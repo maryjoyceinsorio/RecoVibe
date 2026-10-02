@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Student portal - Verify email</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&family=Inter:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="ForgetPassword.css" />
+  </head>
+  <body>
+    <div class="screen">
+      <div class="side">
+        <img
+          src="Picture/PUPLogo-removebg-preview.png"
+          class="mark"
+          alt="RecoVibe logo"
+        />
+        <div>
+          <h1>RecoVibe Student Portal</h1>
+          <p class="tagline">University, Organization, and Seminar Events.</p>
+        </div>
+      </div>
+      <main class="main">
+        <section class="card flow-card" aria-labelledby="verify-heading">
+          <a href="ForgetPassword.html" class="back-link"
+            >&larr; Back to forgot password</a
+          >
+          <h2 id="verify-heading">Verify your email</h2>
+          <p class="sub">
+            Enter the 6-digit verification code we sent to your school email.
+          </p>
+          <p class="sub email-display">johnd***@iskolarngbayan.pup.edu.ph</p>
+
+          <div
+            class="code-inputs"
+            id="code-inputs"
+            aria-label="Verification code"
+          >
+            <input
+              type="text"
+              inputmode="numeric"
+              maxlength="1"
+              autocomplete="one-time-code"
+              aria-label="Verification digit 1"
+            />
+            <input
+              type="text"
+              inputmode="numeric"
+              maxlength="1"
+              aria-label="Verification digit 2"
+            />
+            <input
+              type="text"
+              inputmode="numeric"
+              maxlength="1"
+              aria-label="Verification digit 3"
+            />
+            <input
+              type="text"
+              inputmode="numeric"
+              maxlength="1"
+              aria-label="Verification digit 4"
+            />
+            <input
+              type="text"
+              inputmode="numeric"
+              maxlength="1"
+              aria-label="Verification digit 5"
+            />
+            <input
+              type="text"
+              inputmode="numeric"
+              maxlength="1"
+              aria-label="Verification digit 6"
+            />
+          </div>
+          <div class="code-help">
+            <span>Didn't receive the code?</span>
+            <button type="button" class="link-btn" id="resend-code">
+              Resend code
+            </button>
+          </div>
+          <button type="button" class="btn-primary" id="verify-code">
+            Verify Code
+          </button>
+          <p class="countdown" id="countdown">Code expires in 05:00</p>
+        </section>
+      </main>
+    </div>
+    <script src="forgot-flow.js"></script>
+  </body>
+</html>

@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Student portal — Create account</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&family=Inter:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="StudentRegistration.css" />
+  </head>
+  <body>
+    <div class="screen" id="studentRegistrationPage">
+      <div class="side" id="registrationBrandPanel">
+        <img
+          id="registrationBrandLogo"
+          src="Picture/PUPLogo-removebg-preview.png"
+          class="mark"
+          alt="RecoVibe logo"
+        />
+        <div>
+          <h1 id="registrationPageTitle">RecoVibe</h1>
+          <p class="portal-subtitle">Student Portal</p>
+          <p class="tagline" id="registrationPageTagline">
+            University, Organization, and Seminar Events.
+          </p>
+        </div>
+      </div>
+
+      <div class="main" id="registrationMain">
+        <div class="card" id="registrationCard">
+          <!-- ---------------- REGISTRATION FORM ---------------- -->
+          <div class="view active" id="view-register">
+            <a href="StudentLogin.html" class="back-link">‹ Back to sign in</a>
+            <h2 id="registrationHeading">Create your account</h2>
+            <p class="sub" id="registrationDescription">
+              Enter your student details to set up portal access.
+            </p>
+
+            <form id="student-registration-form" novalidate>
+            <div class="name-grid">
+              <div class="field" id="field-reg-lastname">
+                <label for="reg-lastname">Last name</label>
+                <input
+                  type="text"
+                  id="reg-lastname"
+                  placeholder="David"
+                  required
+                  autocomplete="family-name"
+                />
+                <div class="error-msg">Enter your last name.</div>
+              </div>
+              <div class="field" id="field-reg-firstname">
+                <label for="reg-firstname">First name</label>
+                <input
+                  type="text"
+                  id="reg-firstname"
+                  placeholder="Marv"
+                  required
+                  autocomplete="given-name"
+                />
+                <div class="error-msg">Enter your first name.</div>
+              </div>
+            </div>
+
+            <div class="field" id="field-reg-middlename">
+              <div class="label-row">
+                <label for="reg-middlename">Middle name</label>
+              </div>
+              <input
+                type="text"
+                id="reg-middlename"
+                placeholder="Lebron"
+                autocomplete="additional-name"
+              />
+              <label class="checkbox-inline" for="no-middle-name">
+                <input type="checkbox" id="no-middle-name" />
+                I don't have a middle name
+              </label>
+              <div class="error-msg">
+                Enter your middle name, or check the box above.
+              </div>
+            </div>
+
+            <div class="field" id="field-reg-email">
+              <label for="reg-email">School email</label>
+              <input
+                type="email"
+                id="reg-email"
+                placeholder="johndavid@iskolarngbayan.pup.edu.ph"
+                required
+                autocomplete="email"
+              />
+              <div class="error-msg">Enter a valid school email.</div>
+            </div>
+
+            <div class="field" id="field-reg-student-id">
+              <label for="reg-student-id">Student number</label>
+              <input
+                type="text"
+                id="reg-student-id"
+                placeholder="2025-00756-BN-1"
+                required
+                pattern="20[0-9]{2}-[0-9]{5}-BN-[A-Za-z0-9]"
+                autocomplete="username"
+              />
+              <div class="error-msg">Enter your student number.</div>
+            </div>
+
+            <div class="registration-grid">
+              <div class="field" id="field-reg-contact">
+                <label for="reg-contact">Contact number</label>
+                <input
+                  type="tel"
+                  id="reg-contact"
+                  placeholder="09XXXXXXXXX"
+                  required
+                  pattern="09[0-9]{9}"
+                  maxlength="11"
+                  inputmode="numeric"
+                  autocomplete="tel"
+                />
+                <div class="error-msg">Enter your contact number.</div>
+              </div>
+              <div class="field" id="field-reg-department">
+                <label for="reg-department">Department</label>
+                <select id="reg-department" required>
+                  <option value="">Select department</option>
+                  <option value="BSIT">
+                    Bachelor of Science in Information Technology (BSIT)
+                  </option>
+                  <option value="BSCPE">
+                    Bachelor of Science in Computer Engineering (BSCPE)
+                  </option>
+                  <option value="BSBA">
+                    Bachelor of Science in Business Administration (BSBA)
+                  </option>
+                  <option value="BSOA">
+                    Bachelor of Science in Office Administration (BSOA)
+                  </option>
+                  <option value="BSHM">
+                    Bachelor of Science in Hospitality Management (BSHM)
+                  </option>
+                  <option value="Other">Other</option>
+                </select>
+                <div class="error-msg">Enter your department.</div>
+              </div>
+              <div class="field" id="field-reg-year">
+                <label for="reg-year">Year</label>
+                <input
+                  type="text"
+                  id="reg-year"
+                  placeholder="2-3"
+                  required
+                  pattern="[1-9][0-9]*-[1-9][0-9]*"
+                  inputmode="numeric"
+                />
+                <div class="error-msg">Enter your year and section.</div>
+              </div>
+              <div class="field" id="field-reg-organization">
+                <label for="reg-organization">Organization</label>
+                <select id="reg-organization" required>
+                  <option value="">Select organization</option>
+                  <option value="IBITS">IBITS</option>
+                  <option value="ORG">ORG</option>
+                  <option value="None">None</option>
+                </select>
+                <div class="error-msg">Enter your organization.</div>
+              </div>
+            </div>
+
+            <div class="field" id="field-reg-pass">
+              <label for="reg-pass">Password</label>
+              <div class="password-wrapper">
+                <input
+                  type="password"
+                  id="reg-pass"
+                  placeholder="At least 6 characters"
+                  required
+                  autocomplete="new-password"
+                />
+                <button
+                  type="button"
+                  class="toggle-password"
+                  data-target="reg-pass"
+                  aria-label="Show password"
+                >
+                  <svg
+                    class="icon-eye"
+                    viewBox="0 0 24 24"
+                    width="18"
+                    height="18"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                  >
+                    <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                  <svg
+                    class="icon-eye-off"
+                    viewBox="0 0 24 24"
+                    width="18"
+                    height="18"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    style="display: none"
+                  >
+                    <path
+                      d="M17.94 17.94A10.94 10.94 0 0 1 12 19c-7 0-11-7-11-7a20.6 20.6 0 0 1 4.22-5.06M9.9 4.24A9.6 9.6 0 0 1 12 4c7 0 11 7 11 7a20.7 20.7 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"
+                    />
+                    <path d="M1 1l22 22" />
+                  </svg>
+                </button>
+              </div>
+              <div class="error-msg">
+                Password must be at least 6 characters.
+              </div>
+            </div>
+
+            <div class="field" id="field-reg-confirm">
+              <label for="reg-confirm">Confirm password</label>
+              <div class="password-wrapper">
+                <input
+                  type="password"
+                  id="reg-confirm"
+                  placeholder="••••••••"
+                  required
+                  autocomplete="new-password"
+                />
+                <button
+                  type="button"
+                  class="toggle-password"
+                  data-target="reg-confirm"
+                  aria-label="Show password"
+                >
+                  <svg
+                    class="icon-eye"
+                    viewBox="0 0 24 24"
+                    width="18"
+                    height="18"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                  >
+                    <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                  <svg
+                    class="icon-eye-off"
+                    viewBox="0 0 24 24"
+                    width="18"
+                    height="18"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    style="display: none"
+                  >
+                    <path
+                      d="M17.94 17.94A10.94 10.94 0 0 1 12 19c-7 0-11-7-11-7a20.6 20.6 0 0 1 4.22-5.06M9.9 4.24A9.6 9.6 0 0 1 12 4c7 0 11 7 11 7a20.7 20.7 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"
+                    />
+                    <path d="M1 1l22 22" />
+                  </svg>
+                </button>
+              </div>
+              <div class="error-msg">Passwords don't match.</div>
+            </div>
+
+            <button type="submit" class="btn-primary" id="create-account">
+              Create account
+            </button>
+            </form>
+
+            <p class="foot-note">
+              Already have an account?
+              <a href="StudentLogin.html" class="link-btn">Sign in</a>
+            </p>
+          </div>
+
+          <!-- ---------------- SUCCESS ---------------- -->
+          <div class="view" id="view-success">
+            <div class="success-icon">✓</div>
+            <h2 id="registrationSuccessHeading">Account created</h2>
+            <p class="sub" id="success-sub">
+              Your student portal account is ready. Sign in to continue.
+            </p>
+            <a
+              href="StudentLogin.html"
+              class="btn-primary"
+              style="
+                display: block;
+                text-align: center;
+                text-decoration: none;
+                box-sizing: border-box;
+              "
+              >Go to sign in</a
+            >
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="events-data.js"></script>
+    <script type="module" src="StudentRegistration.js"></script>
+  </body>
+</html>

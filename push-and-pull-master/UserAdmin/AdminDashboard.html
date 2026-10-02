@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Admin Dashboard · RecoVibe</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="AdminDashboard.css" />
+  </head>
+  <body>
+    <div class="admin-app">
+      <aside class="admin-sidebar">
+        <a class="admin-brand" href="AdminDashboard.html"
+          ><span class="admin-brand-mark">RV</span
+          ><span
+            ><strong>RECOVIBE</strong><small>PUP Biñan Campus</small></span
+          ></a
+        >
+        <nav aria-label="Admin navigation">
+          <a class="active" href="AdminDashboard.html"><b>▦</b>Dashboard</a
+          ><a href="AdminAllEvents.html"><b>▤</b>All Events</a
+          ><a href="AdminApproval.html"
+            ><b>✓</b>Approval Queue<span
+              class="admin-badge"
+              data-queue-count
+              hidden
+            ></span></a
+          ><a href="AdminCalendar.html"><b>▦</b>Calendar</a
+          ><a href="AdminNotification.html"
+            ><b>♧</b>Notifications<span
+              class="admin-badge"
+              data-notification-count
+              hidden
+            ></span></a
+          ><a href="AdminProfile.html"><b>◉</b>Profile</a>
+        </nav>
+        <footer>
+          <span class="admin-avatar" data-avatar>HA</span
+          ><span class="admin-user"
+            ><strong data-name>ADMIN</strong
+            ><small data-role>Head of Academic Programs</small></span
+          ><a
+            class="admin-logout"
+            href="AdminLogin.html"
+            aria-label="Logout"
+            title="Logout"
+            >↪</a
+          >
+        </footer>
+      </aside>
+      <main class="admin-main">
+        <header class="admin-page-heading">
+          <div>
+            <p class="admin-eyebrow">ADMINISTRATION</p>
+            <h1 id="greeting">Good day</h1>
+          </div>
+          <div class="dashboard-heading-actions">
+            <div class="dashboard-notifications">
+              <button type="button" class="dashboard-notification-toggle" data-notification-toggle aria-label="Notifications" aria-expanded="false" aria-controls="dashboardNotificationMenu">
+                <span aria-hidden="true">♧</span>
+                <span class="admin-badge" data-notification-count hidden></span>
+              </button>
+              <div class="dashboard-notification-menu" id="dashboardNotificationMenu" data-notification-menu hidden>
+                <div class="dashboard-notification-heading"><strong>Notifications</strong><a href="AdminNotification.html">View all</a></div>
+                <p class="dashboard-notification-empty">Loading notifications…</p>
+              </div>
+            </div>
+            <p class="admin-today">Today / <strong data-today></strong></p>
+          </div>
+        </header>
+        <section class="admin-content" id="dashboardRoot" aria-live="polite"></section>
+      </main>
+    </div>
+    <div class="admin-toast" role="status" aria-live="polite" hidden></div>
+    <script type="module" src="AdminDashboard.js"></script>
+  </body>
+</html>

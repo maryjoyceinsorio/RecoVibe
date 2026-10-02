@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Event Organizer Portal - Verify Email</title>
+    <link rel="stylesheet" href="EventOrganizerForgotPassword.css" />
+  </head>
+
+  <body>
+    <div class="screen">
+      <!-- Sidebar -->
+      <div class="side">
+        <img
+          src="../UserStudent/Picture/PUPLogo-removebg-preview.png"
+          class="mark"
+          alt="RecoVibe logo"
+        />
+        <div>
+          <h1>RecoVibe Event Organizer Portal</h1>
+          <p class="tagline">University, Organization, and Seminar Events.</p>
+        </div>
+      </div>
+
+      <!-- Main Content -->
+      <main class="main">
+        <section class="card flow-card">
+          <!-- Back Navigation -->
+          <a href="EventOrganizerForgetPassword.html" class="back-link">
+            &larr; Back to forgot password</a
+          >
+
+          <!-- Page Heading -->
+          <h2>Verify your email</h2>
+
+          <p class="sub">
+            Enter the 6-digit verification code we sent to your school email.
+          </p>
+
+          <p class="sub">johnd***@iskolarngbayan.pup.edu.ph</p>
+
+          <!-- Verification Code Inputs -->
+          <div class="code-inputs" id="code-inputs">
+            <input type="text" inputmode="numeric" maxlength="1" />
+
+            <input type="text" inputmode="numeric" maxlength="1" />
+
+            <input type="text" inputmode="numeric" maxlength="1" />
+
+            <input type="text" inputmode="numeric" maxlength="1" />
+
+            <input type="text" inputmode="numeric" maxlength="1" />
+
+            <input type="text" inputmode="numeric" maxlength="1" />
+          </div>
+
+          <!-- Resend Code -->
+          <div class="code-help">
+            <span> Didn't receive the code? </span>
+
+            <button type="button" class="link-btn" id="resend-code">
+              Resend code
+            </button>
+          </div>
+
+          <!-- Verify Button -->
+          <button type="button" class="btn-primary" id="verify-code">
+            Verify Code
+          </button>
+
+          <!-- Countdown -->
+          <p class="countdown" id="countdown">Code expires in 05:00</p>
+        </section>
+      </main>
+    </div>
+    <script src="EventOrganizerForgotPassword.js"></script>
+  </body>
+</html>
