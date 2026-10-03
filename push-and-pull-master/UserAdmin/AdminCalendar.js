@@ -1,3 +1,5 @@
+import { loadCalendarData } from "../calendarDataService.js";
+
 (() => {
   "use strict";
   const profile = read("recovibeAdminProfile", null),
@@ -16,7 +18,11 @@
       timeZone: "Asia/Manila",
     }).format(new Date());
   let viewed = new Date(),
-    activePopup = null;
+    activePopup = null,
+    firestoreEvents = [],
+    holidays = [],
+    monthDataSequence = 0,
+    loadedMonthDataKey = "";
   document.querySelector("[data-name]").textContent = (
     profile.name || identity
   ).toUpperCase();
@@ -86,7 +92,7 @@
       ? window.RECOVIBE_EVENTS
       : [];
     const seen = new Set();
-    return [...saved, ...source].filter((event) => {
+    return [...saved, ...source, ...firestoreEvents].filter((event) => {
       const id = String(event.eventId || event.id || "");
       if (
         !id ||
@@ -136,7 +142,7 @@
           day,
           iso === today ? "today" : "",
           iso,
-          dayEvents.length,
+          dayEvents,
         );
       }
       for (let day = 1; day < 7 - last; day++) cells += cell(day, "muted", "");
@@ -152,14 +158,92 @@
         .forEach(
           (button) => (button.onclick = () => openDay(button.dataset.iso)),
         );
+      renderHolidayBadges();
+      loadMonthData(year, month);
     } catch (error) {
       root.innerHTML =
         '<div class="admin-error">Could not load calendar. <button id="retryCalendar" class="admin-row-action">Retry</button></div>';
       root.querySelector("#retryCalendar").onclick = render;
     }
   }
-  function cell(day, klass, iso, count = 0) {
-    return `<div class="admin-day ${klass}" ${iso ? `data-iso="${iso}"` : ""}><button type="button" ${iso ? `aria-label="${iso}, ${count} events"` : ""}>${day}</button></div>`;
+  function cell(day, klass, iso, dayEvents = []) {
+    const dots = dayEvents
+      .slice(0, 4)
+      .map(
+        (event) =>
+          `<span class="admin-dot" style="background:${color(sourceName(event))}" title="${esc(event.title || "Untitled event")}"></span>`,
+      )
+      .join("");
+    return `<div class="admin-day ${klass}" ${iso ? `data-date="${iso}" data-iso="${iso}"` : ""}><button type="button" ${iso ? `aria-label="${iso}, ${dayEvents.length} events"` : ""}>${day}</button>${dayEvents.length ? `<div class="admin-day-dots" aria-hidden="true">${dots}</div>` : iso ? '<small class="admin-day-empty">No events</small>' : ""}</div>`;
+  }
+  async function loadMonthData(year, month) {
+    const monthKey = `${year}-${month}`;
+    if (loadedMonthDataKey === monthKey) return;
+    const sequence = ++monthDataSequence;
+    try {
+      const { events, holidays: monthHolidays } = await loadCalendarData(
+        allEvents(),
+        year,
+        month,
+      );
+      if (sequence !== monthDataSequence) return;
+      firestoreEvents = events;
+      holidays = monthHolidays;
+      loadedMonthDataKey = monthKey;
+      render();
+      renderHolidayBadges();
+    } catch (error) {
+      console.error("Unable to load admin calendar data:", error);
+    }
+  }
+  function renderHolidayBadges() {
+    const holidaysByDate = new Map();
+    holidays.forEach((holiday) => {
+      const names = holidaysByDate.get(holiday.date) || [];
+      names.push(holiday.title || holiday.name);
+      holidaysByDate.set(holiday.date, names);
+    });
+    const cellsByDate = new Map();
+    root.querySelectorAll(".admin-day[data-date]").forEach((day) => {
+      cellsByDate.set(day.dataset.date, day);
+      const names = holidaysByDate.get(day.dataset.date) || [];
+      day.classList.toggle("is-holiday", names.length > 0);
+      day.querySelectorAll(".calendar-badge.badge-holiday").forEach((badge) =>
+        badge.remove(),
+      );
+      names.forEach((name) => {
+        const badge = document.createElement("span");
+        badge.className = "calendar-badge badge-holiday";
+        badge.textContent = name;
+        badge.title = name;
+        day.appendChild(badge);
+      });
+    });
+
+    try {
+      if (
+        new URLSearchParams(location.search).get("debugHolidays") === "1" ||
+        localStorage.getItem("recovibeDebugHolidays") === "true"
+      ) {
+        holidays.forEach((holiday) => {
+          if (!cellsByDate.has(holiday.date)) {
+            console.log("[AdminCalendar] Holiday date has no matching cell", {
+              holiday,
+              renderedDates: [...cellsByDate.keys()],
+            });
+          }
+        });
+        console.log("[AdminCalendar] Holiday-to-cell mapping", {
+          holidayCount: holidays.length,
+          matchedCount: holidays.filter((holiday) =>
+            cellsByDate.has(holiday.date),
+          ).length,
+          renderedCellCount: cellsByDate.size,
+        });
+      }
+    } catch (error) {
+      console.warn("Unable to read holiday diagnostic setting:", error);
+    }
   }
   function move(amount) {
     viewed = new Date(viewed.getFullYear(), viewed.getMonth() + amount, 1);
@@ -167,11 +251,12 @@
   }
   function openDay(iso) {
     const events = allEvents().filter((event) => dateOf(event) === iso);
-    if (!events.length) return;
+    const holidayName = holidays.find((holiday) => holiday.date === iso)?.title;
+    if (!events.length && !holidayName) return;
     const date = new Date(`${iso}T00:00:00`);
     const overlay = document.createElement("div");
     overlay.className = "admin-day-overlay";
-    overlay.innerHTML = `<section class="admin-day-dialog" role="dialog" aria-modal="true" aria-labelledby="adminDayTitle" tabindex="-1"><button type="button" class="admin-close" aria-label="Close day details">×</button><h2 id="adminDayTitle">${date.toLocaleDateString("en-US", { timeZone: "Asia/Manila", month: "long", day: "numeric", year: "numeric" })}</h2><div class="admin-day-list">${events
+    overlay.innerHTML = `<section class="admin-day-dialog" role="dialog" aria-modal="true" aria-labelledby="adminDayTitle" tabindex="-1"><button type="button" class="admin-close" aria-label="Close day details">×</button><h2 id="adminDayTitle">${date.toLocaleDateString("en-US", { timeZone: "Asia/Manila", month: "long", day: "numeric", year: "numeric" })}</h2>${holidayName ? `<p class="admin-holiday-note">${esc(holidayName)} · Philippine Holiday</p>` : ""}<div class="admin-day-list">${events
       .map((event) => {
         const source = sourceName(event),
           time =
@@ -246,5 +331,9 @@
     if (!event.key || event.key.includes("Events")) render();
   });
   window.addEventListener("focus", render);
+  window.addEventListener("online", () => {
+    loadedMonthDataKey = "";
+    render();
+  });
   render();
 })();

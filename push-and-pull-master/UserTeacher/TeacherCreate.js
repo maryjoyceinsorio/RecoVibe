@@ -1,3 +1,5 @@
+import { checkPhilippineHoliday } from "../holidayService.js";
+
 (function () {
   "use strict";
 
@@ -139,8 +141,15 @@
   function attr(value) {
     return escapeHTML(value).replace(/`/g, "&#96;");
   }
-  function input(id, label, type, placeholder = "", attrs = "") {
-    return `<div class="ce-field" id="wrap-${id}"><label for="${id}">${label}</label><input id="${id}" name="${id}" type="${type}" placeholder="${attr(placeholder)}" ${attrs}><p class="ce-error" id="error-${id}" hidden></p></div>`;
+  function input(
+    id,
+    label,
+    type,
+    placeholder = "",
+    attrs = "",
+    suffix = "",
+  ) {
+    return `<div class="ce-field" id="wrap-${id}"><label for="${id}">${label}</label><input id="${id}" name="${id}" type="${type}" placeholder="${attr(placeholder)}" ${attrs}>${suffix}<p class="ce-error" id="error-${id}" hidden></p></div>`;
   }
   function dropdown(id, label, options, value = "") {
     return `<div class="ce-field" id="wrap-${id}"><label id="label-${id}" for="${id}-button">${label}</label><div class="ce-dropdown" data-dropdown="${id}"><button class="ce-select" id="${id}-button" type="button" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="label-${id} ${id}-button"><span class="ce-select-value">${escapeHTML(value || "Select...")}</span><span class="ce-chevron" aria-hidden="true"></span></button><div class="ce-options" id="${id}-options" role="listbox" aria-labelledby="label-${id}" tabindex="-1">${options.map((option) => `<button class="ce-option" type="button" role="option" aria-selected="${option === value}" data-value="${attr(option)}" tabindex="-1">${escapeHTML(option)}</button>`).join("")}</div><input id="${id}" type="hidden" value="${attr(value)}"></div><p class="ce-error" id="error-${id}" hidden></p></div>`;
@@ -162,7 +171,7 @@
           <div class="ce-field" id="wrap-categories"><span class="ce-label" id="label-categories">Event Category <small>(select up to 3)</small></span><div class="ce-dropdown" data-dropdown="categories"><button class="ce-select" id="categories-button" type="button" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="label-categories categories-button"><span class="ce-select-value">Select categories...</span><span class="ce-chevron" aria-hidden="true"></span></button><div class="ce-options ce-options--checks" id="categories-options" role="listbox" aria-labelledby="label-categories" aria-multiselectable="true">${CATEGORIES.map((category) => `<label class="ce-option ce-check-option" role="option" aria-selected="false"><input type="checkbox" value="${attr(category)}"><span>${escapeHTML(category)}</span></label>`).join("")}</div></div><p class="ce-error" id="error-categories" hidden></p></div>
         </div>
         <div class="ce-grid ce-grid--4 ce-grid--space">${dropdown("eventType", "Event Type", EVENT_TYPES, "Seminar")}${dropdown("targetDepartment", "Target Department", TARGET_DEPARTMENTS, "All Departments")}${dropdown("targetYear", "Target Year", TARGET_YEARS, "All Years")}</div>
-        <div class="ce-grid ce-grid--4 ce-grid--space">${input("eventDate", "Date", "date", "", "required")}${dropdown("venue", "Venue", VENUES)}${dropdown("timeStart", "Time Start", TIMES, "08:00 AM")}${dropdown("timeEnd", "Time End", TIMES, "09:00 AM")}</div>
+        <div class="ce-grid ce-grid--4 ce-grid--space">${input("eventDate", "Date", "date", "", "required", '<p id="holidayNotice" class="ce-holiday-notice" role="status" aria-live="polite" hidden></p>')}${dropdown("venue", "Venue", VENUES)}${dropdown("timeStart", "Time Start", TIMES, "08:00 AM")}${dropdown("timeEnd", "Time End", TIMES, "09:00 AM")}</div>
         <div id="venueOtherWrap" class="ce-dependent" hidden>${input("venueOther", "Specify location", "text", "Enter the location", "required")}</div><div id="sourceOtherWrap" class="ce-dependent" hidden>${input("sourceOther", "Specify organization", "text", "Enter the organization", "required")}</div>
         <div class="ce-grid ce-grid--4 ce-grid--space">${input("registrationDeadline", "Registration Deadline", "datetime-local", "", "required")}${dropdown("capacityMode", "Capacity", ["N/A", "Max Cap Depends", "Both Cap and Weather"], "N/A")}${dropdown("weatherContingency", "Weather Contingency", ["N/A", "Indoor", "Outdoor — Might Rain"], "N/A")}${dropdown("attendanceRequired", "Attendance Required", ["Yes", "No"], "Yes")}</div>
         <div id="capacityDetails" class="ce-grid ce-grid--4 ce-grid--space ce-dependent" hidden><div id="maxCapacityWrap">${input("maxCapacity", "Max Capacity", "number", "Positive whole number", 'min="1" step="1"')}</div><div class="ce-field" id="alternateVenueWrap" hidden><label id="label-alternateVenue" for="alternateVenue-button">Alternate Venue</label><div class="ce-dropdown" data-dropdown="alternateVenue"><button class="ce-select" id="alternateVenue-button" type="button" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="label-alternateVenue alternateVenue-button"><span class="ce-select-value">Select...</span><span class="ce-chevron" aria-hidden="true"></span></button><div class="ce-options" id="alternateVenue-options" role="listbox" aria-labelledby="label-alternateVenue" tabindex="-1">${VENUES.map((option) => `<button class="ce-option" type="button" role="option" aria-selected="false" data-value="${attr(option)}" tabindex="-1">${escapeHTML(option)}</button>`).join("")}</div><input id="alternateVenue" type="hidden"></div><p class="ce-error" id="error-alternateVenue" hidden></p></div></div>
@@ -416,6 +425,40 @@
     toastTimer = setTimeout(() => {
       toast.hidden = true;
     }, 3200);
+  }
+  let holidayLookupSequence = 0;
+  async function updateHolidayNotice() {
+    const date = el("eventDate").value;
+    const notice = el("holidayNotice");
+    const sequence = ++holidayLookupSequence;
+    notice.hidden = true;
+    notice.textContent = "";
+    notice.classList.remove("is-warning", "is-unavailable");
+
+    if (!date) return;
+
+    try {
+      const result = await checkPhilippineHoliday(date);
+      if (sequence !== holidayLookupSequence || el("eventDate").value !== date)
+        return;
+      if (!result.isHoliday) return;
+
+      notice.textContent = `Warning: Selected date falls on ${result.holidayName || "an official Philippine holiday"}.`;
+      notice.classList.add("is-warning");
+      notice.hidden = false;
+    } catch (error) {
+      console.warn(
+        "Unable to check the selected date for a Philippine holiday:",
+        error,
+      );
+      if (sequence !== holidayLookupSequence || el("eventDate").value !== date)
+        return;
+
+      notice.textContent =
+        "Holiday information is unavailable. You can still submit this event.";
+      notice.classList.add("is-unavailable");
+      notice.hidden = false;
+    }
   }
   function control(id) {
     if (id === "categories") return el("categories-button");
@@ -1502,6 +1545,7 @@
   el("saveDraft").addEventListener("click", saveDraft);
   el("submitForApproval").addEventListener("click", submit);
   el("cancelCreate").addEventListener("click", cancel);
+  el("eventDate").addEventListener("change", updateHolidayNotice);
   window.addEventListener("beforeunload", (event) => {
     if (state.dirty) {
       event.preventDefault();
@@ -1547,4 +1591,5 @@
       el("createHeading").textContent = "Edit Event";
     }
   }
+  updateHolidayNotice();
 })();

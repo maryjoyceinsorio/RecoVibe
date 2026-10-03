@@ -8,6 +8,7 @@ import {
   db,
   isFirebaseConfigured,
 } from "../UserStudent/firebaseConfig.js";
+import { fetchMonthHolidays } from "../holidayService.js";
 
 (() => {
   const monthNames = [
@@ -79,6 +80,18 @@ import {
     )
       return source;
     return "Others / External";
+  }
+
+  function eventDotClass(event) {
+    return (
+      {
+        "PUP Official": "official",
+        "PUP Biñan": "binan",
+        "PUP CITE": "cite",
+        "Event Organizer": "organizer",
+        "Others / External": "external",
+      }[normalizedSource(event)] || "external"
+    );
   }
 
   function visibleEvents() {
@@ -186,9 +199,17 @@ import {
         const today = cell.iso && cell.iso === todayIso;
         const eventCount =
           cell.events && cell.events.length ? cell.events.length : 0;
+        const eventDots = cell.events
+          .slice(0, 4)
+          .map(
+            (event) =>
+              `<span class="dot dot-${eventDotClass(event)}" title="${escape(event.title || "Untitled event")}"></span>`,
+          )
+          .join("");
         return `
-        <div class="cal-day-full ${cell.muted ? "is-muted" : ""} ${eventCount ? "has-event" : ""} ${today ? "is-today" : ""}" ${cell.iso ? `data-iso="${cell.iso}" tabindex="0"` : ""}>
+        <div class="cal-day-full ${cell.muted ? "is-muted" : ""} ${eventCount ? "has-event" : ""} ${today ? "is-today" : ""}" ${cell.iso ? `data-date="${cell.iso}" data-iso="${cell.iso}" tabindex="0" aria-label="${cell.iso}: ${eventCount ? `${eventCount} event${eventCount === 1 ? "" : "s"}` : "no events"}"` : ""}>
           <span class="day-num">${cell.day || ""}</span>
+          ${eventCount ? `<span class="event-dots" aria-hidden="true">${eventDots}</span>` : '<span class="calendar-day-empty">No events</span>'}
           ${
             cell.events && cell.events.length
               ? `<span class="calendar-hover-preview"><strong>${eventCount} event${eventCount > 1 ? "s" : ""}</strong>${cell.events
@@ -455,70 +476,96 @@ import {
     }
   });
 
-  calendarDays.replaceChildren();
-  calendarListView.replaceChildren();
-  upcomingPanel.replaceChildren();
+  renderCalendar();
+  upcomingPanel.innerHTML =
+    '<h3>Upcoming</h3><div class="upcoming-empty">Loading events...</div>';
 
   if (!isFirebaseConfigured || !auth || !db) {
     upcomingPanel.innerHTML =
       '<h3>Upcoming</h3><div class="upcoming-empty">Calendar data is unavailable.</div>';
-    renderCalendar();
     return;
   }
 
-  onAuthStateChanged(auth, (user) => {
-    unsubscribeEvents?.();
-    if (!user) {
-      window.location.replace("EventOrganizerLogin.html");
-      return;
-    }
-
+  function showLoadError(error) {
+    console.error("Unable to load calendar events:", error);
+    events = [];
     upcomingPanel.innerHTML =
-      '<h3>Upcoming</h3><div class="upcoming-empty">Loading events...</div>';
-    unsubscribeEvents = onSnapshot(
-      collection(db, "events"),
-      (snapshot) => {
-        events = snapshot.docs.map((eventDocument) => {
-          const data = eventDocument.data();
-          const dateISO = data.eventDate || data.dateISO || data.date || "";
-          const startTime = data.startTime || "";
-          const endTime = data.endTime || "";
-          return {
-            ...data,
-            id: eventDocument.id,
-            eventId: eventDocument.id,
-            title: data.eventName || data.title || "Untitled event",
-            dateISO,
-            time:
-              data.time ||
-              [startTime, endTime].filter(Boolean).join(" - ") ||
-              "Time TBA",
-            source:
-              data.source ||
-              data.eventSource ||
-              (data.organizerId
-                ? "Event Organizer"
-                : data.organization || data.organizerName || "Others / External"),
-            location: data.venue || data.location || data.venueOther || "",
-            description:
-              data.eventDescription || data.description || data.desc || "",
-          };
-        });
+      '<h3>Upcoming</h3><div class="upcoming-empty">Could not load events.</div>';
+    renderCalendar();
+  }
 
-        calendarDays.replaceChildren();
-        calendarListView.replaceChildren();
-        upcomingPanel.replaceChildren();
-        renderCalendar();
+  try {
+    onAuthStateChanged(
+      auth,
+      (user) => {
+        unsubscribeEvents?.();
+        if (!user) {
+          window.location.replace("EventOrganizerLogin.html");
+          return;
+        }
+
+        try {
+          unsubscribeEvents = onSnapshot(
+            collection(db, "events"),
+            (snapshot) => {
+              const eventRecords = snapshot.docs.map((eventDocument) => {
+                const data = eventDocument.data();
+                const dateISO = data.eventDate || data.dateISO || data.date || "";
+                const startTime = data.startTime || "";
+                const endTime = data.endTime || "";
+                return {
+                  ...data,
+                  id: eventDocument.id,
+                  eventId: eventDocument.id,
+                  title: data.eventName || data.title || "Untitled event",
+                  dateISO,
+                  time:
+                    data.time ||
+                    [startTime, endTime].filter(Boolean).join(" - ") ||
+                    "Time TBA",
+                  source:
+                    data.source ||
+                    data.eventSource ||
+                    (data.organizerId
+                      ? "Event Organizer"
+                      : data.organization ||
+                        data.organizerName ||
+                        "Others / External"),
+                  location: data.venue || data.location || data.venueOther || "",
+                  description:
+                    data.eventDescription || data.description || data.desc || "",
+                };
+              });
+              const year = state.date.getFullYear();
+              const month = state.date.getMonth();
+              Promise.all([
+                Promise.resolve(
+                  eventRecords.filter((event) => {
+                    const status = String(event.status || "").toLowerCase();
+                    return (
+                      ["approved", "published"].includes(status) ||
+                      event.published === true
+                    );
+                  }),
+                ),
+                fetchMonthHolidays(year, month),
+              ])
+                .then(([approvedEvents, monthHolidays]) => {
+                  events = approvedEvents;
+                  window.RecoVibeCalendarShell?.setHolidays(monthHolidays);
+                  renderCalendar();
+                })
+                .catch(showLoadError);
+            },
+            showLoadError,
+          );
+        } catch (error) {
+          showLoadError(error);
+        }
       },
-      (error) => {
-        console.error("Unable to load calendar events:", error);
-        events = [];
-        calendarDays.replaceChildren();
-        calendarListView.replaceChildren();
-        upcomingPanel.innerHTML =
-          '<h3>Upcoming</h3><div class="upcoming-empty">Could not load events.</div>';
-        renderCalendar();
-      },
+      showLoadError,
     );
-  });
+  } catch (error) {
+    showLoadError(error);
+  }
 })();

@@ -1,3 +1,5 @@
+import { loadCalendarData } from "../calendarDataService.js";
+
 (() => {
   const monthNames = [
     "January",
@@ -16,7 +18,7 @@
   const rawEvents = Array.isArray(window.RECOVIBE_EVENTS)
     ? [...window.RECOVIBE_EVENTS]
     : [];
-  const events = rawEvents.reduce((list, event) => {
+  const baseEvents = rawEvents.reduce((list, event) => {
     const uniqueKey = event.id || event.eventId;
     if (
       !uniqueKey ||
@@ -26,6 +28,7 @@
     list.push(event);
     return list;
   }, []);
+  let events = baseEvents;
 
   const filterInputs = document.querySelectorAll(".filter-option input");
   const state = {
@@ -72,6 +75,19 @@
         "Teachers / Faculty": "Teachers/Faculty",
         "Other / External": "Others/External",
       }[source] || source
+    );
+  }
+
+  function eventDotClass(event) {
+    return (
+      {
+        "PUP Official": "official",
+        "PUP Biñan Campus": "binan",
+        "PUP CITE": "cite",
+        IBITS: "ibits",
+        "Teachers/Faculty": "faculty",
+        "Others/External": "external",
+      }[eventSource(event)] || "external"
     );
   }
 
@@ -167,9 +183,17 @@
         const today = cell.iso && cell.iso === todayIso;
         const eventCount =
           cell.events && cell.events.length ? cell.events.length : 0;
+        const eventDots = cell.events
+          .slice(0, 4)
+          .map(
+            (event) =>
+              `<span class="dot dot-${eventDotClass(event)}" title="${escape(event.title || "Untitled event")}"></span>`,
+          )
+          .join("");
         return `
-        <div class="cal-day-full ${cell.muted ? "is-muted" : ""} ${eventCount ? "has-event" : ""} ${today ? "is-today" : ""}" ${cell.iso ? `data-iso="${cell.iso}" tabindex="0"` : ""}>
+        <div class="cal-day-full ${cell.muted ? "is-muted" : ""} ${eventCount ? "has-event" : ""} ${today ? "is-today" : ""}" ${cell.iso ? `data-date="${cell.iso}" data-iso="${cell.iso}" tabindex="0" aria-label="${cell.iso}: ${eventCount ? `${eventCount} event${eventCount === 1 ? "" : "s"}` : "no events"}"` : ""}>
           <span class="day-num">${cell.day || ""}</span>
+          ${eventCount ? `<span class="event-dots" aria-hidden="true">${eventDots}</span>` : '<span class="calendar-day-empty">No events</span>'}
           ${
             cell.events && cell.events.length
               ? `<span class="calendar-hover-preview"><strong>${eventCount} event${eventCount > 1 ? "s" : ""}</strong>${cell.events
@@ -278,6 +302,27 @@
     );
     state.date = new Date(year, month, day);
     renderCalendar();
+    refreshCalendarData();
+  }
+
+  let dataRequestSequence = 0;
+  async function refreshCalendarData() {
+    const sequence = ++dataRequestSequence;
+    const year = state.date.getFullYear();
+    const month = state.date.getMonth();
+    try {
+      const { events: loadedEvents, holidays } = await loadCalendarData(
+        baseEvents,
+        year,
+        month,
+      );
+      if (sequence !== dataRequestSequence) return;
+      events = loadedEvents;
+      window.RecoVibeCalendarShell?.setHolidays(holidays);
+      renderCalendar();
+    } catch (error) {
+      console.error("Unable to refresh student calendar data:", error);
+    }
   }
 
   function setView(view) {
@@ -406,6 +451,7 @@
   todayButton.addEventListener("click", () => {
     state.date = new Date();
     renderCalendar();
+    refreshCalendarData();
   });
 
   monthModeButton.addEventListener("click", () => setView("month"));
@@ -457,5 +503,7 @@
     });
     renderCalendar();
   });
+  window.addEventListener("online", refreshCalendarData);
   renderCalendar();
+  refreshCalendarData();
 })();

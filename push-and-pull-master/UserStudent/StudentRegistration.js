@@ -304,6 +304,7 @@ form.addEventListener("submit", async (event) => {
 
     // Metadata
     fullName: [firstName, middleName, lastName].filter(Boolean).join(" "),
+    name: [firstName, middleName, lastName].filter(Boolean).join(" "),
     uid: "",
     role: "student",
     status: "Active",
@@ -324,8 +325,7 @@ form.addEventListener("submit", async (event) => {
     user = credential.user;
     profile.uid = user.uid;
 
-    // Isusulat sa `studentuser` collection
-    await setDoc(doc(db, "studentuser", user.uid), profile);
+    await setDoc(doc(db, "studentUser", user.uid), profile);
 
     alert("Your student account has been created! Redirecting...");
     window.location.assign("StudentLogin.html");

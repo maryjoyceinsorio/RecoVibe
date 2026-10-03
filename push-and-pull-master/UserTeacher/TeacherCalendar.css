@@ -535,6 +535,36 @@
 .dot-external {
   background: #64748b;
 }
+.dot-holiday {
+  background: #d97706;
+}
+.calendar-day-empty {
+  color: #a89d95;
+  font-size: 9px;
+  line-height: 1.2;
+}
+.holiday-indicator {
+  max-width: 100%;
+  overflow: hidden;
+  color: #9a5700;
+  font-size: 9px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.calendar-badge.badge-holiday {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 2px 4px;
+  border-radius: 3px;
+  background: #fff0cf;
+  color: #7a4b00;
+  font-size: 9px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .calendar-side {
   position: sticky;

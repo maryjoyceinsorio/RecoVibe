@@ -2,6 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta name="google-calendar-api-key" content="YOUR_GOOGLE_CALENDAR_API_KEY" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>RecoVibe - Organizer Calendar</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -305,6 +306,20 @@
                 /><span>Others / External</span></label
               >
             </section>
+            <section
+              class="calendar-side-panel cal-legend"
+              id="calendarLegend"
+              data-calendar-legend="organizer"
+              aria-label="Calendar legend"
+            >
+              <span class="legend-title">Calendar legend</span>
+              <span class="legend-item"><span class="dot dot-official" aria-hidden="true"></span>PUP Official</span>
+              <span class="legend-item"><span class="dot dot-binan" aria-hidden="true"></span>PUP Biñan</span>
+              <span class="legend-item"><span class="dot dot-cite" aria-hidden="true"></span>PUP CITE</span>
+              <span class="legend-item"><span class="dot dot-organizer" aria-hidden="true"></span>Event Organizer</span>
+              <span class="legend-item"><span class="dot dot-external" aria-hidden="true"></span>Others/External</span>
+              <span class="legend-item"><span class="dot dot-holiday" aria-hidden="true"></span>Philippine Holiday</span>
+            </section>
           </aside>
         </div>
       </main>
@@ -362,6 +377,7 @@
     </div>
     <script src="OrganizerNotificationBadge.js"></script>
     <script src="../EventDetailsModal.js"></script>
+    <script src="../CalendarShell.js"></script>
     <script type="module" src="EventOrganizerCalendar.js"></script>
   </body>
 </html>
