@@ -92,12 +92,10 @@
 
         <div class="sidebar-bottom">
           <div class="user-card">
-            <div class="avatar" id="userAvatar">JL</div>
+            <div class="avatar" id="userAvatar"></div>
             <div class="user-meta">
-              <div class="user-name" id="userName">Joshua Lopez</div>
-              <div class="user-role" id="userRole">
-                IBITS &nbsp;|&nbsp; BSIT 2-3 Ladderized
-              </div>
+              <div class="user-name" id="userName"></div>
+              <div class="user-role" id="userRole"></div>
             </div>
           </div>
           <a
@@ -201,7 +199,7 @@
           <div class="content-left" id="dashboardEventsColumn">
             <div class="panel-head">
               <h2>Upcoming Events</h2>
-              <a href="#" class="link-see-all" data-view="events"
+              <a href="Events.html" class="link-see-all" data-view="events"
                 >See All Events</a
               >
             </div>
@@ -214,7 +212,7 @@
             <div class="card calendar-card" id="dashboardCalendarCard">
               <div class="panel-head panel-head--tight">
                 <h2>Calendar Preview</h2>
-                <a href="#" class="link-see-all" data-view="calendar"
+                <a href="Calendar.html" class="link-see-all" data-view="calendar"
                   >Full Calendar</a
                 >
               </div>
@@ -252,6 +250,7 @@
                 ><span>Th</span><span>F</span><span>S</span>
               </div>
               <div class="cal-grid" id="calDays"><!-- injected by JS --></div>
+              <div class="cal-day-events" id="calDayEvents" aria-live="polite"></div>
             </div>
 
             <div class="card notif-card" id="dashboardNotificationsCard">
@@ -346,7 +345,48 @@
 
     <script src="events-data.js"></script>
     <script src="notification-count.js"></script>
-    <script src="student-sidebar-profile.js"></script>
+    <script>
+      (() => {
+        let user = {};
+        try {
+          user = JSON.parse(localStorage.getItem("recovibeCurrentUser") || "null") || {};
+        } catch {
+          user = {};
+        }
+        const firstName = String(user.firstName || "").trim();
+        const fullName = String(user.name || user.fullName || "").trim();
+        const nameFromProfile = [firstName, user.middleName, user.lastName]
+          .map((part) => String(part || "").trim())
+          .filter(Boolean)
+          .join(" ");
+        const displayName = fullName || nameFromProfile || "Student";
+        const first = firstName || fullName.split(/\s+/).filter(Boolean)[0] || "";
+        const fallback = [
+          user.username,
+          user.studentNumber,
+          user.studentId,
+          user.email,
+        ]
+          .map((value) => String(value || "").trim())
+          .find(Boolean) || "";
+        const avatar = Array.from(first || fallback)[0]?.toLocaleUpperCase() || "S";
+        const organization = String(user.organization || "").trim();
+        const role =
+          organization && organization.toLowerCase() !== "none"
+            ? organization
+            : "Student";
+        document.querySelectorAll(".user-name").forEach((item) => item.textContent = displayName);
+        document.querySelectorAll(".user-role").forEach((item) => item.textContent = role);
+        document.querySelectorAll(".avatar").forEach((item) => item.textContent = avatar);
+        document.querySelectorAll("#userFirstName").forEach((item) => item.textContent = first);
+        const greeting = document.getElementById("dashboardGreeting");
+        if (greeting) {
+          const hour = new Date().getHours();
+          const salutation = hour < 12 ? "Good Morning" : hour < 18 ? "Good Noon" : "Good Evening";
+          greeting.textContent = `${salutation}, ${displayName}`;
+        }
+      })();
+    </script>
     <script src="Dashboard.js"></script>
   </body>
 </html>

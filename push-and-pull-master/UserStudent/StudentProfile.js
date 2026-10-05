@@ -1,17 +1,33 @@
 function hydrateUserProfile() {
   const user =
     JSON.parse(localStorage.getItem("recovibeCurrentUser") || "null") || {};
-  const name = String(user.name || "Joshua Lopez").trim();
-  const parts = name.split(/\s+/).filter(Boolean);
-  const firstName = user.firstName || parts[0] || "Joshua";
-  const displayName =
-    user.firstName && parts.length > 1
-      ? `${user.firstName} ${parts[parts.length - 1]}`
-      : name;
+  const storedFirstName = String(user.firstName || "").trim();
+  const storedFullName = String(user.name || user.fullName || "").trim();
+  const nameFromProfile = [storedFirstName, user.middleName, user.lastName]
+    .map((part) => String(part || "").trim())
+    .filter(Boolean)
+    .join(" ");
+  const displayName = storedFullName || nameFromProfile || "Student";
+  const firstName =
+    storedFirstName ||
+    storedFullName.split(/\s+/).filter(Boolean)[0] ||
+    nameFromProfile.split(/\s+/).filter(Boolean)[0] ||
+    "";
+  const avatarFallback = [
+    user.username,
+    user.studentNumber,
+    user.studentId,
+    user.email,
+  ]
+    .map((value) => String(value || "").trim())
+    .find(Boolean) || "";
+  const avatarLetter =
+    Array.from(firstName || avatarFallback)[0]?.toLocaleUpperCase() || "S";
+  const organization = String(user.organization || "").trim();
   const role =
-    user.organization && user.year
-      ? `${user.organization} | BSIT ${user.year} Ladderized`
-      : "IBITS | BSIT 2-3 Ladderized";
+    organization && organization.toLowerCase() !== "none"
+      ? organization
+      : "Student";
 
   document.querySelectorAll(".user-name").forEach((element) => {
     element.textContent = displayName;
@@ -20,12 +36,7 @@ function hydrateUserProfile() {
     element.textContent = role;
   });
   document.querySelectorAll(".avatar").forEach((element) => {
-    element.textContent = displayName
-      .split(" ")
-      .map((part) => part[0])
-      .slice(0, 2)
-      .join("")
-      .toUpperCase();
+    element.textContent = avatarLetter;
   });
   document.querySelectorAll("#userFirstName").forEach((element) => {
     element.textContent = firstName;
@@ -71,31 +82,27 @@ function hydrateUserProfile() {
 
   const setText = (id, value) => {
     const element = document.getElementById(id);
-    if (element) element.textContent = value || "-";
+    if (element) element.textContent = String(value || "").trim() || "Not provided";
   };
-  const firstName = user.firstName || (user.name || "Joshua").split(/\s+/)[0];
-  const nameParts = (user.name || `${firstName} Lopez`).split(/\s+/);
-  setText("userFirstName", firstName);
+  const storedName = String(user.fullName || user.name || "").trim();
+  const nameParts = storedName.split(/\s+/).filter(Boolean);
+  const firstName = String(user.firstName || "").trim() || nameParts[0] || "";
+  const lastName =
+    String(user.lastName || "").trim() ||
+    (nameParts.length > 1 ? nameParts.at(-1) : "");
   setText("profileFirstName", firstName);
   setText(
     "profileMiddleName",
-    nameParts.length > 2 ? nameParts.slice(1, -1).join(" ") : "-",
+    String(user.middleName || "").trim() ||
+      (nameParts.length > 2 ? nameParts.slice(1, -1).join(" ") : ""),
   );
-  setText("profileLastName", nameParts[nameParts.length - 1]);
-  setText("profileStudentId", user.studentId);
+  setText("profileLastName", lastName);
+  setText("profileStudentId", user.studentNumber || user.studentId);
   setText("profileEmail", user.email);
-  setText("profileContact", user.contact);
+  setText("profileContact", user.contactNumber || user.contact);
   setText("profileDepartment", user.department);
   setText("profileYear", user.year);
   setText("profileOrganization", user.organization);
-  setText(
-    "userAvatar",
-    nameParts
-      .map((part) => part[0])
-      .slice(0, 2)
-      .join("")
-      .toUpperCase(),
-  );
   setText(
     "todayDate",
     new Date().toLocaleDateString("en-US", {
@@ -104,22 +111,37 @@ function hydrateUserProfile() {
       day: "numeric",
     }),
   );
-  setText("userFirstName", firstName);
-  setText(
+  const renderSummary = (id, items, emptyMessage) => {
+    const container = document.getElementById(id);
+    if (!container) return;
+    container.replaceChildren();
+    if (!items.length) {
+      const emptyState = document.createElement("p");
+      emptyState.className = "preference-empty";
+      emptyState.textContent = emptyMessage;
+      container.append(emptyState);
+      return;
+    }
+    items.forEach((item) => {
+      const chip = document.createElement("span");
+      chip.className = "preference-chip";
+      chip.textContent = item;
+      container.append(chip);
+    });
+  };
+  renderSummary(
     "categorySummary",
-    preferences.categories.join("  •  ") || "No categories selected.",
+    preferences.categories,
+    "No categories selected.",
   );
-  setText(
-    "sourceSummary",
-    preferences.sources.join("  •  ") || "No sources selected.",
-  );
-  setText("userFirstName", firstName);
+  renderSummary("sourceSummary", preferences.sources, "No sources selected.");
+  const organization = String(user.organization || "").trim();
   const role =
-    [user.organization, user.year && `BSIT ${user.year} Ladderized`]
-      .filter(Boolean)
-      .join(" | ") || "Student | Portal account";
+    organization && organization.toLowerCase() !== "none"
+      ? organization
+      : "Student";
   setText("userRole", role);
-  setText("userName", user.name || `${firstName} Lopez`);
+  setText("userName", storedName || firstName);
   hydrateUserProfile();
 
   const sidebar = document.getElementById("sidebar");
@@ -197,13 +219,15 @@ function hydrateUserProfile() {
       ),
     };
     localStorage.setItem(preferenceKey, JSON.stringify(preferences));
-    setText(
+    renderSummary(
       "categorySummary",
-      preferences.categories.join("  •  ") || "No categories selected.",
+      preferences.categories,
+      "No categories selected.",
     );
-    setText(
+    renderSummary(
       "sourceSummary",
-      preferences.sources.join("  •  ") || "No sources selected.",
+      preferences.sources,
+      "No sources selected.",
     );
     document.getElementById("cancelPreferences").click();
     const toast = document.getElementById("toast");

@@ -8,6 +8,57 @@
   const password = document.getElementById("new-password");
   const confirmation = document.getElementById("confirm-password");
   const matchMessage = document.getElementById("match-message");
+  const resetEmailInput = document.getElementById("school-email");
+  const resetEmailStatus = document.getElementById("forgot-status");
+  let resetEmailInvalid = false;
+  const emailPattern =
+    /^(?=.{1,254}$)(?!.*\.\.)[A-Z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[A-Z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,}$/i;
+
+  function isValidEmail(value) {
+    if (
+      value.length > 254 ||
+      /\s/.test(value) ||
+      (value.match(/@/g) || []).length !== 1
+    ) {
+      return false;
+    }
+    const [local, domain] = value.split("@");
+    return (
+      local.length <= 64 &&
+      !local.startsWith(".") &&
+      !local.endsWith(".") &&
+      !domain.startsWith(".") &&
+      !domain.endsWith(".") &&
+      emailPattern.test(value)
+    );
+  }
+
+  resetEmailInput?.addEventListener("input", () => {
+    if (!resetEmailInvalid) return;
+    const email = resetEmailInput.value.trim().toLowerCase();
+    const message = email
+      ? isValidEmail(email)
+        ? ""
+        : "Enter a valid email address."
+      : "Email is required.";
+    resetEmailInvalid = Boolean(message);
+    resetEmailInput.toggleAttribute("aria-invalid", resetEmailInvalid);
+    resetEmailInput.closest(".field")?.classList.toggle("invalid", resetEmailInvalid);
+    resetEmailStatus.textContent = message;
+  });
+  resetEmailInput?.addEventListener("blur", () => {
+    const email = resetEmailInput.value.trim().toLowerCase();
+    resetEmailInput.value = email;
+    const message = email
+      ? isValidEmail(email)
+        ? ""
+        : "Enter a valid email address."
+      : "Email is required.";
+    resetEmailInvalid = Boolean(message);
+    resetEmailInput.toggleAttribute("aria-invalid", resetEmailInvalid);
+    resetEmailInput.closest(".field")?.classList.toggle("invalid", resetEmailInvalid);
+    resetEmailStatus.textContent = message;
+  });
 
   function startCountdown() {
     const countdown = document.getElementById("countdown");
@@ -48,16 +99,23 @@
   }
 
   document.getElementById("send-code")?.addEventListener("click", () => {
-    const emailInput = document.getElementById("school-email");
-    const status = document.getElementById("forgot-status");
-    if (!emailInput.value.trim() || !emailInput.checkValidity()) {
-      status.textContent = "Enter a valid school email address.";
-      emailInput.focus();
+    const email = resetEmailInput.value.trim().toLowerCase();
+    resetEmailInput.value = email;
+    const valid = isValidEmail(email);
+    resetEmailInvalid = !valid;
+    resetEmailInput.toggleAttribute("aria-invalid", resetEmailInvalid);
+    resetEmailInput.closest(".field")?.classList.toggle("invalid", resetEmailInvalid);
+    if (!valid) {
+      resetEmailStatus.textContent = email
+        ? "Enter a valid email address."
+        : "Email is required.";
+      resetEmailInput.focus();
       return;
     }
+    resetEmailStatus.textContent = "";
     sessionStorage.setItem(
       resetEmailKey,
-      emailInput.value.trim().toLowerCase(),
+      email,
     );
     issueDemoCode();
     window.location.href = "TeacherVerifyCode.html";
@@ -83,7 +141,7 @@
     const email = sessionStorage.getItem(resetEmailKey);
     resetEmailLabel.textContent = email
       ? `Code requested for ${email}`
-      : "No reset email was provided. Return and enter your school email.";
+      : "No reset email was provided. Return and enter your email.";
     document.getElementById("verify-status").textContent =
       "Local prototype code: 123456. No email service is connected.";
     startCountdown();
@@ -95,7 +153,7 @@
     const isExpired =
       Date.now() >= Number(sessionStorage.getItem(resetExpiryKey));
     if (!sessionStorage.getItem(resetEmailKey)) {
-      status.textContent = "Start again and enter your school email first.";
+      status.textContent = "Start again and enter your email first.";
     } else if (isExpired) {
       status.textContent = "This code has expired. Request a new code.";
     } else if (enteredCode !== sessionStorage.getItem(resetCodeKey)) {
@@ -110,7 +168,7 @@
   document.getElementById("resend-code")?.addEventListener("click", () => {
     if (!sessionStorage.getItem(resetEmailKey)) {
       document.getElementById("verify-status").textContent =
-        "Return and enter your school email first.";
+        "Return and enter your email first.";
       return;
     }
     codeInputs.forEach((input) => {

@@ -1,15 +1,30 @@
 import { sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { auth, isFirebaseConfigured } from "./firebaseConfig.js";
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const PUP_EMAIL_PATTERN = /^[^\s@]+@(?:[a-z0-9-]+\.)*pup\.edu\.ph$/i;
+const EMAIL_PATTERN =
+  /^(?=.{1,254}$)(?!.*\.\.)[A-Z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[A-Z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,}$/i;
+
+function isValidEmail(value) {
+  if (value.length > 254 || /\s/.test(value) || (value.match(/@/g) || []).length !== 1) {
+    return false;
+  }
+  const [local, domain] = value.split("@");
+  return (
+    local.length <= 64 &&
+    !local.startsWith(".") &&
+    !local.endsWith(".") &&
+    !domain.startsWith(".") &&
+    !domain.endsWith(".") &&
+    EMAIL_PATTERN.test(value)
+  );
+}
 
 function errorMessage(error) {
   switch (error.code) {
     case "auth/invalid-email":
-      return "Enter a valid PUP email address.";
+      return "Enter a valid email address.";
     case "auth/user-not-found":
-      return "If an account exists for that PUP email, a reset link will be sent.";
+      return "If an account exists for that email, a reset link will be sent.";
     case "auth/too-many-requests":
       return "Too many requests. Please wait a while and try again.";
     case "auth/network-request-failed":
@@ -24,24 +39,54 @@ document.querySelectorAll("[data-password-reset-form]").forEach((form) => {
   const button = form.querySelector('button[type="submit"]');
   const status = form.querySelector("[data-reset-status]");
   const field = emailInput?.closest(".field");
+  const errorSlot = field?.querySelector(".error-msg");
+  let hasEmailError = false;
 
   if (!emailInput || !button || !status) return;
 
   emailInput.addEventListener("input", () => {
-    field?.classList.remove("invalid");
+    if (!hasEmailError) return;
+    const email = emailInput.value.trim().toLowerCase();
+    const message = email
+      ? isValidEmail(email)
+        ? ""
+        : "Enter a valid email address."
+      : "Email is required.";
+    hasEmailError = Boolean(message);
+    field?.classList.toggle("invalid", hasEmailError);
+    emailInput.toggleAttribute("aria-invalid", hasEmailError);
+    if (errorSlot) errorSlot.textContent = message;
     status.textContent = "";
+  });
+
+  emailInput.addEventListener("blur", () => {
+    const email = emailInput.value.trim().toLowerCase();
+    emailInput.value = email;
+    const message = email
+      ? isValidEmail(email)
+        ? ""
+        : "Enter a valid email address."
+      : "Email is required.";
+    hasEmailError = Boolean(message);
+    field?.classList.toggle("invalid", hasEmailError);
+    emailInput.toggleAttribute("aria-invalid", hasEmailError);
+    if (errorSlot) errorSlot.textContent = message;
   });
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
     const email = emailInput.value.trim().toLowerCase();
-    if (
-      !EMAIL_PATTERN.test(email) ||
-      !PUP_EMAIL_PATTERN.test(email) ||
-      !emailInput.checkValidity()
-    ) {
+    emailInput.value = email;
+    if (!email || !isValidEmail(email)) {
+      hasEmailError = true;
       field?.classList.add("invalid");
-      status.textContent = "Enter a valid PUP email address.";
+      emailInput.setAttribute("aria-invalid", "true");
+      if (errorSlot) {
+        errorSlot.textContent = email
+          ? "Enter a valid email address."
+          : "Email is required.";
+      }
+      status.textContent = "";
       emailInput.focus();
       return;
     }
@@ -56,11 +101,19 @@ document.querySelectorAll("[data-password-reset-form]").forEach((form) => {
     status.textContent = "Sending reset link…";
     try {
       await sendPasswordResetEmail(auth, email);
+      hasEmailError = false;
       field?.classList.remove("invalid");
+      emailInput.removeAttribute("aria-invalid");
+      if (errorSlot) errorSlot.textContent = "";
       status.textContent =
-        "If an account exists for that PUP email, a reset link will be sent. Check your inbox and spam folder.";
+        "If an account exists for that email, a reset link will be sent. Check your inbox and spam folder.";
     } catch (error) {
-      field?.classList.add("invalid");
+      if (error.code === "auth/invalid-email") {
+        hasEmailError = true;
+        field?.classList.add("invalid");
+        emailInput.setAttribute("aria-invalid", "true");
+        if (errorSlot) errorSlot.textContent = "Enter a valid email address.";
+      }
       status.textContent = errorMessage(error);
     } finally {
       button.disabled = false;

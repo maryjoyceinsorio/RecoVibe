@@ -31,7 +31,6 @@ import { fetchMonthHolidays } from "../holidayService.js";
   const sourceFilters = [...document.querySelectorAll("[data-event-source]")];
   const state = {
     date: new Date(),
-    view: "month",
     selectedSources: new Set(
       sourceFilters.map((filter) => filter.dataset.eventSource),
     ),
@@ -39,12 +38,9 @@ import { fetchMonthHolidays } from "../holidayService.js";
   const monthSelect = document.getElementById("calMonthSelect");
   const yearSelect = document.getElementById("calYearSelect");
   const calendarDays = document.getElementById("calFullDays");
-  const calendarListView = document.getElementById("calendarListView");
   const modal = document.getElementById("organizerModalOverlay");
   const upcomingPanel = document.querySelector(".upcoming-panel");
   const todayButton = document.querySelector(".cal-toggle");
-  const monthModeButton = document.getElementById("calendarMonthMode");
-  const listModeButton = document.getElementById("calendarListMode");
 
   const toDate = (value) => {
     if (!value) return null;
@@ -98,22 +94,6 @@ import { fetchMonthHolidays } from "../holidayService.js";
     return events.filter((event) =>
       state.selectedSources.has(normalizedSource(event)),
     );
-  }
-
-  function setView(view) {
-    state.view = view;
-    const isList = view === "list";
-    document
-      .querySelector(".calendar-page")
-      .classList.toggle("is-list-view", isList);
-    document.querySelector(".cal-grid--dow").hidden = isList;
-    calendarDays.hidden = isList;
-    calendarListView.hidden = !isList;
-    monthModeButton.classList.toggle("is-active", !isList);
-    listModeButton.classList.toggle("is-active", isList);
-    monthModeButton.setAttribute("aria-pressed", String(!isList));
-    listModeButton.setAttribute("aria-pressed", String(isList));
-    renderCalendar();
   }
 
   function buildUpcomingList() {
@@ -226,33 +206,7 @@ import { fetchMonthHolidays } from "../holidayService.js";
       })
       .join("");
 
-    renderListView();
     buildUpcomingList();
-  }
-
-  function renderListView() {
-    const year = state.date.getFullYear();
-    const month = state.date.getMonth();
-    const monthEvents = visibleEvents()
-      .filter((event) => {
-        const date = toDate(event.dateISO || event.date);
-        return date && date.getFullYear() === year && date.getMonth() === month;
-      })
-      .sort(eventSort);
-
-    calendarListView.innerHTML = monthEvents.length
-      ? monthEvents
-          .map((event) => {
-            const date = toDate(event.dateISO || event.date);
-            const source = normalizedSource(event);
-            const dateLabel = date.toLocaleDateString("en-US", {
-              month: "short",
-              day: "numeric",
-            });
-            return `<button class="calendar-list-event" type="button" data-event-id="${escape(event.eventId || event.id)}"><span class="calendar-list-event-date">${dateLabel}</span><span class="calendar-list-event-copy"><strong>${escape(event.title || "Untitled event")}</strong><small>${escape(event.time || "Time TBA")} · ${escape(source)}</small></span></button>`;
-          })
-          .join("")
-      : '<div class="calendar-list-empty">No events match the selected month and categories.</div>';
   }
 
   function openEventModal(eventId) {
@@ -298,7 +252,7 @@ import { fetchMonthHolidays } from "../holidayService.js";
   }
 
   function openDay(iso) {
-    const dayEvents = events.filter(
+    const dayEvents = visibleEvents().filter(
       (event) => (event.dateISO || event.date) === iso,
     );
     if (!dayEvents.length) return;
@@ -350,7 +304,6 @@ import { fetchMonthHolidays } from "../holidayService.js";
     .map((month, index) => `<option value="${index}">${month}</option>`)
     .join("");
   renderYearOptions();
-  window.enhanceDropdownSelects?.("#calMonthSelect, #calYearSelect");
 
   monthSelect.addEventListener("change", () => {
     setCalendarMonth(state.date.getFullYear(), Number(monthSelect.value));
@@ -373,9 +326,6 @@ import { fetchMonthHolidays } from "../holidayService.js";
     renderCalendar();
   });
 
-  monthModeButton.addEventListener("click", () => setView("month"));
-  listModeButton.addEventListener("click", () => setView("list"));
-
   sourceFilters.forEach((filter) => {
     filter.addEventListener("change", () => {
       if (filter.checked) state.selectedSources.add(filter.dataset.eventSource);
@@ -393,11 +343,6 @@ import { fetchMonthHolidays } from "../holidayService.js";
       });
       renderCalendar();
     });
-
-  calendarListView.addEventListener("click", (event) => {
-    const button = event.target.closest("[data-event-id]");
-    if (button) openEventModal(button.dataset.eventId);
-  });
 
   calendarDays.addEventListener("click", (event) => {
     const cell = event.target.closest("[data-iso]");

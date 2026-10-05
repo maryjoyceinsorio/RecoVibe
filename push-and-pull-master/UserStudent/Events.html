@@ -1488,12 +1488,10 @@
 
         <div class="sidebar-bottom">
           <div class="user-card">
-            <div class="avatar" id="userAvatar">JL</div>
+            <div class="avatar" id="userAvatar"></div>
             <div class="user-meta">
-              <div class="user-name" id="userName">Joshua Lopez</div>
-              <div class="user-role" id="userRole">
-                IBITS &nbsp;|&nbsp; BSIT 2-3 Ladderized
-              </div>
+              <div class="user-name" id="userName"></div>
+              <div class="user-role" id="userRole"></div>
             </div>
           </div>
           <a
@@ -1756,12 +1754,6 @@
                   data-value="available"
                 >
                   Available</button
-                ><button
-                  type="button"
-                  class="filter-option"
-                  data-value="limited"
-                >
-                  Limited</button
                 ><button type="button" class="filter-option" data-value="full">
                   Full
                 </button>
@@ -1855,17 +1847,38 @@
         const user =
           JSON.parse(localStorage.getItem("recovibeCurrentUser") || "null") ||
           {};
-        const name = String(user.name || "Joshua Lopez").trim();
-        const parts = name.split(/\s+/).filter(Boolean);
-        const firstName = user.firstName || parts[0] || "Joshua";
-        const displayName =
-          user.firstName && parts.length > 1
-            ? `${user.firstName} ${parts[parts.length - 1]}`
-            : name;
+        const storedFirstName = String(user.firstName || "").trim();
+        const storedFullName = String(user.name || user.fullName || "").trim();
+        const nameFromProfile = [
+          storedFirstName,
+          user.middleName,
+          user.lastName,
+        ]
+          .map((part) => String(part || "").trim())
+          .filter(Boolean)
+          .join(" ");
+        const displayName = storedFullName || nameFromProfile || "Student";
+        const firstName =
+          storedFirstName ||
+          storedFullName.split(/\s+/).filter(Boolean)[0] ||
+          nameFromProfile.split(/\s+/).filter(Boolean)[0] ||
+          "";
+        const avatarFallback = [
+          user.username,
+          user.studentNumber,
+          user.studentId,
+          user.email,
+        ]
+          .map((value) => String(value || "").trim())
+          .find(Boolean) || "";
+        const avatarLetter =
+          Array.from(firstName || avatarFallback)[0]?.toLocaleUpperCase() ||
+          "S";
+        const organization = String(user.organization || "").trim();
         const role =
-          user.organization && user.year
-            ? `${user.organization} | BSIT ${user.year} Ladderized`
-            : "IBITS | BSIT 2-3 Ladderized";
+          organization && organization.toLowerCase() !== "none"
+            ? organization
+            : "Student";
 
         document.querySelectorAll(".user-name").forEach((element) => {
           element.textContent = displayName;
@@ -1874,12 +1887,7 @@
           element.textContent = role;
         });
         document.querySelectorAll(".avatar").forEach((element) => {
-          element.textContent = displayName
-            .split(" ")
-            .map((part) => part[0])
-            .slice(0, 2)
-            .join("")
-            .toUpperCase();
+          element.textContent = avatarLetter;
         });
         document.querySelectorAll("#userFirstName").forEach((element) => {
           element.textContent = firstName;
@@ -2079,9 +2087,6 @@
           const matchesAvailability =
             filterState.availability === "all" ||
             (filterState.availability === "available" && openSlots > 20) ||
-            (filterState.availability === "limited" &&
-              openSlots > 0 &&
-              openSlots <= 20) ||
             (filterState.availability === "full" && openSlots <= 0);
           const matchesQuery =
             !query ||

@@ -38,12 +38,10 @@ import { auth, db, isFirebaseConfigured } from "../UserStudent/firebaseConfig.js
   function authErrorMessage(error) {
     switch (error?.code) {
       case "auth/user-not-found":
-        return "No account was found for this email address.";
       case "auth/wrong-password":
       case "auth/invalid-credential":
-        return "The email or password is incorrect.";
       case "auth/invalid-email":
-        return "Enter a valid email address.";
+        return "Incorrect email or password.";
       case "auth/too-many-requests":
         return "Too many sign-in attempts. Please try again later.";
       default:

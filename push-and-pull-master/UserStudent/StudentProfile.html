@@ -115,16 +115,12 @@
     <div class="app" id="profilePage">
       <aside class="sidebar" id="sidebar">
         <div class="sidebar-top">
-          <a
-            class="brand"
-            href="Dashboard.html"
-            aria-label="RecoVibe dashboard"
-          >
+          <div class="brand">
             <span class="brand-mark">RV</span>
             <span class="brand-text"
               ><strong>RecoVibe</strong><small>PUP Biñan Campus</small></span
             >
-          </a>
+          </div>
         </div>
 
         <nav class="nav" id="profileNavigation" aria-label="Primary">
@@ -194,12 +190,10 @@
 
         <div class="sidebar-bottom">
           <div class="user-card">
-            <div class="avatar" id="userAvatar">JL</div>
+            <div class="avatar" id="userAvatar"></div>
             <div class="user-meta">
-              <strong class="user-name" id="userName">Joshua Lopez</strong
-              ><small class="user-role" id="userRole"
-                >IBITS | BSIT 2-3 Ladderized</small
-              >
+              <strong class="user-name" id="userName"></strong
+              ><small class="user-role" id="userRole"></small>
             </div>
           </div>
           <a class="nav-item logout" href="StudentLogin.html" title="Logout"
@@ -225,30 +219,57 @@
               <span class="status-dot" id="accountStatus">Account</span>
             </div>
             <div class="info-grid">
-              <dl>
-                <dt>First Name</dt>
-                <dd id="profileFirstName">Joshua</dd>
-                <dt>Middle Name</dt>
-                <dd id="profileMiddleName">-</dd>
-                <dt>Last Name</dt>
-                <dd id="profileLastName">Lopez</dd>
-              </dl>
-              <dl>
-                <dt>Student No.</dt>
-                <dd id="profileStudentId">-</dd>
-                <dt>Email Address</dt>
-                <dd id="profileEmail">-</dd>
-                <dt>Contact Number</dt>
-                <dd id="profileContact">-</dd>
-              </dl>
-              <dl>
-                <dt>Department</dt>
-                <dd id="profileDepartment">-</dd>
-                <dt>Year</dt>
-                <dd id="profileYear">-</dd>
-                <dt>Organization</dt>
-                <dd id="profileOrganization">-</dd>
-              </dl>
+              <section class="info-group">
+                <h3>Name</h3>
+                <div class="info-fields">
+                  <dl class="info-field">
+                    <dt>First Name</dt>
+                    <dd id="profileFirstName">Not provided</dd>
+                  </dl>
+                  <dl class="info-field">
+                    <dt>Middle Name</dt>
+                    <dd id="profileMiddleName">Not provided</dd>
+                  </dl>
+                  <dl class="info-field">
+                    <dt>Last Name</dt>
+                    <dd id="profileLastName">Not provided</dd>
+                  </dl>
+                </div>
+              </section>
+              <section class="info-group">
+                <h3>Student Details</h3>
+                <div class="info-fields">
+                  <dl class="info-field info-field--wide">
+                    <dt>Student No.</dt>
+                    <dd id="profileStudentId">Not provided</dd>
+                  </dl>
+                  <dl class="info-field">
+                    <dt>Year</dt>
+                    <dd id="profileYear">Not provided</dd>
+                  </dl>
+                  <dl class="info-field">
+                    <dt>Organization</dt>
+                    <dd id="profileOrganization">Not provided</dd>
+                  </dl>
+                  <dl class="info-field info-field--wide">
+                    <dt>Department</dt>
+                    <dd id="profileDepartment">Not provided</dd>
+                  </dl>
+                </div>
+              </section>
+              <section class="info-group info-group--contact">
+                <h3>Contact</h3>
+                <div class="info-fields">
+                  <dl class="info-field info-field--wide">
+                    <dt>Email Address</dt>
+                    <dd id="profileEmail">Not provided</dd>
+                  </dl>
+                  <dl class="info-field">
+                    <dt>Contact Number</dt>
+                    <dd id="profileContact">Not provided</dd>
+                  </dl>
+                </div>
+              </section>
             </div>
           </article>
 
@@ -259,8 +280,8 @@
                 Edit Preferences
               </button>
             </div>
-            <div class="preference-summary" id="categorySummary">
-              No categories selected.
+            <div class="preference-summary">
+              <div class="preference-chips" id="categorySummary"></div>
             </div>
             <div class="preference-editor" id="preferenceEditor" hidden>
               <h3 id="categoryChoicesHeading">Categories</h3>
@@ -285,7 +306,7 @@
             </div>
             <div class="source-summary">
               <h2 id="sourceSummaryHeading">Preferred Sources</h2>
-              <p id="sourceSummary">No sources selected.</p>
+              <div class="preference-chips" id="sourceSummary"></div>
             </div>
           </article>
         </section>
@@ -293,7 +314,6 @@
     </div>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script src="notification-count.js"></script>
-    <script src="student-sidebar-profile.js"></script>
     <script src="StudentProfile.js"></script>
   </body>
 </html>

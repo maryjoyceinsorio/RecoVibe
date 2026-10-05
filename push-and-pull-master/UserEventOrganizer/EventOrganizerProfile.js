@@ -3,7 +3,7 @@
   const organizerId = localStorage.getItem("recovibeOrganizerId") || "";
   const defaultProfile = {
     name: "Event Organizer",
-    email: organizerId.includes("@") ? organizerId : "organizer@pup.edu.ph",
+    email: organizerId.includes("@") ? organizerId : "",
     organization: "IBITS",
   };
   const storedProfile = localStorage.getItem(profileStorageKey);

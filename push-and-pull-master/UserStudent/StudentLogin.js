@@ -35,7 +35,9 @@ function loginErrorMessage(error) {
     case "auth/invalid-credential":
     case "auth/wrong-password":
     case "auth/user-not-found":
-      return "The student ID or password is incorrect.";
+      return "Incorrect email or password.";
+    case "student/not-found":
+      return "Incorrect email or password.";
     case "auth/too-many-requests":
       return "Too many sign-in attempts. Please wait and try again.";
     case "auth/network-request-failed":
@@ -79,7 +81,7 @@ async function signIn() {
     const studentMatches = await getDocs(studentQuery);
     if (studentMatches.empty) {
       setInvalid("field-id", true);
-      showBanner("No account was found for that student ID.");
+      showBanner(loginErrorMessage({ code: "student/not-found" }));
       return;
     }
     if (studentMatches.size !== 1) {
@@ -89,7 +91,7 @@ async function signIn() {
     }
 
     const matchedProfile = studentMatches.docs[0].data();
-    const email = String(matchedProfile.email || "").trim();
+    const email = String(matchedProfile.email || "").trim().toLowerCase();
     if (!email) {
       throw Object.assign(new Error("Student profile email is missing."), {
         code: "student/missing-email",

@@ -522,3 +522,401 @@ body {
     font-size: 23px;
   }
 }
+
+.admin-calendar-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 2.1fr) minmax(260px, 0.8fr);
+  align-items: stretch;
+  gap: 22px;
+  width: 100%;
+  height: min(780px, calc(100vh - 205px));
+  min-height: 540px;
+}
+.admin-calendar {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  padding: 18px;
+  border: 1px solid #d8cfc2;
+  border-radius: 12px;
+  background: #fffdf9;
+  box-shadow: 0 10px 28px rgba(48, 33, 23, 0.08);
+}
+.admin-calendar-toolbar {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.admin-calendar-selectors,
+.admin-calendar-navigation {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.admin-calendar-navigation {
+  justify-content: center;
+}
+.admin-calendar-selectors select,
+.admin-calendar-toolbar button,
+.admin-calendar-mode {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  min-height: 40px;
+  border: 1px solid #d8cfc2;
+  border-radius: 8px;
+  color: var(--admin-ink);
+  font: 600 14px/1 Inter, sans-serif;
+  transition:
+    border-color 0.18s ease,
+    background-color 0.18s ease,
+    box-shadow 0.18s ease,
+    color 0.18s ease;
+}
+.admin-calendar-selectors select {
+  padding: 0 12px;
+  background: #f7f4f1;
+}
+#adminMonthSelect {
+  min-width: 140px;
+}
+#adminYearSelect {
+  min-width: 92px;
+}
+.admin-calendar-toolbar button {
+  padding: 0 14px;
+  background: #f5f1ed;
+  cursor: pointer;
+}
+.admin-calendar-toolbar button[aria-label] {
+  width: 40px;
+  padding: 0;
+  background: #fff;
+  font-size: 18px;
+}
+.admin-calendar-mode {
+  padding: 0 14px;
+  border-color: var(--admin-maroon);
+  background: var(--admin-maroon);
+  color: #fff;
+  white-space: nowrap;
+}
+.admin-calendar-toolbar button:hover {
+  border-color: var(--admin-maroon);
+  background: #f2e8e5;
+}
+.admin-calendar-toolbar button:active {
+  background: #e8d7d4;
+}
+.admin-calendar-selectors select:focus-visible,
+.admin-calendar-toolbar button:focus-visible,
+.admin-panel-header button:focus-visible,
+.admin-filter-option input:focus-visible {
+  outline: 3px solid var(--admin-gold);
+  outline-offset: 2px;
+}
+.admin-weekdays {
+  border-bottom: 1px solid #e2dbd2;
+  color: var(--admin-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.admin-weekdays span {
+  padding: 10px 8px;
+}
+.admin-month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-auto-rows: minmax(0, 1fr);
+  min-height: 0;
+  border-left: 1px solid #e2dbd2;
+}
+.admin-day {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  overflow: visible;
+  padding: 8px 5px;
+  border: 0;
+  border-right: 1px solid #e2dbd2;
+  border-bottom: 1px solid #e2dbd2;
+  background: rgba(255, 255, 255, 0.05);
+  text-align: center;
+}
+.admin-day.muted {
+  background: rgba(255, 255, 255, 0.2);
+}
+.admin-day.today {
+  box-shadow: none;
+}
+.admin-day > button {
+  display: grid;
+  flex: 0 0 26px;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--admin-ink);
+  font: 600 14px/1 Inter, sans-serif;
+}
+.admin-day.today > button {
+  background: var(--admin-maroon);
+  color: #fff;
+}
+.admin-day > button:disabled {
+  color: transparent;
+  background: transparent;
+}
+.admin-day[data-iso] {
+  cursor: pointer;
+}
+.admin-day[data-iso]:hover {
+  background: #f4efe4;
+}
+.admin-day[data-iso]:focus-within {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid var(--admin-maroon);
+  outline-offset: -2px;
+}
+.admin-day-dots {
+  justify-content: center;
+  gap: 5px;
+  min-height: 10px;
+  margin-top: 0;
+  flex-wrap: wrap;
+}
+.admin-dot,
+.admin-legend-dot {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 10px;
+  border-radius: 50%;
+}
+.admin-day-empty {
+  margin: 0;
+  color: #a89d95;
+  font-size: 9px;
+  line-height: 1.2;
+}
+.calendar-badge.badge-holiday {
+  flex: 0 1 auto;
+  margin-top: 0;
+  padding: 2px 5px;
+  font-size: 9px;
+}
+.admin-calendar-side {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  gap: 16px;
+}
+.admin-calendar-panel {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid #d8cfc2;
+  border-radius: 12px;
+  background: #fffdf9;
+  box-shadow: 0 10px 28px rgba(48, 33, 23, 0.08);
+}
+.admin-upcoming-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+.admin-calendar-panel h2 {
+  margin: 0 0 14px;
+  color: var(--admin-ink);
+  font: 600 20px/1.2 Fraunces, Georgia, serif;
+}
+.admin-upcoming-item {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid #e2dbd2;
+  cursor: pointer;
+}
+.admin-upcoming-item:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.admin-upcoming-item:focus-visible {
+  outline: 3px solid var(--admin-gold);
+  outline-offset: 2px;
+}
+.admin-upcoming-date {
+  display: flex;
+  min-height: 52px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: rgba(107, 18, 32, 0.06);
+  color: var(--admin-maroon);
+}
+.admin-upcoming-date strong {
+  font-size: 20px;
+  line-height: 1;
+}
+.admin-upcoming-date small {
+  margin-top: 4px;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+}
+.admin-upcoming-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+.admin-upcoming-copy strong {
+  color: var(--admin-ink);
+  font-size: 13px;
+  line-height: 1.35;
+}
+.admin-upcoming-copy small,
+.admin-upcoming-empty {
+  color: var(--admin-muted);
+  font-size: 12px;
+}
+.admin-upcoming-empty {
+  margin: 0;
+}
+.admin-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.admin-panel-header h2 {
+  margin: 0;
+}
+.admin-panel-header button {
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--admin-maroon);
+  font: 600 13px Inter, sans-serif;
+  cursor: pointer;
+}
+.admin-panel-header button:hover {
+  background: #f2e8e5;
+}
+.admin-filter-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  color: var(--admin-ink);
+  font-size: 13px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+.admin-filter-option input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--admin-maroon);
+}
+.admin-calendar-legend {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 12px 16px;
+  font-size: 13px;
+}
+.admin-calendar-legend > strong {
+  grid-column: 1 / -1;
+  font: 600 20px/1.2 Fraunces, Georgia, serif;
+}
+.admin-calendar-legend .admin-legend-item {
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  line-height: 1.4;
+}
+.admin-calendar-legend .admin-legend-dot {
+  display: block;
+}
+@media (max-width: 980px) {
+  .admin-calendar-layout {
+    grid-template-columns: minmax(0, 1fr);
+    height: auto;
+  }
+  .admin-calendar {
+    min-height: 560px;
+  }
+  .admin-calendar-side {
+    min-height: initial;
+  }
+  .admin-upcoming-panel {
+    flex: initial;
+  }
+}
+@media (max-width: 560px) {
+  .admin-calendar-layout {
+    gap: 14px;
+  }
+  .admin-calendar {
+    min-height: 500px;
+    padding: 12px 8px;
+  }
+  .admin-calendar-toolbar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+  }
+  .admin-calendar-selectors {
+    grid-column: 1 / -1;
+  }
+  #adminMonthSelect {
+    min-width: 0;
+    flex: 1;
+  }
+  #adminYearSelect {
+    min-width: 82px;
+  }
+  .admin-calendar-navigation {
+    justify-content: flex-start;
+    gap: 6px;
+  }
+  .admin-calendar-toolbar button,
+  .admin-calendar-mode {
+    padding: 0 10px;
+  }
+  .admin-calendar-toolbar button[aria-label] {
+    width: 38px;
+  }
+  .admin-weekdays span {
+    padding: 8px 2px;
+    font-size: 10px;
+  }
+  .admin-day {
+    gap: 5px;
+    padding: 5px 2px;
+  }
+  .admin-day-empty,
+  .calendar-badge.badge-holiday {
+    font-size: 8px;
+  }
+  .admin-calendar-legend {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+  .admin-calendar-legend > strong {
+    grid-column: auto;
+  }
+}

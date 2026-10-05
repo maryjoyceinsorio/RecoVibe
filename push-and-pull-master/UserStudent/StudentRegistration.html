@@ -22,8 +22,7 @@
           alt="RecoVibe logo"
         />
         <div>
-          <h1 id="registrationPageTitle">RecoVibe</h1>
-          <p class="portal-subtitle">Student Portal</p>
+          <h1 id="registrationPageTitle">RecoVibe Student Portal</h1>
           <p class="tagline" id="registrationPageTagline">
             University, Organization, and Seminar Events.
           </p>
@@ -49,9 +48,13 @@
                   id="reg-lastname"
                   placeholder="David"
                   required
+                  minlength="2"
+                  maxlength="50"
                   autocomplete="family-name"
+                  autocapitalize="words"
+                  aria-describedby="reg-lastname-error"
                 />
-                <div class="error-msg">Enter your last name.</div>
+                <div class="error-msg" id="reg-lastname-error" role="alert"></div>
               </div>
               <div class="field" id="field-reg-firstname">
                 <label for="reg-firstname">First name</label>
@@ -60,41 +63,49 @@
                   id="reg-firstname"
                   placeholder="Marv"
                   required
+                  minlength="2"
+                  maxlength="50"
                   autocomplete="given-name"
+                  autocapitalize="words"
+                  aria-describedby="reg-firstname-error"
                 />
-                <div class="error-msg">Enter your first name.</div>
+                <div class="error-msg" id="reg-firstname-error" role="alert"></div>
               </div>
-            </div>
-
-            <div class="field" id="field-reg-middlename">
-              <div class="label-row">
+              <div class="field" id="field-reg-middlename">
                 <label for="reg-middlename">Middle name</label>
-              </div>
-              <input
-                type="text"
-                id="reg-middlename"
-                placeholder="Lebron"
-                autocomplete="additional-name"
-              />
-              <label class="checkbox-inline" for="no-middle-name">
-                <input type="checkbox" id="no-middle-name" />
-                I don't have a middle name
-              </label>
-              <div class="error-msg">
-                Enter your middle name, or check the box above.
+                <input
+                  type="text"
+                  id="reg-middlename"
+                  placeholder="Lebron"
+                  minlength="2"
+                  maxlength="50"
+                  autocomplete="additional-name"
+                  autocapitalize="words"
+                  aria-describedby="reg-middlename-error"
+                />
+                <label class="checkbox-inline" for="no-middle-name">
+                  <input type="checkbox" id="no-middle-name" />
+                  I don't have a middle name
+                </label>
+                <div class="error-msg" id="reg-middlename-error" role="alert"></div>
               </div>
             </div>
 
             <div class="field" id="field-reg-email">
-              <label for="reg-email">School email</label>
+              <label for="reg-email">Email</label>
               <input
                 type="email"
                 id="reg-email"
-                placeholder="johndavid@iskolarngbayan.pup.edu.ph"
+                placeholder="Enter your email address"
                 required
+                maxlength="254"
                 autocomplete="email"
+                inputmode="email"
+                autocapitalize="none"
+                spellcheck="false"
+                aria-describedby="reg-email-error"
               />
-              <div class="error-msg">Enter a valid school email.</div>
+              <div class="error-msg" id="reg-email-error" role="alert"></div>
             </div>
 
             <div class="field" id="field-reg-student-id">
@@ -102,12 +113,13 @@
               <input
                 type="text"
                 id="reg-student-id"
-                placeholder="2025-00756-BN-1"
+                placeholder="Enter Student Number"
                 required
-                pattern="20[0-9]{2}-[0-9]{5}-BN-[A-Za-z0-9]"
+                maxlength="20"
                 autocomplete="username"
+                aria-describedby="reg-student-id-error"
               />
-              <div class="error-msg">Enter your student number.</div>
+              <div class="error-msg" id="reg-student-id-error" role="alert"></div>
             </div>
 
             <div class="registration-grid">
@@ -116,37 +128,38 @@
                 <input
                   type="tel"
                   id="reg-contact"
-                  placeholder="09XXXXXXXXX"
+                  value="09"
                   required
                   pattern="09[0-9]{9}"
                   maxlength="11"
                   inputmode="numeric"
                   autocomplete="tel"
+                  aria-describedby="reg-contact-error"
                 />
-                <div class="error-msg">Enter your contact number.</div>
+                <div class="error-msg" id="reg-contact-error" role="alert"></div>
               </div>
               <div class="field" id="field-reg-department">
                 <label for="reg-department">Department</label>
-                <select id="reg-department" required>
+                <select id="reg-department" required aria-describedby="reg-department-error">
                   <option value="">Select department</option>
-                  <option value="BSIT">
+                  <option value="BSIT" title="Bachelor of Science in Information Technology (BSIT)">
                     Bachelor of Science in Information Technology (BSIT)
                   </option>
-                  <option value="BSCPE">
+                  <option value="BSCPE" title="Bachelor of Science in Computer Engineering (BSCPE)">
                     Bachelor of Science in Computer Engineering (BSCPE)
                   </option>
-                  <option value="BSBA">
+                  <option value="BSBA" title="Bachelor of Science in Business Administration (BSBA)">
                     Bachelor of Science in Business Administration (BSBA)
                   </option>
-                  <option value="BSOA">
+                  <option value="BSOA" title="Bachelor of Science in Office Administration (BSOA)">
                     Bachelor of Science in Office Administration (BSOA)
                   </option>
-                  <option value="BSHM">
+                  <option value="BSHM" title="Bachelor of Science in Hospitality Management (BSHM)">
                     Bachelor of Science in Hospitality Management (BSHM)
                   </option>
-                  <option value="Other">Other</option>
+                  <option value="Other" title="Other">Other</option>
                 </select>
-                <div class="error-msg">Enter your department.</div>
+                <div class="error-msg" id="reg-department-error" role="alert"></div>
               </div>
               <div class="field" id="field-reg-year">
                 <label for="reg-year">Year</label>
@@ -155,20 +168,21 @@
                   id="reg-year"
                   placeholder="2-3"
                   required
-                  pattern="[1-9][0-9]*-[1-9][0-9]*"
+                  maxlength="3"
                   inputmode="numeric"
+                  aria-describedby="reg-year-error"
                 />
-                <div class="error-msg">Enter your year and section.</div>
+                <div class="error-msg" id="reg-year-error" role="alert"></div>
               </div>
               <div class="field" id="field-reg-organization">
                 <label for="reg-organization">Organization</label>
-                <select id="reg-organization" required>
+                <select id="reg-organization" required aria-describedby="reg-organization-error">
                   <option value="">Select organization</option>
                   <option value="IBITS">IBITS</option>
                   <option value="ORG">ORG</option>
                   <option value="None">None</option>
                 </select>
-                <div class="error-msg">Enter your organization.</div>
+                <div class="error-msg" id="reg-organization-error" role="alert"></div>
               </div>
             </div>
 
@@ -178,9 +192,11 @@
                 <input
                   type="password"
                   id="reg-pass"
-                  placeholder="At least 6 characters"
+                  placeholder="At least 8 characters"
                   required
+                  maxlength="64"
                   autocomplete="new-password"
+                  aria-describedby="reg-pass-error reg-pass-checklist"
                 />
                 <button
                   type="button"
@@ -217,9 +233,6 @@
                   </svg>
                 </button>
               </div>
-              <div class="error-msg">
-                Password must be at least 6 characters.
-              </div>
             </div>
 
             <div class="field" id="field-reg-confirm">
@@ -231,6 +244,7 @@
                   placeholder="••••••••"
                   required
                   autocomplete="new-password"
+                  aria-describedby="reg-confirm-error"
                 />
                 <button
                   type="button"
@@ -267,9 +281,18 @@
                   </svg>
                 </button>
               </div>
-              <div class="error-msg">Passwords don't match.</div>
             </div>
 
+            <ul class="password-checklist" id="reg-pass-checklist">
+              <li data-rule="length">8+ characters</li>
+              <li data-rule="uppercase">Uppercase letter</li>
+              <li data-rule="lowercase">Lowercase letter</li>
+              <li data-rule="number">Number</li>
+              <li data-rule="special">Special character</li>
+            </ul>
+            <div class="error-msg password-error" id="reg-pass-error" role="alert"></div>
+            <div class="error-msg confirm-error" id="reg-confirm-error" role="alert"></div>
+            <div class="form-error" id="registration-form-error" role="alert" aria-live="assertive"></div>
             <button type="submit" class="btn-primary" id="create-account">
               Create account
             </button>

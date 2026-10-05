@@ -31,17 +31,20 @@
             >‹ Back to portal selection</a
           >
           <h2>Sign in</h2>
-          <p class="sub">Use your school email and portal password.</p>
+          <p class="sub">Use your email and portal password.</p>
           <div class="banner" id="login-banner"></div>
           <div class="field" id="field-email">
-            <label for="login-email">School email</label
+            <label for="login-email">Email</label
             ><input
               type="email"
               id="login-email"
-              placeholder="name@pup.edu.ph"
-              autocomplete="username"
+              placeholder="Enter your email address"
+              autocomplete="email"
+              inputmode="email"
+              autocapitalize="none"
+              spellcheck="false"
             />
-            <div class="error-msg">Enter your school email.</div>
+            <div class="error-msg">Enter a valid email address.</div>
           </div>
           <div class="field password-field" id="field-pass">
             <label for="login-pass">Password</label

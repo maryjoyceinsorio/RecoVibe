@@ -52,9 +52,10 @@
           "auth/invalid-credential",
           "auth/user-not-found",
           "auth/wrong-password",
+          "auth/invalid-email",
         ].includes(error.code)
       ) {
-        banner.textContent = "Email or password is incorrect.";
+        banner.textContent = "Incorrect email or password.";
       } else if (error.code === "auth/too-many-requests") {
         banner.textContent = "Too many attempts. Please try again later.";
       } else {

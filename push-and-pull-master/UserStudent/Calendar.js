@@ -33,25 +33,70 @@ import { loadCalendarData } from "../calendarDataService.js";
   const filterInputs = document.querySelectorAll(".filter-option input");
   const state = {
     date: new Date(),
-    view: "month",
   };
   const monthSelect = document.getElementById("calMonthSelect");
   const yearSelect = document.getElementById("calYearSelect");
   const calendarDays = document.getElementById("calFullDays");
-  const calendarListView = document.getElementById("calendarListView");
   const modal = document.getElementById("organizerModalOverlay");
   const dayModal = document.getElementById("organizerDayOverlay");
   const upcomingPanel = document.querySelector(".upcoming-panel");
   const todayButton = document.querySelector(".cal-toggle");
-  const monthModeButton = document.getElementById("calendarMonthMode");
-  const listModeButton = document.getElementById("calendarListMode");
   const resetButton = document.querySelector(".filter-reset");
 
   const toDate = (value) => {
     if (!value) return null;
-    const date = new Date(`${value}T00:00:00`);
+    if (typeof value === "object" && typeof value.toDate === "function") {
+      return toDate(value.toDate());
+    }
+    if (typeof value === "object" && Number.isFinite(value.seconds)) {
+      return new Date(value.seconds * 1000);
+    }
+    if (value instanceof Date) {
+      return Number.isNaN(value.getTime()) ? null : value;
+    }
+    if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      const [year, month, day] = value.split("-").map(Number);
+      const date = new Date(year, month - 1, day);
+      return date.getFullYear() === year &&
+        date.getMonth() === month - 1 &&
+        date.getDate() === day
+        ? date
+        : null;
+    }
+    const date = new Date(value);
     return Number.isNaN(date.getTime()) ? null : date;
   };
+
+  const toISODate = (value) => {
+    const date = toDate(value);
+    if (!date) return "";
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  };
+
+  function eventDateRange(event) {
+    const start =
+      [
+        event.dateISO,
+        event.eventDate,
+        event.date,
+        event.startDate,
+      ].map(toISODate).find(Boolean) || "";
+    const end =
+      [
+        event.endDateISO,
+        event.eventEndDate,
+        event.endDate,
+        event.dateEnd,
+        event.end,
+        start,
+      ].map(toISODate).find(Boolean) || start;
+    return start ? { start, end: end && end >= start ? end : start } : null;
+  }
+
+  function eventOccursOn(event, iso) {
+    const range = eventDateRange(event);
+    return Boolean(range && range.start <= iso && iso <= range.end);
+  }
 
   const escape = (value) =>
     String(value ?? "").replace(
@@ -67,15 +112,39 @@ import { loadCalendarData } from "../calendarDataService.js";
     );
 
   function eventSource(event) {
-    const source = event.source || "PUP Biñan Campus";
-    if (source === "Event Organizer") return "Others/External";
-    return (
-      {
-        "PUP Biñan": "PUP Biñan Campus",
-        "Teachers / Faculty": "Teachers/Faculty",
-        "Other / External": "Others/External",
-      }[source] || source
-    );
+    const categories = {
+      pupofficial: "PUP Official",
+      official: "PUP Official",
+      pupbinan: "PUP Biñan Campus",
+      pupbinancampus: "PUP Biñan Campus",
+      pupcite: "PUP CITE",
+      cite: "PUP CITE",
+      ibits: "IBITS",
+      teachersfaculty: "Teachers/Faculty",
+      teacherfaculty: "Teachers/Faculty",
+      faculty: "Teachers/Faculty",
+      othersexternal: "Others/External",
+      otherexternal: "Others/External",
+      eventorganizer: "Others/External",
+      holiday: "Philippine Holiday",
+      philippineholiday: "Philippine Holiday",
+    };
+    const sources = [
+      event.category,
+      event.eventSource,
+      event.source,
+      event.organization,
+    ];
+    for (const source of sources) {
+      const normalized = String(source || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "");
+      if (categories[normalized]) return categories[normalized];
+    }
+    return "Others/External";
   }
 
   function eventDotClass(event) {
@@ -87,6 +156,7 @@ import { loadCalendarData } from "../calendarDataService.js";
         IBITS: "ibits",
         "Teachers/Faculty": "faculty",
         "Others/External": "external",
+        "Philippine Holiday": "holiday",
       }[eventSource(event)] || "external"
     );
   }
@@ -104,16 +174,16 @@ import { loadCalendarData } from "../calendarDataService.js";
     const now = new Date();
     const upcoming = visibleEvents()
       .filter((event) => {
-        const date = toDate(event.dateISO || event.date);
+        const range = eventDateRange(event);
         return (
-          date &&
-          date >= new Date(now.getFullYear(), now.getMonth(), now.getDate())
+          range &&
+          range.end >=
+            `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`
         );
       })
       .sort((a, b) =>
-        String(a.dateISO || "").localeCompare(String(b.dateISO || "")),
-      )
-      .slice(0, 5);
+        eventDateRange(a).start.localeCompare(eventDateRange(b).start),
+      );
 
     if (!upcoming.length) {
       upcomingPanel.innerHTML =
@@ -121,26 +191,61 @@ import { loadCalendarData } from "../calendarDataService.js";
       return;
     }
 
+    const shownUpcoming = upcoming.slice(0, 5);
+    const moreCount = upcoming.length - shownUpcoming.length;
     upcomingPanel.innerHTML = [
       "<h3>Upcoming</h3>",
-      ...upcoming.map((event) => {
-        const date = toDate(event.dateISO || event.date);
+      `<div class="upcoming-list">${shownUpcoming.map((event) => {
+        const date = toDate(eventDateRange(event)?.start);
         const month = date
           ? date.toLocaleDateString("en-US", { month: "short" }).toUpperCase()
           : "TBA";
         const day = date ? date.getDate() : "";
-        const sourceLabel = event.source || "PUP Biñan Campus";
+        const sourceLabel = eventSource(event);
+        const categoryClass = `dot-${eventDotClass(event)}`;
         return `
           <div class="upcoming-item" data-event-id="${escape(event.id || event.eventId || "")}" tabindex="0" role="button">
-            <div class="upcoming-date"><span>${day}</span><small>${month}</small></div>
+            <div class="upcoming-date ${categoryClass}"><span>${day}</span><small>${month}</small></div>
             <div class="upcoming-copy">
               <strong>${escape(event.title || "Untitled event")}</strong>
               <span>${escape(sourceLabel)}</span>
             </div>
           </div>
         `;
-      }),
+      }).join("")}</div>`,
+      moreCount
+        ? `<button class="upcoming-more" type="button" data-upcoming-more>+${moreCount} more</button>`
+        : "",
     ].join("");
+  }
+
+  function openRemainingUpcoming() {
+    const now = new Date();
+    const today =
+      `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const remaining = visibleEvents()
+      .filter((item) => {
+        const range = eventDateRange(item);
+        return range && range.end >= today;
+      })
+      .sort((a, b) =>
+        eventDateRange(a).start.localeCompare(eventDateRange(b).start),
+      )
+      .slice(5);
+    openEventList("More upcoming events", remaining);
+  }
+
+  function openEventList(listTitle, listedEvents) {
+    const dayTitle = document.getElementById("organizerDayTitle");
+    const dayList = document.getElementById("organizerDayList");
+    dayTitle.textContent = listTitle;
+    dayList.innerHTML = listedEvents
+      .map(
+        (event) =>
+          `<button class="day-modal-row dot-${eventDotClass(event)}" type="button" data-event-id="${escape(event.id || event.eventId || "")}"><strong>${escape(event.title || "Untitled event")}</strong><small>${escape(event.time || "Time TBA")}</small></button>`,
+      )
+      .join("");
+    dayModal.classList.add("is-open");
   }
 
   function renderCalendar() {
@@ -166,9 +271,7 @@ import { loadCalendarData } from "../calendarDataService.js";
         day,
         iso,
         muted: false,
-        events: visible.filter(
-          (event) => (event.dateISO || event.date) === iso,
-        ),
+        events: visible.filter((event) => eventOccursOn(event, iso)),
       });
     }
 
@@ -184,61 +287,73 @@ import { loadCalendarData } from "../calendarDataService.js";
         const eventCount =
           cell.events && cell.events.length ? cell.events.length : 0;
         const eventDots = cell.events
-          .slice(0, 4)
+          .slice(0, 3)
           .map(
             (event) =>
               `<span class="dot dot-${eventDotClass(event)}" title="${escape(event.title || "Untitled event")}"></span>`,
           )
           .join("");
+        const eventTitles = cell.events
+          .map(
+            (event) =>
+              `<span class="calendar-day-event dot-${eventDotClass(event)}" title="${escape(event.title || "Untitled event")}">${escape(event.title || "Untitled event")}</span>`,
+          )
+          .join("");
+        const dotOverflowCount = Math.max(0, eventCount - 3);
         return `
         <div class="cal-day-full ${cell.muted ? "is-muted" : ""} ${eventCount ? "has-event" : ""} ${today ? "is-today" : ""}" ${cell.iso ? `data-date="${cell.iso}" data-iso="${cell.iso}" tabindex="0" aria-label="${cell.iso}: ${eventCount ? `${eventCount} event${eventCount === 1 ? "" : "s"}` : "no events"}"` : ""}>
           <span class="day-num">${cell.day || ""}</span>
-          ${eventCount ? `<span class="event-dots" aria-hidden="true">${eventDots}</span>` : '<span class="calendar-day-empty">No events</span>'}
-          ${
-            cell.events && cell.events.length
-              ? `<span class="calendar-hover-preview"><strong>${eventCount} event${eventCount > 1 ? "s" : ""}</strong>${cell.events
-                  .slice(0, 3)
-                  .map(
-                    (event) =>
-                      `<span class="calendar-hover-event"><b>${escape(event.title || "Untitled event")}</b><small>${escape(event.time || "Time TBA")}</small></span>`,
-                  )
-                  .join("")}</span>`
-              : ""
-          }
+          ${eventCount ? `<span class="event-dots" aria-hidden="true">${eventDots}${dotOverflowCount ? `<span class="event-dot-overflow">+${dotOverflowCount}</span>` : ""}</span>` : ""}
+          ${eventCount ? `<span class="calendar-day-event-list">${eventTitles}<button class="calendar-day-more" type="button" hidden></button></span>` : ""}
         </div>
       `;
       })
       .join("");
 
-    renderListView();
+    fitCalendarEventChips();
     buildUpcomingList();
   }
 
-  function renderListView() {
-    const year = state.date.getFullYear();
-    const month = state.date.getMonth();
-    const monthEvents = visibleEvents()
-      .filter((event) => {
-        const date = toDate(event.dateISO || event.date);
-        return date && date.getFullYear() === year && date.getMonth() === month;
-      })
-      .sort((first, second) =>
-        String(first.dateISO || "").localeCompare(String(second.dateISO || "")),
-      );
+  function fitCalendarEventChips() {
+    if (!window.matchMedia("(min-width: 1100px)").matches) return;
+    calendarDays.querySelectorAll(".cal-day-full").forEach((cell) => {
+      const list = cell.querySelector(".calendar-day-event-list");
+      if (!list) return;
 
-    calendarListView.innerHTML = monthEvents.length
-      ? monthEvents
-          .map((event) => {
-            const date = toDate(event.dateISO || event.date);
-            const source = eventSource(event);
-            const dateLabel = date.toLocaleDateString("en-US", {
-              month: "short",
-              day: "numeric",
-            });
-            return `<button class="calendar-list-event" type="button" data-event-id="${escape(event.id || event.eventId)}"><span class="calendar-list-event-date">${dateLabel}</span><span class="calendar-list-event-copy"><strong>${escape(event.title || "Untitled event")}</strong><small>${escape(event.time || "Time TBA")} · ${escape(source)}</small></span></button>`;
-          })
-          .join("")
-      : '<div class="calendar-list-empty">No events for this month.</div>';
+      const chips = [...list.querySelectorAll(".calendar-day-event")];
+      const more = list.querySelector(".calendar-day-more");
+      if (!chips.length || !more) return;
+      chips.forEach((chip) => {
+        chip.hidden = false;
+      });
+      more.hidden = true;
+      const chipHeight = chips[0].getBoundingClientRect().height;
+      if (!chipHeight) return;
+
+      const gap = Number.parseFloat(getComputedStyle(list).rowGap) || 2;
+      const moreHeight = Number.parseFloat(getComputedStyle(more).lineHeight) || 13;
+      const availableHeight = list.clientHeight;
+      const maxVisible = Math.floor(
+        (availableHeight + gap) / (chipHeight + gap),
+      );
+      const visibleCount =
+        chips.length > maxVisible
+          ? Math.max(
+              0,
+              Math.floor(
+                (availableHeight - moreHeight + gap) / (chipHeight + gap),
+              ),
+            )
+          : chips.length;
+
+      chips.forEach((chip, index) => {
+        chip.hidden = index >= visibleCount;
+      });
+      const hiddenCount = chips.length - visibleCount;
+      more.hidden = hiddenCount === 0;
+      more.textContent = `+${hiddenCount} more`;
+      more.setAttribute("aria-label", `Show ${hiddenCount} more events`);
+    });
   }
 
   function openEventModal(eventId) {
@@ -253,35 +368,24 @@ import { loadCalendarData } from "../calendarDataService.js";
     if (modal) modal.classList.remove("is-open");
   }
 
-  function openDay(iso) {
-    const dayEvents = visibleEvents().filter(
-      (event) => (event.dateISO || event.date) === iso,
-    );
+  function openDay(iso, forceList = false) {
+    const dayEvents = visibleEvents().filter((event) => eventOccursOn(event, iso));
     if (!dayEvents.length) return;
 
-    if (dayEvents.length === 1) {
+    if (dayEvents.length === 1 && !forceList) {
       openEventModal(dayEvents[0].id || dayEvents[0].eventId);
       return;
     }
 
-    const dayTitle = document.getElementById("organizerDayTitle");
-    const dayList = document.getElementById("organizerDayList");
     const date = toDate(iso);
-
-    dayTitle.textContent = date
+    const title = date
       ? date.toLocaleDateString("en-US", {
           month: "long",
           day: "numeric",
           year: "numeric",
         })
       : iso;
-    dayList.innerHTML = dayEvents
-      .map(
-        (event) =>
-          `<button class="day-modal-row" type="button" data-event-id="${event.id || event.eventId}"><strong>${escape(event.title || "Untitled event")}</strong><small>${escape(event.time || "Time TBA")}</small></button>`,
-      )
-      .join("");
-    dayModal.classList.add("is-open");
+    openEventList(title, dayEvents);
   }
 
   function renderYearOptions() {
@@ -317,7 +421,16 @@ import { loadCalendarData } from "../calendarDataService.js";
         month,
       );
       if (sequence !== dataRequestSequence) return;
-      events = loadedEvents;
+      const holidayEvents = holidays.map((holiday) => ({
+        id: `holiday:${holiday.date}:${holiday.title}`,
+        eventId: `holiday:${holiday.date}:${holiday.title}`,
+        title: holiday.title,
+        dateISO: holiday.date,
+        source: "Philippine Holiday",
+        status: "published",
+        time: "All day",
+      }));
+      events = [...loadedEvents, ...holidayEvents];
       window.RecoVibeCalendarShell?.setHolidays(holidays);
       renderCalendar();
     } catch (error) {
@@ -325,27 +438,14 @@ import { loadCalendarData } from "../calendarDataService.js";
     }
   }
 
-  function setView(view) {
-    state.view = view;
-    const isList = view === "list";
-    document
-      .querySelector(".calendar-page")
-      .classList.toggle("is-list-view", isList);
-    document.querySelector(".cal-grid--dow").hidden = isList;
-    calendarDays.hidden = isList;
-    calendarListView.hidden = !isList;
-    monthModeButton.classList.toggle("is-active", !isList);
-    listModeButton.classList.toggle("is-active", isList);
-    monthModeButton.setAttribute("aria-pressed", String(!isList));
-    listModeButton.setAttribute("aria-pressed", String(isList));
-    renderCalendar();
-  }
-
   function bindCalendarInteractions() {
     calendarDays.addEventListener("click", (event) => {
       const cell = event.target.closest("[data-iso]");
       if (!cell) return;
-      openDay(cell.dataset.iso);
+      openDay(
+        cell.dataset.iso,
+        Boolean(event.target.closest(".calendar-day-more")),
+      );
     });
 
     calendarDays.addEventListener("keydown", (event) => {
@@ -359,6 +459,10 @@ import { loadCalendarData } from "../calendarDataService.js";
     });
 
     upcomingPanel.addEventListener("click", (event) => {
+      if (event.target.closest("[data-upcoming-more]")) {
+        openRemainingUpcoming();
+        return;
+      }
       const item = event.target.closest("[data-event-id]");
       if (!item) return;
       openEventModal(item.dataset.eventId);
@@ -366,6 +470,11 @@ import { loadCalendarData } from "../calendarDataService.js";
 
     upcomingPanel.addEventListener("keydown", (event) => {
       if (event.key === "Enter" || event.key === " ") {
+        if (event.target.closest("[data-upcoming-more]")) {
+          event.preventDefault();
+          openRemainingUpcoming();
+          return;
+        }
         const item = event.target.closest("[data-event-id]");
         if (item) {
           event.preventDefault();
@@ -430,7 +539,6 @@ import { loadCalendarData } from "../calendarDataService.js";
     .map((month, index) => `<option value="${index}">${month}</option>`)
     .join("");
   renderYearOptions();
-  window.enhanceDropdownSelects?.("#calMonthSelect, #calYearSelect");
 
   monthSelect.addEventListener("change", () => {
     setCalendarMonth(state.date.getFullYear(), Number(monthSelect.value));
@@ -454,18 +562,10 @@ import { loadCalendarData } from "../calendarDataService.js";
     refreshCalendarData();
   });
 
-  monthModeButton.addEventListener("click", () => setView("month"));
-  listModeButton.addEventListener("click", () => setView("list"));
-
   filterInputs.forEach((input) => {
     input.addEventListener("change", () => {
       renderCalendar();
     });
-  });
-
-  calendarListView.addEventListener("click", (event) => {
-    const button = event.target.closest("[data-event-id]");
-    if (button) openEventModal(button.dataset.eventId);
   });
 
   resetButton.addEventListener("click", () => {
@@ -504,6 +604,14 @@ import { loadCalendarData } from "../calendarDataService.js";
     renderCalendar();
   });
   window.addEventListener("online", refreshCalendarData);
+  let resizeFrame = 0;
+  window.addEventListener("resize", () => {
+    window.cancelAnimationFrame(resizeFrame);
+    resizeFrame = window.requestAnimationFrame(renderCalendar);
+  });
+  if (window.ResizeObserver) {
+    new ResizeObserver(fitCalendarEventChips).observe(calendarDays);
+  }
   renderCalendar();
   refreshCalendarData();
 })();

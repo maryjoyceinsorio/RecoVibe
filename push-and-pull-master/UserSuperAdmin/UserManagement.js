@@ -292,7 +292,7 @@ import { db, isFirebaseConfigured } from "../UserStudent/firebaseConfig.js";
     if (!createForm.reportValidity()) return;
     const fullName = stringValue(values.get("fullName")).trim();
     const accountNo = stringValue(values.get("accountNumber")).trim();
-    const email = stringValue(values.get("email")).trim();
+    const email = stringValue(values.get("email")).trim().toLowerCase();
     const contactNumber = stringValue(values.get("contactNumber")).trim();
     const organization = stringValue(values.get("organizationDepartment")).trim();
     const password = passwordInput.value;

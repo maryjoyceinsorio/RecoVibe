@@ -2,6 +2,29 @@ import { fetchMonthHolidays } from "./holidayService.js";
 
 let approvedEventsPromise;
 
+function isPublicCalendarEvent(event, allowUnmarked = false) {
+  const status = String(event.status || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[ _-]+/g, " ");
+  const unpublishedStatuses = [
+    "draft",
+    "unpublished",
+    "pending",
+    "rejected",
+    "canceled",
+    "cancelled",
+    "private",
+  ];
+  if (unpublishedStatuses.includes(status) || event.published === false) {
+    return false;
+  }
+  if (["approved", "published"].includes(status) || event.published === true) {
+    return true;
+  }
+  return allowUnmarked && !status;
+}
+
 export function loadApprovedFirestoreEvents() {
   if (!approvedEventsPromise) {
     let request;
@@ -22,15 +45,7 @@ export function loadApprovedFirestoreEvents() {
         return snapshot.docs
           .map((eventDocument) => {
             const data = eventDocument.data();
-            const status = String(data.status || "")
-              .toLowerCase()
-              .replace(/[ _-]+/g, " ");
-            if (
-              !["approved", "published"].includes(status) &&
-              data.published !== true
-            ) {
-              return null;
-            }
+            if (!isPublicCalendarEvent(data)) return null;
 
             return {
               ...data,
@@ -45,11 +60,10 @@ export function loadApprovedFirestoreEvents() {
               source:
                 data.source ||
                 data.eventSource ||
-                (data.organizerId
-                  ? "Event Organizer"
-                  : data.organization ||
-                    data.organizerName ||
-                    "Others / External"),
+                data.category ||
+                data.organization ||
+                data.organizerName ||
+                "Others / External",
               location: data.venue || data.location || data.venueOther || "",
               description:
                 data.eventDescription || data.description || data.desc || "",
@@ -76,6 +90,7 @@ export async function loadCalendarData(currentEvents, year, monthIndex) {
   ]);
   const seen = new Set();
   const events = [...firestoreEvents, ...currentEvents].filter((event) => {
+    if (!isPublicCalendarEvent(event, true)) return false;
     const id = String(event.eventId || event.id || "");
     if (!id || seen.has(id)) return false;
     seen.add(id);

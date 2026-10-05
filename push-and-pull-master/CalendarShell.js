@@ -145,7 +145,12 @@
       cell.querySelectorAll(".calendar-badge.badge-holiday").forEach((badge) =>
         badge.remove(),
       );
-      const eventCount = cell.querySelectorAll(".event-dots .dot").length;
+      const visibleEventCount = cell.querySelectorAll(".event-dots .dot").length;
+      const overflowCount = Number(
+        cell.querySelector(".event-dot-overflow")?.textContent.replace("+", ""),
+      );
+      const eventCount = visibleEventCount + (overflowCount || 0);
+      const hasHolidayEvent = Boolean(cell.querySelector(".dot-holiday"));
       const day = cell.querySelector(".day-num")?.textContent || "";
       const labels = [
         `${months[Number(cell.dataset.date.slice(5, 7)) - 1]} ${day}`,
@@ -155,7 +160,7 @@
         ...names,
       ];
       cell.setAttribute("aria-label", labels.join("; "));
-      names.forEach((name) => {
+      names.filter(() => !hasHolidayEvent).forEach((name) => {
         const badge = document.createElement("span");
         badge.className = "calendar-badge badge-holiday";
         badge.setAttribute("role", "note");

@@ -30,68 +30,19 @@
           <a href="ForgetPassword.html" class="back-link"
             >&larr; Back to forgot password</a
           >
-          <h2 id="verify-heading">Verify your email</h2>
+          <h2 id="verify-heading">Reset your password</h2>
           <p class="sub">
-            Enter the 6-digit verification code we sent to your school email.
+            RecoVibe now sends a secure password reset link directly to your
+            school email. Request a new link to continue.
           </p>
-          <p class="sub email-display">johnd***@iskolarngbayan.pup.edu.ph</p>
-
-          <div
-            class="code-inputs"
-            id="code-inputs"
-            aria-label="Verification code"
+          <a
+            class="btn-primary"
+            href="ForgetPassword.html"
+            style="display: block; text-align: center; text-decoration: none"
+            >Request reset link</a
           >
-            <input
-              type="text"
-              inputmode="numeric"
-              maxlength="1"
-              autocomplete="one-time-code"
-              aria-label="Verification digit 1"
-            />
-            <input
-              type="text"
-              inputmode="numeric"
-              maxlength="1"
-              aria-label="Verification digit 2"
-            />
-            <input
-              type="text"
-              inputmode="numeric"
-              maxlength="1"
-              aria-label="Verification digit 3"
-            />
-            <input
-              type="text"
-              inputmode="numeric"
-              maxlength="1"
-              aria-label="Verification digit 4"
-            />
-            <input
-              type="text"
-              inputmode="numeric"
-              maxlength="1"
-              aria-label="Verification digit 5"
-            />
-            <input
-              type="text"
-              inputmode="numeric"
-              maxlength="1"
-              aria-label="Verification digit 6"
-            />
-          </div>
-          <div class="code-help">
-            <span>Didn't receive the code?</span>
-            <button type="button" class="link-btn" id="resend-code">
-              Resend code
-            </button>
-          </div>
-          <button type="button" class="btn-primary" id="verify-code">
-            Verify Code
-          </button>
-          <p class="countdown" id="countdown">Code expires in 05:00</p>
         </section>
       </main>
     </div>
-    <script src="forgot-flow.js"></script>
   </body>
 </html>

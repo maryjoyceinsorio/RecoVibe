@@ -7,6 +7,10 @@
   const EVENTS = Array.isArray(window.RECOVIBE_EVENTS)
     ? window.RECOVIBE_EVENTS
     : [];
+  let calendarEvents = [...EVENTS];
+  let calendarDataLoading = false;
+  let calendarDataError = false;
+  let calendarRequestSequence = 0;
 
   const RECOMMENDED = [
     {
@@ -81,6 +85,11 @@
     query: "",
     calMonth: today.getMonth(),
     calYear: today.getFullYear(),
+    calSelectedDate: new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      today.getDate(),
+    ),
     sidebarCollapsed: false,
   };
   const participationStorageKey = "recovibeParticipations";
@@ -239,103 +248,276 @@
   /* ---------------------------------------------------------
      RENDER: calendar
   --------------------------------------------------------- */
+  function calendarISO(date) {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  }
+
+  function calendarDate(value) {
+    if (!value) return null;
+    if (typeof value === "object" && typeof value.toDate === "function") {
+      return calendarDate(value.toDate());
+    }
+    if (typeof value === "object" && Number.isFinite(value.seconds)) {
+      return new Date(value.seconds * 1000);
+    }
+    if (value instanceof Date) {
+      return Number.isNaN(value.getTime()) ? null : value;
+    }
+    if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      const [year, month, day] = value.split("-").map(Number);
+      const date = new Date(year, month - 1, day);
+      return date.getFullYear() === year &&
+        date.getMonth() === month - 1 &&
+        date.getDate() === day
+        ? date
+        : null;
+    }
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  function calendarEventRange(event) {
+    const start = [
+      event.dateISO,
+      event.eventDate,
+      event.date,
+      event.startDate,
+    ]
+      .map(calendarDate)
+      .filter(Boolean)
+      .map(calendarISO)[0] || "";
+    const end = [
+      event.endDateISO,
+      event.eventEndDate,
+      event.endDate,
+      event.dateEnd,
+      event.end,
+    ]
+      .map(calendarDate)
+      .filter(Boolean)
+      .map(calendarISO)[0] || start;
+    return start ? { start, end: end >= start ? end : start } : null;
+  }
+
+  function calendarEventsOn(iso) {
+    return calendarEvents.filter((event) => {
+      const range = calendarEventRange(event);
+      return Boolean(range && range.start <= iso && iso <= range.end);
+    });
+  }
+
+  function calendarCategory(event) {
+    const categories = {
+      pupofficial: "PUP Official",
+      official: "PUP Official",
+      pupbinan: "PUP Biñan Campus",
+      pupbinancampus: "PUP Biñan Campus",
+      pupcite: "PUP CITE",
+      cite: "PUP CITE",
+      ibits: "IBITS",
+      teachersfaculty: "Teachers/Faculty",
+      teacherfaculty: "Teachers/Faculty",
+      faculty: "Teachers/Faculty",
+      othersexternal: "Others/External",
+      otherexternal: "Others/External",
+      eventorganizer: "Others/External",
+      holiday: "Philippine Holiday",
+      philippineholiday: "Philippine Holiday",
+    };
+    for (const source of [
+      event.category,
+      event.eventSource,
+      event.source,
+      event.organization,
+    ]) {
+      const key = String(source || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "");
+      if (categories[key]) return categories[key];
+    }
+    return "Others/External";
+  }
+
+  function calendarCategoryColor(event) {
+    return (
+      {
+        "PUP Official": "#8f2536",
+        "PUP Biñan Campus": "#3a76c4",
+        "PUP CITE": "#c79a2b",
+        IBITS: "#7c5cc4",
+        "Teachers/Faculty": "#1e9a73",
+        "Others/External": "#64748b",
+        "Philippine Holiday": "#d97706",
+      }[calendarCategory(event)] || "#7a1f2e"
+    );
+  }
+
+  function renderSelectedCalendarDay() {
+    const list = document.getElementById("calDayEvents");
+    if (!list) return;
+    const iso = calendarISO(state.calSelectedDate);
+    const label = state.calSelectedDate.toLocaleDateString("en-US", {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    });
+    const dayEvents = calendarEventsOn(iso);
+    const message = calendarDataLoading
+      ? '<p class="cal-day-status">Loading events…</p>'
+      : calendarDataError
+        ? '<p class="cal-day-status">Some calendar data could not be refreshed.</p>'
+        : "";
+    const eventList = dayEvents.length
+      ? `<ul class="cal-selected-events">${dayEvents
+          .map(
+            (event) => `
+              <li>
+                <a href="Calendar.html" class="cal-selected-event">
+                  <span class="cal-event-marker" aria-hidden="true" style="background:${calendarCategoryColor(event)}"></span>
+                  <span class="cal-selected-event-copy">
+                    <strong>${escapeHTML(event.title || "Untitled event")}</strong>
+                    <small>${escapeHTML(event.time || "All day")} · ${escapeHTML(calendarCategory(event))}</small>
+                  </span>
+                </a>
+              </li>`,
+          )
+          .join("")}</ul>`
+      : calendarDataLoading
+        ? ""
+        : `<p class="cal-day-empty">No events on this day.</p>`;
+    list.innerHTML = `
+      <div class="cal-day-events-heading">${escapeHTML(label)}</div>
+      ${message}
+      ${eventList}
+    `;
+  }
+
   function renderCalendar() {
     const label = document.getElementById("calMonthLabel");
     label.textContent = `${MONTH_NAMES[state.calMonth]} ${state.calYear}`;
 
     const firstOfMonth = new Date(state.calYear, state.calMonth, 1);
-    const startWeekday = firstOfMonth.getDay(); // 0 = Sun
-    const daysInMonth = new Date(
-      state.calYear,
-      state.calMonth + 1,
-      0,
-    ).getDate();
-    const daysInPrevMonth = new Date(
+    const gridStart = new Date(
       state.calYear,
       state.calMonth,
-      0,
-    ).getDate();
-
-    const isCurrentRealMonth =
-      state.calMonth === today.getMonth() &&
-      state.calYear === today.getFullYear();
-
-    const cells = [];
-
-    // leading days from previous month
-    for (let i = startWeekday - 1; i >= 0; i--) {
-      cells.push({
-        num: daysInPrevMonth - i,
-        muted: true,
-        hasEvent: false,
-        isToday: false,
-        eventIds: [],
-      });
-    }
-    // days of current month
-    for (let d = 1; d <= daysInMonth; d++) {
-      const dateISO = `${state.calYear}-${String(state.calMonth + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-      const eventIds = EVENTS.filter((event) => event.dateISO === dateISO).map(
-        (event) => event.id,
+      1 - firstOfMonth.getDay(),
+    );
+    const todayISO = calendarISO(today);
+    const selectedISO = calendarISO(state.calSelectedDate);
+    const cells = Array.from({ length: 42 }, (_, index) => {
+      const date = new Date(
+        gridStart.getFullYear(),
+        gridStart.getMonth(),
+        gridStart.getDate() + index,
       );
-      cells.push({
-        num: d,
-        muted: false,
-        hasEvent: eventIds.length > 0,
-        isToday: isCurrentRealMonth && d === today.getDate(),
-        eventIds,
-      });
-    }
-    // trailing days to complete the grid to a multiple of 7
-    let trailing = 1;
-    while (cells.length % 7 !== 0) {
-      cells.push({
-        num: trailing++,
-        muted: true,
-        hasEvent: false,
-        isToday: false,
-        eventIds: [],
-      });
-    }
+      const iso = calendarISO(date);
+      return {
+        date,
+        iso,
+        events: calendarEventsOn(iso),
+        muted: date.getMonth() !== state.calMonth,
+        isToday: iso === todayISO,
+        isSelected: iso === selectedISO,
+      };
+    });
 
     const grid = document.getElementById("calDays");
     grid.innerHTML = cells
-      .map((c) => {
+      .map((cell) => {
         const classes = ["cal-day"];
-        if (c.muted) classes.push("is-muted");
-        if (c.hasEvent) classes.push("has-event");
-        if (c.isToday) classes.push("is-today");
-        const eventId = c.eventIds[0] || "";
-        const dayEvents = EVENTS.filter((event) =>
-          c.eventIds.includes(event.id),
-        );
-        const preview = dayEvents.length
-          ? `
-          <span class="dashboard-calendar-preview" role="tooltip">
-            <strong>${dayEvents.length} event${dayEvents.length === 1 ? "" : "s"}</strong>
-            ${dayEvents.map((event) => `<span><b>${escapeHTML(event.title)}</b><small>${escapeHTML(event.time)}</small></span>`).join("")}
-          </span>`
+        if (cell.muted) classes.push("is-muted");
+        if (cell.events.length) classes.push("has-event");
+        if (cell.isToday) classes.push("is-today");
+        if (cell.isSelected) classes.push("is-selected");
+        const dayLabel = cell.date.toLocaleDateString("en-US", {
+          month: "long",
+          day: "numeric",
+          year: "numeric",
+        });
+        const dots = cell.events
+          .slice(0, 3)
+          .map(
+            (event) =>
+              `<span class="cal-event-dot" aria-hidden="true" style="background:${calendarCategoryColor(event)}"></span>`,
+          )
+          .join("");
+        const overflow = cell.events.length > 3
+          ? '<span class="cal-event-overflow" aria-hidden="true">+</span>'
           : "";
-        const cellId = `dashboard-calendar-day-${state.calYear}-${String(state.calMonth + 1).padStart(2, "0")}-${String(c.num).padStart(2, "0")}`;
-        return `<button type="button" id="${cellId}" class="${classes.join(" ")}"${eventId ? ` data-event-id="${eventId}" aria-label="View event on ${MONTH_NAMES[state.calMonth]} ${c.num}"` : ""} data-calendar-field="date"><span id="${cellId}-number">${c.num}</span>${preview}</button>`;
+        return `<button type="button" id="dashboard-calendar-day-${cell.iso}" class="${classes.join(" ")}" data-calendar-date="${cell.iso}" data-calendar-field="date" aria-label="${escapeHTML(dayLabel)}, ${cell.events.length} event${cell.events.length === 1 ? "" : "s"}" aria-pressed="${cell.isSelected}"><span class="cal-day-number">${cell.date.getDate()}</span>${cell.events.length ? `<span class="cal-day-indicators" aria-hidden="true">${dots}${overflow}</span>` : ""}</button>`;
       })
       .join("");
+    renderSelectedCalendarDay();
   }
 
   function shiftMonth(delta) {
-    let m = state.calMonth + delta;
-    let y = state.calYear;
-    if (m < 0) {
-      m = 11;
-      y -= 1;
-    }
-    if (m > 11) {
-      m = 0;
-      y += 1;
-    }
-    state.calMonth = m;
-    state.calYear = y;
+    const nextMonth = new Date(state.calYear, state.calMonth + delta, 1);
+    state.calMonth = nextMonth.getMonth();
+    state.calYear = nextMonth.getFullYear();
+    const selectedDay = Math.min(
+      state.calSelectedDate.getDate(),
+      new Date(state.calYear, state.calMonth + 1, 0).getDate(),
+    );
+    state.calSelectedDate = new Date(state.calYear, state.calMonth, selectedDay);
     renderCalendar();
+    refreshPreviewCalendarData();
+  }
+
+  async function refreshPreviewCalendarData() {
+    const request = ++calendarRequestSequence;
+    calendarDataLoading = true;
+    calendarDataError = false;
+    renderSelectedCalendarDay();
+    try {
+      const { loadCalendarData } = await import("../calendarDataService.js");
+      const sourceEvents = Array.isArray(window.RECOVIBE_EVENTS)
+        ? window.RECOVIBE_EVENTS
+        : [];
+      const { events, holidays } = await loadCalendarData(
+        sourceEvents,
+        state.calYear,
+        state.calMonth,
+      );
+      if (request !== calendarRequestSequence) return;
+      const holidayEvents = holidays.map((holiday) => ({
+        id: `holiday:${holiday.date}:${holiday.title}`,
+        eventId: `holiday:${holiday.date}:${holiday.title}`,
+        title: holiday.title,
+        dateISO: holiday.date,
+        source: "Philippine Holiday",
+        status: "published",
+        time: "All day",
+      }));
+      calendarEvents = [...events, ...holidayEvents];
+    } catch (error) {
+      if (request !== calendarRequestSequence) return;
+      console.error("Unable to refresh dashboard calendar preview:", error);
+      calendarDataError = true;
+    } finally {
+      if (request === calendarRequestSequence) {
+        calendarDataLoading = false;
+        renderCalendar();
+      }
+    }
+  }
+
+  function selectCalendarDay(iso) {
+    const date = calendarDate(iso);
+    if (!date) return;
+    state.calSelectedDate = new Date(
+      date.getFullYear(),
+      date.getMonth(),
+      date.getDate(),
+    );
+    const changedMonth =
+      date.getMonth() !== state.calMonth || date.getFullYear() !== state.calYear;
+    state.calMonth = date.getMonth();
+    state.calYear = date.getFullYear();
+    renderCalendar();
+    if (changedMonth) refreshPreviewCalendarData();
   }
 
   /* ---------------------------------------------------------
@@ -936,18 +1118,6 @@
       });
   }
 
-  function wireSeeAllLinks() {
-    document.querySelectorAll(".link-see-all[data-view]").forEach((link) => {
-      link.addEventListener("click", (e) => {
-        e.preventDefault();
-        const target = document.querySelector(
-          `.nav-item[data-view="${link.dataset.view}"]`,
-        );
-        if (target) target.click();
-      });
-    });
-  }
-
   function wireSearch() {
     const search = document.getElementById("searchInput");
     search.addEventListener("input", (e) => {
@@ -963,6 +1133,21 @@
     document
       .getElementById("calNext")
       .addEventListener("click", () => shiftMonth(1));
+    document.getElementById("calDays").addEventListener("click", (event) => {
+      const day = event.target.closest("[data-calendar-date]");
+      if (day) selectCalendarDay(day.dataset.calendarDate);
+    });
+    window.addEventListener("focus", refreshPreviewCalendarData);
+    window.addEventListener("storage", (event) => {
+      if (
+        !["events", "recovibeOrganizerEvents", "recovibeTeacherEvents"].includes(
+          event.key,
+        )
+      ) {
+        return;
+      }
+      refreshPreviewCalendarData();
+    });
   }
 
   function wireCardClicks() {
@@ -1054,9 +1239,9 @@
     renderRecommended();
     renderNotifications();
     renderCalendar();
+    refreshPreviewCalendarData();
 
     wireSidebar();
-    wireSeeAllLinks();
     wireSearch();
     wireCalendar();
     wireCardClicks();

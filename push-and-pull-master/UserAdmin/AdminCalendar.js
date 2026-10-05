@@ -14,6 +14,13 @@ import { loadCalendarData } from "../calendarDataService.js";
   }
   const root = document.getElementById("calendarRoot"),
     host = document.getElementById("calendarModalHost"),
+    monthSelect = document.getElementById("adminMonthSelect"),
+    yearSelect = document.getElementById("adminYearSelect"),
+    calendarGrid = document.getElementById("adminMonthGrid"),
+    upcomingItems = document.getElementById("adminUpcomingItems"),
+    categoryFilters = [
+      ...document.querySelectorAll("[data-calendar-category]"),
+    ],
     today = new Intl.DateTimeFormat("en-CA", {
       timeZone: "Asia/Manila",
     }).format(new Date());
@@ -23,6 +30,26 @@ import { loadCalendarData } from "../calendarDataService.js";
     holidays = [],
     monthDataSequence = 0,
     loadedMonthDataKey = "";
+  const monthNames = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+  ];
+  const selectedCategories = new Set(
+    categoryFilters.map((filter) => filter.dataset.calendarCategory),
+  );
+  monthSelect.innerHTML = monthNames
+    .map((month, index) => `<option value="${index}">${month}</option>`)
+    .join("");
   document.querySelector("[data-name]").textContent = (
     profile.name || identity
   ).toUpperCase();
@@ -118,6 +145,27 @@ import { loadCalendarData } from "../calendarDataService.js";
       return "Organizational";
     return value;
   }
+  function eventCategory(event) {
+    const value = [
+      event.category,
+      event.eventCategory,
+      event.eventType,
+      event.source,
+      event.organization,
+      event.organizerName,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    if (/academic|cite|teacher|faculty/.test(value)) return "Academic";
+    if (/organization|organizer|\bcsc\b/.test(value)) return "Organization";
+    return "Institutional";
+  }
+  function visibleEvents() {
+    return allEvents().filter((event) =>
+      selectedCategories.has(eventCategory(event)),
+    );
+  }
   function dateOf(event) {
     return String(event.dateISO || event.date || "").slice(0, 10);
   }
@@ -128,42 +176,26 @@ import { loadCalendarData } from "../calendarDataService.js";
         first = new Date(year, month, 1),
         offset = first.getDay(),
         days = new Date(year, month + 1, 0).getDate(),
-        last = new Date(year, month + 1, 0).getDay(),
-        events = allEvents();
-      let cells = "";
-      for (let index = 0; index < offset; index++) {
-        const day = new Date(year, month, 0).getDate() - offset + index + 1;
-        cells += cell(day, "muted", "");
-      }
+        events = visibleEvents();
+      renderYearOptions();
+      monthSelect.value = String(month);
+      yearSelect.value = String(year);
+      const cells = [];
+      for (let index = 0; index < offset; index++) cells.push(cell("", "muted", ""));
       for (let day = 1; day <= days; day++) {
         const iso = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
           dayEvents = events.filter((event) => dateOf(event) === iso);
-        cells += cell(
-          day,
-          iso === today ? "today" : "",
-          iso,
-          dayEvents,
-        );
+        cells.push(cell(day, iso === today ? "today" : "", iso, dayEvents));
       }
-      for (let day = 1; day < 7 - last; day++) cells += cell(day, "muted", "");
-      root.innerHTML = `<section class="admin-calendar"><div class="admin-calendar-toolbar"><button type="button" id="previousMonth" aria-label="Previous month">‹</button><strong class="admin-month-label">${viewed.toLocaleDateString("en-US", { timeZone: "Asia/Manila", month: "long", year: "numeric" })}</strong><div><button type="button" id="goToday">Today</button> <button type="button" id="nextMonth" aria-label="Next month">›</button></div></div><div class="admin-weekdays"><span>S</span><span>M</span><span>T</span><span>W</span><span>Th</span><span>F</span><span>S</span></div><div class="admin-month-grid">${cells}</div></section>`;
-      root.querySelector("#previousMonth").onclick = () => move(-1);
-      root.querySelector("#nextMonth").onclick = () => move(1);
-      root.querySelector("#goToday").onclick = () => {
-        viewed = new Date();
-        render();
-      };
-      root
-        .querySelectorAll("[data-iso]")
-        .forEach(
-          (button) => (button.onclick = () => openDay(button.dataset.iso)),
-        );
+      while (cells.length % 7 !== 0) cells.push(cell("", "muted", ""));
+      calendarGrid.innerHTML = cells.join("");
+      renderUpcoming(events);
       renderHolidayBadges();
       loadMonthData(year, month);
     } catch (error) {
-      root.innerHTML =
-        '<div class="admin-error">Could not load calendar. <button id="retryCalendar" class="admin-row-action">Retry</button></div>';
-      root.querySelector("#retryCalendar").onclick = render;
+      console.error("Unable to render admin calendar:", error);
+      calendarGrid.innerHTML =
+        '<div class="admin-error">Could not load calendar.</div>';
     }
   }
   function cell(day, klass, iso, dayEvents = []) {
@@ -174,7 +206,33 @@ import { loadCalendarData } from "../calendarDataService.js";
           `<span class="admin-dot" style="background:${color(sourceName(event))}" title="${esc(event.title || "Untitled event")}"></span>`,
       )
       .join("");
-    return `<div class="admin-day ${klass}" ${iso ? `data-date="${iso}" data-iso="${iso}"` : ""}><button type="button" ${iso ? `aria-label="${iso}, ${dayEvents.length} events"` : ""}>${day}</button>${dayEvents.length ? `<div class="admin-day-dots" aria-hidden="true">${dots}</div>` : iso ? '<small class="admin-day-empty">No events</small>' : ""}</div>`;
+    return `<div class="admin-day ${klass}" ${iso ? `data-date="${iso}" data-iso="${iso}"` : ""}><button type="button" ${iso ? `aria-label="${iso}, ${dayEvents.length ? `${dayEvents.length} events` : "no events"}"` : "disabled"}>${day}</button>${dayEvents.length ? `<div class="admin-day-dots" aria-hidden="true">${dots}</div>` : iso ? '<small class="admin-day-empty">No events</small>' : ""}</div>`;
+  }
+  function renderUpcoming(events) {
+    const upcoming = events
+      .filter((event) => dateOf(event) >= today)
+      .sort((first, second) => dateOf(first).localeCompare(dateOf(second)))
+      .slice(0, 5);
+    upcomingItems.innerHTML = upcoming.length
+      ? upcoming
+          .map((event) => {
+            const date = new Date(`${dateOf(event)}T00:00:00`);
+            const source = sourceName(event);
+            const id = esc(event.eventId || event.id);
+            return `<div class="admin-upcoming-item" data-iso="${dateOf(event)}" data-event-id="${id}" role="button" tabindex="0"><span class="admin-upcoming-date"><strong>${date.getDate()}</strong><small>${date.toLocaleDateString("en-US", { month: "short" }).toUpperCase()}</small></span><span class="admin-upcoming-copy"><strong>${esc(event.title || "Untitled event")}</strong><small>${esc(source)}</small></span></div>`;
+          })
+          .join("")
+      : '<p class="admin-upcoming-empty">No upcoming events.</p>';
+  }
+  function renderYearOptions() {
+    const selectedYear = viewed.getFullYear();
+    const years = Array.from(
+      { length: 21 },
+      (_, index) => selectedYear - 10 + index,
+    );
+    yearSelect.innerHTML = years
+      .map((year) => `<option value="${year}">${year}</option>`)
+      .join("");
   }
   async function loadMonthData(year, month) {
     const monthKey = `${year}-${month}`;
@@ -206,7 +264,9 @@ import { loadCalendarData } from "../calendarDataService.js";
     const cellsByDate = new Map();
     root.querySelectorAll(".admin-day[data-date]").forEach((day) => {
       cellsByDate.set(day.dataset.date, day);
-      const names = holidaysByDate.get(day.dataset.date) || [];
+      const names = selectedCategories.has("Holiday")
+        ? holidaysByDate.get(day.dataset.date) || []
+        : [];
       day.classList.toggle("is-holiday", names.length > 0);
       day.querySelectorAll(".calendar-badge.badge-holiday").forEach((badge) =>
         badge.remove(),
@@ -250,8 +310,10 @@ import { loadCalendarData } from "../calendarDataService.js";
     render();
   }
   function openDay(iso) {
-    const events = allEvents().filter((event) => dateOf(event) === iso);
-    const holidayName = holidays.find((holiday) => holiday.date === iso)?.title;
+    const events = visibleEvents().filter((event) => dateOf(event) === iso);
+    const holidayName = selectedCategories.has("Holiday")
+      ? holidays.find((holiday) => holiday.date === iso)?.title
+      : "";
     if (!events.length && !holidayName) return;
     const date = new Date(`${iso}T00:00:00`);
     const overlay = document.createElement("div");
@@ -324,6 +386,65 @@ import { loadCalendarData } from "../calendarDataService.js";
     activePopup = null;
     document.body.style.overflow = "";
   }
+  monthSelect.addEventListener("change", () => {
+    viewed = new Date(viewed.getFullYear(), Number(monthSelect.value), 1);
+    render();
+  });
+  yearSelect.addEventListener("change", () => {
+    viewed = new Date(Number(yearSelect.value), viewed.getMonth(), 1);
+    render();
+  });
+  document.getElementById("previousMonth").addEventListener("click", () => {
+    move(-1);
+  });
+  document.getElementById("nextMonth").addEventListener("click", () => {
+    move(1);
+  });
+  document.getElementById("goToday").addEventListener("click", () => {
+    viewed = new Date();
+    render();
+  });
+  document
+    .getElementById("resetCalendarFilters")
+    .addEventListener("click", () => {
+      categoryFilters.forEach((filter) => {
+        filter.checked = true;
+        selectedCategories.add(filter.dataset.calendarCategory);
+      });
+      render();
+    });
+  categoryFilters.forEach((filter) => {
+    filter.addEventListener("change", () => {
+      if (filter.checked) {
+        selectedCategories.add(filter.dataset.calendarCategory);
+      } else {
+        selectedCategories.delete(filter.dataset.calendarCategory);
+      }
+      render();
+    });
+  });
+  calendarGrid.addEventListener("click", (event) => {
+    const day = event.target.closest("[data-iso]");
+    if (day) openDay(day.dataset.iso);
+  });
+  calendarGrid.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    const day = event.target.closest("[data-iso]");
+    if (!day) return;
+    event.preventDefault();
+    openDay(day.dataset.iso);
+  });
+  upcomingItems.addEventListener("click", (event) => {
+    const item = event.target.closest("[data-iso]");
+    if (item) openDay(item.dataset.iso);
+  });
+  upcomingItems.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    const item = event.target.closest("[data-iso]");
+    if (!item) return;
+    event.preventDefault();
+    openDay(item.dataset.iso);
+  });
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && activePopup) closePopup();
   });

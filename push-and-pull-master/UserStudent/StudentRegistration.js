@@ -3,9 +3,13 @@ import {
   deleteUser,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
+  collection,
   doc,
+  getDocs,
+  query,
   serverTimestamp,
   setDoc,
+  where,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { auth, db, isFirebaseConfigured } from "./firebaseConfig.js";
 
@@ -25,26 +29,141 @@ const fields = {
   confirmation: document.getElementById("reg-confirm"),
 };
 
-window.enhanceDropdownSelects?.("#reg-department, #reg-organization");
+window.enhanceDropdownSelects?.(
+  "#reg-department, #reg-organization",
+);
 const noMiddleNameBox = document.getElementById("no-middle-name");
-const namePattern = /^[A-Z][a-z]*(?: [A-Z][a-z]*)*$/;
-const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const pupEmailPattern = /^[^\s@]+@(?:[a-z0-9-]+\.)*pup\.edu\.ph$/i;
-const studentNumberPattern = /^20[0-9]{2}-[0-9]{5}-BN-[A-Za-z0-9]$/;
+const namePattern = /^[\p{L}\p{M}]+(?:[ .'-][\p{L}\p{M}]+)*\.?$/u;
+const emailPattern =
+  /^(?=.{1,254}$)(?!.*\.\.)[A-Z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[A-Z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,}$/i;
+const studentNumberPattern = /^[A-Z0-9-]{1,20}$/;
 const contactPattern = /^09[0-9]{9}$/;
-const yearPattern = /^[1-9][0-9]*-[1-9][0-9]*$/;
+const yearPattern = /^[1-5]-[1-5]$/;
+const touchedFields = new Set();
+let submitted = false;
 
-function setInvalid(fieldId, invalid, message) {
+function setInvalid(fieldId, invalid, message = "") {
   const field = document.getElementById(fieldId);
   const control = field.querySelector("input, select");
-  const error = field.querySelector(".error-msg");
+  const error =
+    field.querySelector(".error-msg") ||
+    document.getElementById(`${fieldId.replace("field-", "")}-error`);
   field.classList.toggle("invalid", invalid);
-  control.setAttribute("aria-invalid", String(invalid));
-  if (message) error.textContent = message;
+  error.classList.toggle("visible", invalid);
+  error.textContent = invalid ? message : "";
+  if (invalid) control.setAttribute("aria-invalid", "true");
+  else control.removeAttribute("aria-invalid");
+
+  const customButton = field.querySelector(
+    ".native-filter-dropdown .filter-button",
+  );
+  if (customButton) {
+    if (invalid) {
+      customButton.setAttribute("aria-invalid", "true");
+      customButton.setAttribute("aria-describedby", error.id);
+    } else {
+      customButton.removeAttribute("aria-invalid");
+      customButton.removeAttribute("aria-describedby");
+    }
+    if (control.title) customButton.title = control.title;
+  }
 }
 
 function valueOf(control) {
   return control.value.trim();
+}
+
+function normalizeName(value) {
+  return value
+    .replace(/ {2,}/g, " ")
+    .replace(/^ /, "")
+    .replace(/(^|[ '-])(\p{L})/gu, (_, separator, letter) =>
+      separator + letter.toUpperCase(),
+    );
+}
+
+function normalizeYear(value) {
+  const allowed = value.replace(/[^0-9-]/g, "");
+  const first = allowed[0];
+  if (!first || !/[1-5]/.test(first)) return "";
+
+  const rest = allowed.slice(1);
+  if (rest.startsWith("-")) {
+    const second = rest.slice(1).match(/[0-9]/)?.[0];
+    return second && /[1-5]/.test(second) ? `${first}-${second}` : `${first}-`;
+  }
+
+  const second = rest.match(/[0-9]/)?.[0];
+  return second && /[1-5]/.test(second) ? `${first}-${second}` : first;
+}
+
+function normalizePhone(value) {
+  const digits = value.replace(/\D/g, "");
+  if (digits.startsWith("09")) return digits.slice(0, 11);
+  if (digits.startsWith("639")) return `0${digits.slice(2, 12)}`;
+  if (digits.startsWith("9")) return `0${digits.slice(0, 10)}`;
+  return `09${digits.replace(/^0+/, "").slice(0, 9)}`;
+}
+
+function normalizeStudentNumber(value) {
+  return value.replace(/[^A-Za-z0-9-]/g, "").slice(0, 20).toUpperCase();
+}
+
+function normalizeWithCaret(control, normalize) {
+  const value = control.value;
+  const start = control.selectionStart ?? value.length;
+  const end = control.selectionEnd ?? start;
+  const nextValue = normalize(value);
+  if (nextValue !== value) {
+    const nextStart = normalize(value.slice(0, start)).length;
+    const nextEnd = normalize(value.slice(0, end)).length;
+    control.value = nextValue;
+    control.setSelectionRange(
+      Math.min(nextStart, nextValue.length),
+      Math.min(nextEnd, nextValue.length),
+    );
+  }
+}
+
+const passwordRules = [
+  ["length", (value) => value.length >= 8],
+  ["uppercase", (value) => /[A-Z]/.test(value)],
+  ["lowercase", (value) => /[a-z]/.test(value)],
+  ["number", (value) => /\d/.test(value)],
+  ["special", (value) => /[^\p{L}\p{N}\s]/u.test(value)],
+];
+
+function updatePasswordChecklist() {
+  const password = fields.password.value;
+  passwordRules.forEach(([rule, test]) => {
+    const item = document.querySelector(
+      `#reg-pass-checklist [data-rule="${rule}"]`,
+    );
+    const met = test(password);
+    item.classList.toggle("met", met);
+    item.setAttribute("aria-label", `${item.textContent.trim()}${met ? " met" : " required"}`);
+  });
+}
+
+function isValidName(value) {
+  const normalized = value.normalize("NFC");
+  const length = Array.from(normalized).length;
+  return length >= 2 && length <= 50 && namePattern.test(normalized);
+}
+
+function isValidEmail(value) {
+  if (value.length > 254 || /\s/.test(value) || (value.match(/@/g) || []).length !== 1) {
+    return false;
+  }
+  const [local, domain] = value.split("@");
+  return (
+    local.length <= 64 &&
+    !local.startsWith(".") &&
+    !local.endsWith(".") &&
+    !domain.startsWith(".") &&
+    !domain.endsWith(".") &&
+    emailPattern.test(value)
+  );
 }
 
 function validateField(name) {
@@ -52,19 +171,17 @@ function validateField(name) {
 
   if (name === "lastName" || name === "firstName") {
     const label = name === "lastName" ? "Last name" : "First name";
+    const fieldId =
+      name === "lastName" ? "field-reg-lastname" : "field-reg-firstname";
     if (!value) {
-      setInvalid(
-        `field-reg-${name === "lastName" ? "lastname" : "firstname"}`,
-        true,
-        `${label} is required.`,
-      );
+      setInvalid(fieldId, true, `Enter your ${label.toLowerCase()}.`);
       return false;
     }
-    const valid = namePattern.test(value);
+    const valid = isValidName(value);
     setInvalid(
-      `field-reg-${name === "lastName" ? "lastname" : "firstname"}`,
+      fieldId,
       !valid,
-      `${label} must start each word with a capital letter and contain letters only.`,
+      "Use 2–50 valid name characters.",
     );
     return valid;
   }
@@ -74,91 +191,79 @@ function validateField(name) {
       setInvalid("field-reg-middlename", false);
       return true;
     }
-    const valid = Boolean(value) && namePattern.test(value);
+    const valid = isValidName(value);
     setInvalid(
       "field-reg-middlename",
       !valid,
-      valid
-        ? ""
-        : "Middle name must start each word with a capital letter and contain letters only.",
+      value
+        ? "Use 2–50 valid name characters."
+        : "Enter middle name or check box.",
     );
     return valid;
   }
 
   if (name === "email") {
-    const valid = emailPattern.test(value) && pupEmailPattern.test(value);
+    const email = value.toLowerCase();
+    const valid = Boolean(email) && isValidEmail(email);
     setInvalid(
       "field-reg-email",
       !valid,
-      "Please enter a valid PUP email address.",
+      email ? "Enter a valid email address." : "Email is required.",
     );
     return valid;
   }
 
   if (name === "studentId") {
-    const valid = studentNumberPattern.test(value);
+    const valid = studentNumberPattern.test(value.toUpperCase());
     setInvalid(
       "field-reg-student-id",
       !valid,
-      "Student number must follow 20XX-XXXXX-BN-X.",
+      "Make sure the Student Number is valid.",
     );
     return valid;
   }
 
   if (name === "contact") {
-    const valid = contactPattern.test(value);
+    const valid = value !== "09" && contactPattern.test(value);
     setInvalid(
       "field-reg-contact",
       !valid,
-      "Contact number must contain exactly 11 digits and start with 09.",
+      "Enter a valid 11-digit contact number.",
     );
     return valid;
   }
 
   if (name === "year") {
     const valid = yearPattern.test(value);
-    setInvalid(
-      "field-reg-year",
-      !valid,
-      "Year must follow the format N-N without spaces.",
-    );
+    setInvalid("field-reg-year", !valid, "Enter year and section like 2-3.");
     return valid;
   }
 
-  if (name === "department") {
-    const valid = Boolean(fields.department.value);
-    setInvalid(
-      "field-reg-department",
-      !valid,
-      "Please select your department.",
-    );
-    return valid;
-  }
-
-  if (name === "organization") {
-    const valid = Boolean(fields.organization.value);
-    setInvalid(
-      "field-reg-organization",
-      !valid,
-      "Please select your organization.",
-    );
+  if (name === "department" || name === "organization") {
+    const fieldId = `field-reg-${name}`;
+    const valid = Boolean(fields[name].value);
+    setInvalid(fieldId, !valid, `Select your ${name}.`);
     return valid;
   }
 
   if (name === "password") {
     const rawValue = fields.password.value;
-    const valid = rawValue.length >= 6;
+    const valid =
+      rawValue.length >= 8 &&
+      rawValue.length <= 64 &&
+      !/\s/.test(rawValue) &&
+      passwordRules.every(([, test]) => test(rawValue));
     setInvalid(
       "field-reg-pass",
       !valid,
-      "Password must be at least 6 characters.",
+      "",
     );
+    updatePasswordChecklist();
     return valid;
   }
 
   if (name === "confirmation") {
-    const valid =
-      Boolean(fields.confirmation.value) &&
+    const valid = Boolean(fields.confirmation.value) &&
       fields.confirmation.value === fields.password.value;
     setInvalid("field-reg-confirm", !valid, "Passwords do not match.");
     return valid;
@@ -167,70 +272,235 @@ function validateField(name) {
   return true;
 }
 
-function validateAll() {
-  const order = [
-    "lastName",
-    "firstName",
-    "middleName",
-    "studentId",
-    "email",
-    "contact",
-    "year",
-    "department",
-    "organization",
-    "password",
-    "confirmation",
-  ];
-  const results = order.map(validateField);
+const fieldOrder = [
+  "lastName",
+  "firstName",
+  "middleName",
+  "email",
+  "studentId",
+  "contact",
+  "department",
+  "year",
+  "organization",
+  "password",
+  "confirmation",
+];
 
-  const firstInvalidIndex = results.findIndex((result) => !result);
-  if (firstInvalidIndex !== -1) {
-    const firstField = document.getElementById(
-      `field-reg-${["lastname", "firstname", "middlename", "student-id", "email", "contact", "year", "department", "organization", "pass", "confirm"][firstInvalidIndex]}`,
-    );
-    const invalidControl = firstField.querySelector("input, select");
-    (
-      firstField.querySelector(".native-filter-dropdown .filter-button") ||
-      invalidControl
-    ).focus();
-    return false;
-  }
-  return true;
+function validateAll() {
+  const results = fieldOrder.map((name) => ({
+    name,
+    valid: validateField(name),
+  }));
+  const invalidName = results.find((result) => !result.valid)?.name;
+  if (!invalidName) return true;
+
+  const field = fields[invalidName].closest(".field");
+  const focusTarget =
+    field.querySelector(".native-filter-dropdown .filter-button") ||
+    fields[invalidName];
+  focusTarget.scrollIntoView({ behavior: "smooth", block: "center" });
+  focusTarget.focus();
+  return false;
 }
 
 function updateLiveValidation(name) {
-  validateField(name);
-  if (name === "password" && fields.confirmation.value)
+  if (
+    submitted ||
+    touchedFields.has(name) ||
+    fields[name].closest(".field").classList.contains("invalid")
+  ) {
+    validateField(name);
+  }
+  if (
+    name === "password" &&
+    (submitted ||
+      touchedFields.has("confirmation") ||
+    Boolean(fields.confirmation.value) ||
+      fields.confirmation.closest(".field").classList.contains("invalid"))
+  ) {
     validateField("confirmation");
+  }
 }
 
+fields.contact.value = normalizePhone(fields.contact.value || "09");
+
+fields.contact.addEventListener("focus", () => {
+  if (!fields.contact.value.startsWith("09")) {
+    fields.contact.value = normalizePhone(fields.contact.value);
+  }
+  const start = fields.contact.selectionStart ?? fields.contact.value.length;
+  const end = fields.contact.selectionEnd ?? start;
+  if (start < 2) {
+    fields.contact.setSelectionRange(2, Math.max(2, end));
+  }
+});
+
+fields.contact.addEventListener("click", () => {
+  const start = fields.contact.selectionStart ?? 0;
+  const end = fields.contact.selectionEnd ?? start;
+  if (start < 2) fields.contact.setSelectionRange(2, Math.max(2, end));
+});
+
+fields.contact.addEventListener("keydown", (event) => {
+  const start = fields.contact.selectionStart ?? 0;
+  const end = fields.contact.selectionEnd ?? start;
+  const fullSelection = start === 0 && end === fields.contact.value.length;
+  if (event.key === "Home") {
+    event.preventDefault();
+    fields.contact.setSelectionRange(2, 2);
+    return;
+  }
+  if (event.key === "ArrowLeft" && start <= 2) {
+    event.preventDefault();
+    fields.contact.setSelectionRange(2, 2);
+    return;
+  }
+  if (["Backspace", "Delete"].includes(event.key)) {
+    if (fullSelection) {
+      event.preventDefault();
+      fields.contact.value = "09";
+      fields.contact.setSelectionRange(2, 2);
+      fields.contact.dispatchEvent(new Event("input", { bubbles: true }));
+      return;
+    }
+    if (start < 2) {
+      if (end > 2) fields.contact.setSelectionRange(2, end);
+      else {
+        event.preventDefault();
+        fields.contact.setSelectionRange(2, 2);
+      }
+      return;
+    }
+    if (start === 2 && end === 2) {
+      event.preventDefault();
+      return;
+    }
+  }
+  if (
+    start < 2 &&
+    event.key.length === 1 &&
+    !event.ctrlKey &&
+    !event.metaKey &&
+    !event.altKey
+  ) {
+    fields.contact.setSelectionRange(2, Math.max(2, end));
+  }
+});
+
+fields.contact.addEventListener("paste", (event) => {
+  event.preventDefault();
+  fields.contact.value = normalizePhone(
+    event.clipboardData?.getData("text") || "",
+  );
+  fields.contact.setSelectionRange(
+    fields.contact.value.length,
+    fields.contact.value.length,
+  );
+  fields.contact.dispatchEvent(new Event("input", { bubbles: true }));
+});
+
+fields.year.addEventListener("paste", (event) => {
+  const pasted = event.clipboardData?.getData("text") || "";
+  if (!/^[1-5](?:-?[1-5])?$/.test(pasted)) {
+    event.preventDefault();
+    return;
+  }
+  event.preventDefault();
+  fields.year.value = normalizeYear(pasted);
+  fields.year.setSelectionRange(
+    fields.year.value.length,
+    fields.year.value.length,
+  );
+  fields.year.dispatchEvent(new Event("input", { bubbles: true }));
+});
+
 Object.entries(fields).forEach(([name, control]) => {
-  const eventName = control.tagName === "SELECT" ? "change" : "input";
-  control.addEventListener(eventName, () => updateLiveValidation(name));
-  control.addEventListener("blur", () => updateLiveValidation(name));
+  const normalize = () => {
+    if (
+      name === "lastName" ||
+      name === "firstName" ||
+      name === "middleName"
+    ) {
+      normalizeWithCaret(control, normalizeName);
+    } else if (name === "email") {
+      normalizeWithCaret(control, (value) => value.toLowerCase());
+    } else if (name === "studentId") {
+      normalizeWithCaret(control, normalizeStudentNumber);
+    } else if (name === "contact") {
+      normalizeWithCaret(control, normalizePhone);
+    } else if (name === "year") {
+      normalizeWithCaret(control, normalizeYear);
+    }
+  };
+
+  if (control.tagName === "SELECT") {
+    control.addEventListener("change", () => {
+      touchedFields.add(name);
+      const selected = control.selectedOptions[0];
+      control.title = selected?.title || selected?.textContent.trim() || "";
+      updateLiveValidation(name);
+    });
+    control.addEventListener("blur", () => {
+      touchedFields.add(name);
+      updateLiveValidation(name);
+    });
+  } else {
+    control.addEventListener("input", () => {
+      normalize();
+      if (name === "password") updatePasswordChecklist();
+      updateLiveValidation(name);
+    });
+    control.addEventListener("blur", () => {
+      normalize();
+      if (
+        name === "lastName" ||
+        name === "firstName" ||
+        name === "middleName" ||
+        name === "email" ||
+        name === "studentId"
+      ) {
+        control.value = control.value.trim();
+      }
+      if (name === "email") control.value = control.value.toLowerCase();
+      touchedFields.add(name);
+      updateLiveValidation(name);
+    });
+  }
+
+  const customButton = control
+    .closest(".field")
+    .querySelector(".native-filter-dropdown .filter-button");
+  if (customButton) {
+    customButton.addEventListener("blur", () => {
+      touchedFields.add(name);
+      updateLiveValidation(name);
+    });
+
+    customButton.title =
+      control.selectedOptions[0]?.title ||
+      control.selectedOptions[0]?.textContent.trim() ||
+      "";
+  }
 });
 
 noMiddleNameBox.addEventListener("change", () => {
   fields.middleName.disabled = noMiddleNameBox.checked;
+  fields.middleName.setAttribute(
+    "aria-disabled",
+    String(noMiddleNameBox.checked),
+  );
   if (noMiddleNameBox.checked) {
     fields.middleName.value = "";
+    touchedFields.add("middleName");
     setInvalid("field-reg-middlename", false);
-  } else {
+  } else if (submitted || touchedFields.has("middleName")) {
     fields.middleName.focus();
     validateField("middleName");
   }
 });
 
-document
-  .getElementById("reg-contact")
-  ?.addEventListener("beforeinput", (event) => {
-    if (
-      event.data &&
-      (/\D/.test(event.data) ||
-        event.target.value.length + event.data.length > 11)
-    )
-      event.preventDefault();
-  });
+fields.middleName.setAttribute("aria-disabled", "false");
+updatePasswordChecklist();
 
 document.querySelectorAll(".toggle-password").forEach((button) => {
   button.addEventListener("click", () => {
@@ -249,29 +519,45 @@ document.querySelectorAll(".toggle-password").forEach((button) => {
 function registrationErrorMessage(error) {
   switch (error.code) {
     case "auth/email-already-in-use":
-      return "An account already exists for this email. Please sign in instead.";
+      return "This email is already registered.";
+    case "registration/student-number-already-in-use":
+      return "Make sure the Student Number is valid.";
     case "auth/weak-password":
-      return "Choose a password with at least 6 characters.";
+      return "";
     case "auth/invalid-email":
-      return "Please enter a valid PUP email address.";
+      return "Enter a valid email address.";
     case "auth/operation-not-allowed":
       return "Student registration is unavailable right now. Please contact support.";
-    case "permission-denied":
-    case "firestore/permission-denied":
-      return "Your account could not be saved due to database permissions. Please publish the Firestore rules.";
     case "auth/network-request-failed":
       return "A network error occurred. Check your connection and try again.";
+    case "permission-denied":
+    case "firestore/permission-denied":
+      return "We couldn't save your account. Please try again or contact support.";
     default:
-      return "We couldn't create your account right now: " + error.message;
+      return "We couldn't create your account right now. Please try again.";
   }
 }
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
+  submitted = true;
+  document.getElementById("registration-form-error").textContent = "";
+  fields.lastName.value = fields.lastName.value.trim();
+  fields.firstName.value = fields.firstName.value.trim();
+  fields.lastName.value = normalizeName(fields.lastName.value);
+  fields.firstName.value = normalizeName(fields.firstName.value);
+  fields.middleName.value = normalizeName(fields.middleName.value.trim());
+  fields.email.value = fields.email.value.trim().toLowerCase();
+  fields.studentId.value = normalizeStudentNumber(
+    fields.studentId.value.trim(),
+  );
+  fields.contact.value = normalizePhone(fields.contact.value);
+  fields.year.value = normalizeYear(fields.year.value);
   if (!validateAll()) return;
 
   if (!isFirebaseConfigured || !auth || !db) {
-    alert("Student registration is not configured yet. Please check firebaseConfig.js.");
+    document.getElementById("registration-form-error").textContent =
+      "Student registration is not configured yet. Please contact support.";
     return;
   }
 
@@ -317,6 +603,26 @@ form.addEventListener("submit", async (event) => {
 
   let user;
   try {
+    const matchingStudents = await getDocs(
+      query(
+        collection(db, "studentUser"),
+        where("studentNumber", "==", studentNumber),
+      ),
+    );
+    if (!matchingStudents.empty) {
+      const duplicateError = Object.assign(new Error(), {
+        code: "registration/student-number-already-in-use",
+      });
+      setInvalid(
+        "field-reg-student-id",
+        true,
+        registrationErrorMessage(duplicateError),
+      );
+      fields.studentId.scrollIntoView({ behavior: "smooth", block: "center" });
+      fields.studentId.focus();
+      return;
+    }
+
     const credential = await createUserWithEmailAndPassword(
       auth,
       email,
@@ -338,7 +644,29 @@ form.addEventListener("submit", async (event) => {
         console.error("Cleanup error:", delError);
       }
     }
-    alert(registrationErrorMessage(error));
+    const message = registrationErrorMessage(error);
+    if (error.code === "auth/email-already-in-use") {
+      setInvalid("field-reg-email", true, message);
+      fields.email.focus();
+    } else if (
+      error.code === "registration/student-number-already-in-use"
+    ) {
+      setInvalid(
+        "field-reg-student-id",
+        true,
+        "Make sure the Student Number is valid.",
+      );
+      fields.studentId.focus();
+    } else if (error.code === "auth/weak-password") {
+      setInvalid("field-reg-pass", true, message);
+      fields.password.focus();
+    } else if (error.code === "auth/invalid-email") {
+      setInvalid("field-reg-email", true, message);
+      fields.email.focus();
+    } else {
+      document.getElementById("registration-form-error").textContent =
+        message;
+    }
   } finally {
     submitButton.disabled = false;
     submitButton.removeAttribute("aria-busy");

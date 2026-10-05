@@ -64,18 +64,48 @@
         </header>
         <section class="admin-content">
           <div id="calendarRoot" aria-live="polite">
-            <div class="admin-loading">Loading calendar…</div>
-          </div>
-          <div
-            class="admin-calendar-legend"
-            id="calendarLegend"
-            aria-label="Calendar legend"
-          >
-            <strong>Calendar legend</strong>
-            <span class="admin-legend-item"><i class="admin-legend-dot dot-holiday"></i>Holiday</span>
-            <span class="admin-legend-item"><i class="admin-legend-dot dot-academic"></i>Academic</span>
-            <span class="admin-legend-item"><i class="admin-legend-dot dot-organization"></i>Organization</span>
-            <span class="admin-legend-item"><i class="admin-legend-dot dot-institutional"></i>Institutional</span>
+            <div class="admin-calendar-layout">
+              <section class="admin-calendar">
+                <div class="admin-calendar-toolbar">
+                  <div class="admin-calendar-selectors">
+                    <select id="adminMonthSelect" aria-label="Select month"></select>
+                    <select id="adminYearSelect" aria-label="Select year"></select>
+                  </div>
+                  <div class="admin-calendar-navigation">
+                    <button type="button" id="goToday">Today</button>
+                    <button type="button" id="previousMonth" aria-label="Previous month">←</button>
+                    <button type="button" id="nextMonth" aria-label="Next month">→</button>
+                  </div>
+                </div>
+                <div class="admin-weekdays" aria-hidden="true">
+                  <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+                </div>
+                <div class="admin-month-grid" id="adminMonthGrid"></div>
+              </section>
+              <aside class="admin-calendar-side">
+                <section class="admin-calendar-panel admin-upcoming-panel">
+                  <h2>Upcoming</h2>
+                  <div id="adminUpcomingItems"><p class="admin-upcoming-empty">Loading events…</p></div>
+                </section>
+                <section class="admin-calendar-panel admin-filter-panel">
+                  <div class="admin-panel-header">
+                    <h2>Filter by category</h2>
+                    <button type="button" id="resetCalendarFilters">Reset</button>
+                  </div>
+                  <label class="admin-filter-option"><input type="checkbox" data-calendar-category="Academic" checked /><span>Academic</span></label>
+                  <label class="admin-filter-option"><input type="checkbox" data-calendar-category="Organization" checked /><span>Organization</span></label>
+                  <label class="admin-filter-option"><input type="checkbox" data-calendar-category="Institutional" checked /><span>Institutional</span></label>
+                  <label class="admin-filter-option"><input type="checkbox" data-calendar-category="Holiday" checked /><span>Holiday</span></label>
+                </section>
+                <section class="admin-calendar-panel admin-calendar-legend" id="calendarLegend" aria-label="Calendar legend">
+                  <strong>Calendar legend</strong>
+                  <span class="admin-legend-item"><i class="admin-legend-dot dot-holiday"></i>Holiday</span>
+                  <span class="admin-legend-item"><i class="admin-legend-dot dot-academic"></i>Academic</span>
+                  <span class="admin-legend-item"><i class="admin-legend-dot dot-organization"></i>Organization</span>
+                  <span class="admin-legend-item"><i class="admin-legend-dot dot-institutional"></i>Institutional</span>
+                </section>
+              </aside>
+            </div>
           </div>
         </section>
       </main>

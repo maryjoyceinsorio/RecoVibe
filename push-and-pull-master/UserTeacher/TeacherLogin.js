@@ -14,7 +14,7 @@
       setInvalid("field-pass", !validPassword);
       banner.classList.remove("show");
       if (!validEmail || !validPassword) {
-        banner.textContent = "Enter a valid school email and password.";
+        banner.textContent = "Enter a valid email and password.";
         banner.classList.add("show");
         return;
       }
@@ -28,7 +28,9 @@
         console.warn("Unable to read teacher account:", error);
       }
       const existingName =
-        teacher.email === normalizedEmail ? teacher.name : "";
+        String(teacher.email || "").trim().toLowerCase() === normalizedEmail
+          ? teacher.name
+          : "";
       const nameFromEmail = normalizedEmail
         .split("@")[0]
         .replace(/[._-]+/g, " ")
