@@ -1589,22 +1589,8 @@
                 ><button
                   type="button"
                   class="filter-option"
-                  data-value="PUP Biñan"
+                  data-value="CSC"
                 >
-                  PUP Biñan</button
-                ><button
-                  type="button"
-                  class="filter-option"
-                  data-value="PUP CITE"
-                >
-                  PUP CITE</button
-                ><button
-                  type="button"
-                  class="filter-option"
-                  data-value="Organizational"
-                >
-                  Organizational</button
-                ><button type="button" class="filter-option" data-value="CSC">
                   CSC</button
                 ><button
                   type="button"
@@ -1612,6 +1598,12 @@
                   data-value="Teacher / Faculty"
                 >
                   Teacher / Faculty</button
+                ><button
+                  type="button"
+                  class="filter-option"
+                  data-value="Organizational"
+                >
+                  Organizational</button
                 ><button
                   type="button"
                   class="filter-option"
@@ -1664,9 +1656,52 @@
                 ><button
                   type="button"
                   class="filter-option"
+                  data-value="Music &amp; Entertainment"
+                >
+                  Music &amp; Entertainment</button
+                ><button
+                  type="button"
+                  class="filter-option"
+                  data-value="Orgs &amp; Student Acts"
+                >
+                  Orgs &amp; Student Acts</button
+                ><button
+                  type="button"
+                  class="filter-option"
                   data-value="Social Events"
                 >
                   Social Events
+                </button
+                ><button
+                  type="button"
+                  class="filter-option"
+                  data-value="Community &amp; Outreach"
+                >
+                  Community &amp; Outreach</button
+                ><button
+                  type="button"
+                  class="filter-option"
+                  data-value="Competitions"
+                >
+                  Competitions</button
+                ><button
+                  type="button"
+                  class="filter-option"
+                  data-value="Seminars &amp; Workshops"
+                >
+                  Seminars &amp; Workshops</button
+                ><button
+                  type="button"
+                  class="filter-option"
+                  data-value="Arts &amp; Culture"
+                >
+                  Arts &amp; Culture</button
+                ><button
+                  type="button"
+                  class="filter-option"
+                  data-value="University &amp; Campuses"
+                >
+                  University &amp; Campuses
                 </button>
               </div>
             </div>
@@ -1726,9 +1761,15 @@
                 ><button
                   type="button"
                   class="filter-option"
-                  data-value="Rejected"
+                  data-value="Cancelled"
                 >
-                  Rejected
+                  Cancelled</button
+                ><button
+                  type="button"
+                  class="filter-option"
+                  data-value="Rescheduled"
+                >
+                  Rescheduled
                 </button>
               </div>
             </div>
@@ -1956,24 +1997,21 @@
           "University & Campuses": ["university", "campus"],
         };
 
-        const sourceAliases = {
-          "PUP Official": ["PUP Official"],
-          "PUP Biñan": ["PUP Biñan", "PUP Biñan Campus"],
-          Organizational: [
-            "Organization",
-            "Organizational",
-            "IBITS",
-            "Event Organizer",
-          ],
-          CSC: ["CSC"],
-          "Teacher / Faculty": ["Teacher / Faculty", "Teachers/Faculty"],
-          "Others / External": [
-            "Other / External",
-            "Others/External",
-            "Others / External",
-            "Admin",
-          ],
-        };
+        function normalizeSource(source) {
+          const value = String(source || "").trim().toLowerCase();
+          if (/\bcsc\b/.test(value)) return "CSC";
+          if (/teacher|faculty/.test(value)) return "Teacher / Faculty";
+          if (/organization|organizational|ibits|event organizer/.test(value))
+            return "Organizational";
+          if (/external|admin|other/.test(value)) return "Others / External";
+          if (/pup|campus|cite/.test(value)) return "PUP Official";
+          return "Others / External";
+        }
+        EVENTS.forEach((event) => {
+          event.source = normalizeSource(
+            event.source || event.eventSource || event.campus || event.office,
+          );
+        });
 
         function getParticipationIds() {
           try {
@@ -2045,9 +2083,6 @@
             .getElementById("searchInput")
             .value.trim()
             .toLowerCase();
-          const sourceValues = sourceAliases[filterState.source] || [
-            filterState.source,
-          ];
           const categoryValues = categoryAliases[filterState.category] || [];
           const eventDate = new Date(`${event.dateISO}T00:00:00`);
           const todayDate = new Date();
@@ -2060,7 +2095,7 @@
             filterState.view === "all" || getParticipationIds().has(event.id);
           const matchesSource =
             filterState.source === "All Sources" ||
-            sourceValues.includes(event.source);
+            normalizeSource(event.source) === filterState.source;
           const eventCategory = String(event.category || "").toLowerCase();
           const matchesCategory =
             filterState.category === "All Categories" ||
@@ -2076,11 +2111,16 @@
               eventDate.getFullYear() === todayDate.getFullYear() &&
               eventDate.getMonth() === todayDate.getMonth()) ||
             (filterState.date === "upcoming" && eventDate >= todayDate);
+          const rawStatus = String(event.status || "").trim().toLowerCase();
+          const availableSlots = getEventSlots(event);
           const eventStatus =
-            event.status ||
-            (Number(event.slotsOpen) > 0
-              ? "Available to Join"
-              : "Registration Closed");
+            rawStatus === "cancelled" || rawStatus === "canceled"
+              ? "Cancelled"
+              : rawStatus === "rescheduled"
+                ? "Rescheduled"
+                : rawStatus === "registration closed" || availableSlots <= 0
+                  ? "Registration Closed"
+                  : "Available to Join";
           const matchesStatus =
             filterState.status === "all" || eventStatus === filterState.status;
           const openSlots = getEventSlots(event);
@@ -2124,7 +2164,7 @@
         <div class="event-date" id="event-date-${event.id}" data-event-field="date"><span class="mon" id="event-month-${event.id}">${displayMonth}</span><span class="day" id="event-day-${event.id}">${displayDate.getDate()}</span><span class="year" id="event-year-${event.id}">${displayDate.getFullYear()}</span></div>
         <div class="event-body">
           <h3 class="event-title" id="event-title-${event.id}" data-event-field="title">${escapeHTML(event.title)}</h3>
-          <p class="event-source" id="event-source-${event.id}" data-event-field="source">${escapeHTML(event.source || "Event Organizer")}</p>
+          <p class="event-source" id="event-source-${event.id}" data-event-field="source">${escapeHTML(normalizeSource(event.source))}</p>
           <div class="event-meta" id="event-meta-${event.id}" data-event-field="schedule"><span id="event-time-${event.id}" data-event-field="time">🕐 ${escapeHTML(event.time || "Schedule to be announced")}</span><span id="event-location-${event.id}" data-event-field="location">🏛 ${escapeHTML(event.location || "Location TBD")} · ${escapeHTML(event.room || "Room TBD")}</span></div>
           <div class="event-category-row" id="event-category-row-${event.id}"><span class="category category-${getCategoryClass(event.category)}" id="event-category-${event.id}" data-event-field="category">${escapeHTML(preferredCategory)}</span></div>
           <div class="event-foot" id="event-footer-${event.id}"><span class="slots" id="event-slots-${event.id}" data-event-field="participants">${event.capacityMode === "N/A" ? "No capacity limit" : `${getEventSlots(event)} of ${event.maxSlots ?? event.capacity ?? 0} Slots Open`}</span><button type="button" class="btn-outline" id="event-details-button-${event.id}" data-event-id="${event.id}" aria-controls="studentEventDetailsDialog">View Details</button></div>
@@ -2319,6 +2359,15 @@
 
         renderCurrentDate();
         renderEvents();
+        document.addEventListener("recovibeParticipationChanged", renderEvents);
+        window.addEventListener("storage", (event) => {
+          if (
+            event.key === "recovibeEventSlots" ||
+            event.key === "recovibeParticipations"
+          ) {
+            renderEvents();
+          }
+        });
 
         function setSidebarCollapsed(collapsed) {
           sidebar.classList.toggle("is-collapsed", collapsed);

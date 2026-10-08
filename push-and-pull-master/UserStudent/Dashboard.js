@@ -12,55 +12,8 @@
   let calendarDataError = false;
   let calendarRequestSequence = 0;
 
-  const RECOMMENDED = [
-    {
-      id: "leadership-seminar",
-      tagLabel: "PUP Biñan Campus",
-      tagClass: "tag-campus",
-      title: "PUP Biñan Leadership Seminar",
-      when: "Mar 15 | 1:00 PM",
-      match: "Matches Your Interest In Academic Events",
-    },
-    {
-      id: "intramurals-opening",
-      tagLabel: "Sports",
-      tagClass: "tag-sports",
-      title: "Intramurals Opening Program",
-      when: "Apr 2 | 7:00 AM",
-      match: "Matches Your Interest In Sports",
-    },
-    {
-      id: "cite-hackathon",
-      tagLabel: "PUP CITE",
-      tagClass: "tag-academic",
-      title: "CITE Mini Hackathon",
-      when: "Apr 18 | 9:00 AM",
-      match: "Matches Your Interest In Academic Events",
-    },
-    {
-      id: "ibits-general-assembly",
-      tagLabel: "IBITS",
-      tagClass: "tag-campus",
-      title: "IBITS General Assembly",
-      when: "May 5 | 2:00 PM",
-      match: "Matches Your Interest In Org Activities",
-    },
-  ];
-
-  const NOTIFICATIONS = [
-    {
-      text: 'Your participation for <b>"IBITS General Assembly"</b> was confirmed.',
-      time: "2 Hours Ago",
-    },
-    {
-      text: '<b>"IBITS General Assembly"</b> was cancelled due to internal reasons.',
-      time: "40 Hours Ago",
-    },
-    {
-      text: 'Your participation for <b>"IBITS General Assembly"</b> was rejected.',
-      time: "56 Hours Ago",
-    },
-  ];
+  const RECOMMENDED = [];
+  const NOTIFICATIONS = [];
 
   const MONTH_NAMES = [
     "January",
@@ -216,38 +169,72 @@
   --------------------------------------------------------- */
   function renderRecommended() {
     const grid = document.getElementById("recGrid");
-    grid.innerHTML = RECOMMENDED.map((r) => {
-      const event = EVENTS.find((item) => item.id === r.id) || r;
-      return `
-      <article class="rec-card" id="recommended-card-${r.id}" data-event-id="${r.id}">
-        <h3 id="recommended-title-${r.id}" data-event-field="title">${escapeHTML(event.title || r.title)}</h3>
-        <div class="rec-source" id="recommended-source-${r.id}" data-event-field="source">${escapeHTML(event.source || r.tagLabel)}</div>
-        <div class="rec-when" id="recommended-time-${r.id}" data-event-field="time">${escapeHTML(event.time || r.when)}</div>
-        <div class="rec-match" id="recommended-location-${r.id}" data-event-field="location">${escapeHTML(event.location ? `${event.location} · ${event.room || ""}` : r.match)}</div>
-        <span class="rec-tag ${r.tagClass}" id="recommended-category-${r.id}" data-event-field="category">${escapeHTML(preferredCategory(event.category || r.tagLabel))}</span>
-        <div class="rec-match" id="recommended-participants-${r.id}" data-event-field="participants">${event.capacityMode === "N/A" ? "No capacity limit" : event.slotsOpen !== undefined ? `${event.slotsOpen} of ${event.maxSlots} Slots Open` : escapeHTML(r.match)}</div>
-        <button type="button" class="btn-outline event-details-trigger" id="recommended-details-button-${r.id}" data-event-id="${r.id}" aria-controls="detailsDialog">View Details</button>
+    if (!grid) return;
+    const recommendedList = EVENTS.filter((event) => {
+      const status = String(event.status || "").trim().toLowerCase();
+      const id = String(event.id || event.eventId || "");
+      return !id.startsWith("demo-event-") && status !== "cancelled" && status !== "canceled" && status !== "draft";
+    }).slice(0, 4);
+
+    if (!recommendedList.length) {
+      grid.innerHTML = '<p class="rec-empty" style="grid-column: 1 / -1; color: var(--ink-500); text-align: center; padding: 28px 0; font-size: 14px;">No recommended events at this time.</p>';
+      return;
+    }
+
+    grid.innerHTML = recommendedList
+      .map((event) => {
+        const id = event.id || event.eventId;
+        const tagClass = event.category
+          ? "tag-" + String(event.category).toLowerCase().replace(/[^a-z0-9]/g, "")
+          : "tag-academic";
+        return `
+      <article class="rec-card" id="recommended-card-${id}" data-event-id="${id}">
+        <h3 id="recommended-title-${id}" data-event-field="title">${escapeHTML(event.title || "Untitled event")}</h3>
+        <div class="rec-source" id="recommended-source-${id}" data-event-field="source">${escapeHTML(event.source || "PUP Biñan Campus")}</div>
+        <div class="rec-when" id="recommended-time-${id}" data-event-field="time">${escapeHTML(event.time || "Time TBA")}</div>
+        <div class="rec-match" id="recommended-location-${id}" data-event-field="location">${escapeHTML(event.location ? `${event.location} · ${event.room || ""}` : "Location TBA")}</div>
+        <span class="rec-tag ${tagClass}" id="recommended-category-${id}" data-event-field="category">${escapeHTML(preferredCategory(event.category || event.tag || "Academic & Learning"))}</span>
+        <div class="rec-match" id="recommended-participants-${id}" data-event-field="participants">${event.capacityMode === "N/A" ? "No capacity limit" : event.slotsOpen !== undefined && event.maxSlots ? `${event.slotsOpen} of ${event.maxSlots} Slots Open` : (event.capacity ? `${event.capacity} Slots` : "Open registration")}</div>
+        <button type="button" class="btn-outline event-details-trigger" id="recommended-details-button-${id}" data-event-id="${id}" aria-controls="detailsDialog">View Details</button>
       </article>`;
-    }).join("");
+      })
+      .join("");
   }
 
-  /* ---------------------------------------------------------
-     RENDER: notifications
-  --------------------------------------------------------- */
   function renderNotifications() {
     const list = document.getElementById("notifList");
-    list.innerHTML = NOTIFICATIONS.map(
-      (n) => `
+    if (!list) return;
+    let saved = [];
+    try {
+      saved = JSON.parse(localStorage.getItem("recovibeNotifications") || "[]");
+      if (!Array.isArray(saved)) saved = [];
+    } catch {
+      saved = [];
+    }
+    const realNotifs = saved.filter(
+      (n) =>
+        n &&
+        !String(n.eventId || "").includes("leadership-seminar") &&
+        !String(n.eventId || "").includes("ibits-general-assembly") &&
+        !String(n.id || "").includes("leadership-seminar")
+    );
+    if (!realNotifs.length) {
+      list.innerHTML =
+        '<li class="notif-item notif-empty" style="color: var(--ink-500); font-size: 13px; padding: 12px 0;">No new notifications.</li>';
+      return;
+    }
+    list.innerHTML = realNotifs
+      .slice(0, 5)
+      .map(
+        (n) => `
       <li class="notif-item">
-        ${n.text}
-        <span class="notif-time">${escapeHTML(n.time)}</span>
+        ${n.message || n.text || ""}
+        <span class="notif-time">${escapeHTML(n.time || "Recently")}</span>
       </li>`,
-    ).join("");
+      )
+      .join("");
   }
 
-  /* ---------------------------------------------------------
-     RENDER: calendar
-  --------------------------------------------------------- */
   function calendarISO(date) {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
   }
@@ -727,10 +714,16 @@
         const safeHref = /^(https?:|blob:|data:|\.\.?\/|\/)/i.test(String(href))
           ? href
           : "";
+        const fileId =
+          typeof item === "object" && (item.fileId || item.id)
+            ? item.fileId || item.id
+            : "";
         const icon = `<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.5v10m0 0 3.5-3.5M10 12.5 6.5 9M3.5 13.5v3h13v-3"/></svg>`;
         const download = safeHref
           ? `<a href="${escapeHTML(safeHref)}" download="${escapeHTML(name)}" aria-label="Download ${escapeHTML(name)}" title="Download ${escapeHTML(name)}">${icon}</a>`
-          : `<span title="Download link unavailable" aria-label="Download unavailable">${icon}</span>`;
+          : fileId
+            ? `<a href="#" data-dashboard-file-id="${escapeHTML(fileId)}" download="${escapeHTML(name)}" aria-label="Download ${escapeHTML(name)}" title="Download ${escapeHTML(name)}">${icon}</a>`
+            : `<span title="Download link unavailable" aria-label="Download unavailable">${icon}</span>`;
         return `<div class="dashboard-attachment"><span>${escapeHTML(name)}</span>${download}</div>`;
       })
       .join("")}</div>`;
@@ -806,6 +799,16 @@
     const [startTime, endTime] = eventTimes(event);
     const capacity = eventCapacity(event);
     const slots = availableSlots(event);
+    const participants =
+      capacity == null ? null : Math.max(0, capacity - slots);
+    const weatherContingency =
+      /open field|outside|outdoor/i.test(
+        [event.venue, event.venueOther, event.location, event.room]
+          .filter(Boolean)
+          .join(" "),
+      )
+        ? "Outside – Might Rain."
+        : "No rain concerns.";
     const venue = [event.location || event.venue || "Not specified", event.room]
       .filter(Boolean)
       .join(" · ");
@@ -856,12 +859,11 @@
         <div class="dashboard-info-item">${infoIcon("time")}<strong>Start time</strong>${escapeHTML(startTime)}</div>
         <div class="dashboard-info-item">${infoIcon("time")}<strong>End time</strong>${escapeHTML(endTime)}</div>
         <div class="dashboard-info-item">${infoIcon("venue")}<strong>Venue</strong>${escapeHTML(venue)}</div>
-        <div class="dashboard-info-item">${infoIcon("capacity")}<strong>Max Capacity ${capacity}</strong>${slots} slots open<small>${slots} out of ${capacity} Slots are Open</small></div>
+        <div class="dashboard-info-item">${infoIcon("capacity")}<strong>Max Capacity ${capacity}</strong>${slots} slots open<small>${participants} participants · ${slots} of ${capacity} slots open</small></div>
       </div>
       <div class="dashboard-event-facts">
         <div class="dashboard-event-fact"><strong>Registration Deadline</strong>${escapeHTML(event.registrationDeadline || "Not specified")}</div>
-        <div class="dashboard-event-fact"><strong>Alternate Venue</strong>${escapeHTML(event.alternateVenue || "Not specified")}</div>
-        <div class="dashboard-event-fact"><strong>Weather Contingency</strong>${escapeHTML(event.weatherContingency || event.weatherPlan || "Not specified")}</div>
+        <div class="dashboard-event-fact"><strong>Weather Contingency</strong>${escapeHTML(weatherContingency)}</div>
         <div class="dashboard-event-fact"><strong>Attendance Required</strong>${escapeHTML(event.attendanceRequired || "Not specified")}</div>
       </div>
       <section class="dashboard-event-section dashboard-event-description"><h3>Event Description</h3>${descriptionParagraphs.map((paragraph) => `<p>${escapeHTML(paragraph)}</p>`).join("")}</section>
@@ -873,7 +875,7 @@
         <section class="dashboard-event-section"><h3>Participation Rules</h3>${renderBulletList(event.participationRules || event.rules)}</section>
         <section class="dashboard-event-section dashboard-contact"><h3>Contact Person</h3>${contactMarkup}</section>
       </div>
-      <section class="dashboard-event-section"><h3>Participants Should Download &amp; Fill This Up</h3>${attachmentMarkup(event)}</section>`;
+      <section class="dashboard-event-section"><h3>Participant Documents</h3><p>Participants should download and fill this up before joining the event.</p>${attachmentMarkup(event)}</section>`;
   }
 
   function updateDetailsAction() {
@@ -1156,6 +1158,49 @@
         ".event-details-trigger, .cal-day[data-event-id]",
       );
       if (trigger) openEventModal(trigger.dataset.eventId);
+    });
+    modalContent.addEventListener("click", async (event) => {
+      const link = event.target.closest("[data-dashboard-file-id]");
+      if (!link) return;
+      event.preventDefault();
+      link.setAttribute("aria-busy", "true");
+      try {
+        const database = await new Promise((resolve, reject) => {
+          const request = indexedDB.open("RecoVibeEventDocuments", 1);
+          request.onupgradeneeded = () => {
+            if (!request.result.objectStoreNames.contains("files"))
+              request.result.createObjectStore("files", { keyPath: "id" });
+          };
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () =>
+            reject(
+              request.error || new Error("Document storage is unavailable."),
+            );
+        });
+        const stored = await new Promise((resolve, reject) => {
+          const request = database
+            .transaction("files")
+            .objectStore("files")
+            .get(link.dataset.dashboardFileId);
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () =>
+            reject(
+              request.error || new Error("Could not read the attached file."),
+            );
+        });
+        database.close();
+        if (!stored?.blob) throw new Error("This file is no longer available.");
+        const url = URL.createObjectURL(stored.blob);
+        const download = document.createElement("a");
+        download.href = url;
+        download.download = stored.name || link.download;
+        download.click();
+        window.setTimeout(() => URL.revokeObjectURL(url), 30000);
+      } catch (error) {
+        showToast(`Unable to download ${link.download}: ${error.message}`);
+      } finally {
+        link.removeAttribute("aria-busy");
+      }
     });
   }
 

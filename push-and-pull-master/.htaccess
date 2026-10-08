@@ -1,0 +1,28 @@
+<IfModule mod_headers.c>
+    # 1. Content Security Policy
+    Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasestorage.app; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'"
+
+    # 2. Anti-Clickjacking
+    Header always set X-Frame-Options "SAMEORIGIN"
+
+    # 3. MIME-Type Sniffing Protection
+    Header always set X-Content-Type-Options "nosniff"
+
+    # 4. Remove X-Powered-By Header
+    Header always unset X-Powered-By
+    Header unset X-Powered-By
+
+    # 5. Strict-Transport-Security (enforced on HTTPS, safe on localhost HTTP)
+    Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains" "expr=%{HTTPS} == 'on'"
+</IfModule>
+
+# Ensure correct MIME Types and UTF-8 charset
+<IfModule mod_mime.c>
+    AddType text/html .html
+    AddType text/css .css
+    AddType text/javascript .js
+    AddType application/json .json
+    AddType image/svg+xml .svg
+    AddDefaultCharset UTF-8
+</IfModule>
+

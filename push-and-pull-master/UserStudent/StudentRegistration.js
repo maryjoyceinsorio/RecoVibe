@@ -41,6 +41,16 @@ const contactPattern = /^09[0-9]{9}$/;
 const yearPattern = /^[1-5]-[1-5]$/;
 const touchedFields = new Set();
 let submitted = false;
+const defaultPreferences = {
+  categories: ["Academic & Learning", "Tech & Innovation"],
+  sources: [
+    "PUP Official",
+    "CSC",
+    "Teacher / Faculty",
+    "Organizational",
+    "Others / External",
+  ],
+};
 
 function setInvalid(fieldId, invalid, message = "") {
   const field = document.getElementById(fieldId);
@@ -587,6 +597,7 @@ form.addEventListener("submit", async (event) => {
     department,
     year,
     organization,
+    preferences: defaultPreferences,
 
     // Metadata
     fullName: [firstName, middleName, lastName].filter(Boolean).join(" "),

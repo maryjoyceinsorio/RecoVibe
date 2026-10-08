@@ -54,20 +54,34 @@ import {
         })[char],
     );
   const sourceMatches = {
-    "PUP Official": ["PUP Official"],
-    "PUP Biñan": ["PUP Biñan", "PUP Biñan Campus"],
-    Organizational: ["Organizational", "Organization", "Event Organizer"],
-    CSC: ["CSC"],
-    "Teacher / Faculty": ["Teacher / Faculty", "Teachers/Faculty"],
-    "Others / External": ["Others / External", "Other / External", "Admin"],
+    "PUP Official": ["pup official", "pup biñan", "pup biñan campus", "pup cite", "pup main"],
+    CSC: ["csc"],
+    "Teacher / Faculty": ["teacher / faculty", "teachers/faculty", "teacher", "faculty"],
+    Organizational: ["organizational", "organization", "event organizer", "ibits", "organizer"],
+    "Others / External": ["others / external", "other / external", "others/external", "admin", "external"],
   };
   const categoryMatches = {
-    "Academic & Learning": ["academic"],
+    "Academic & Learning": ["academic", "learning"],
     "Tech & Innovation": ["tech", "innovation"],
     "Leadership & Career": ["leadership", "career"],
     "Sports & Fitness": ["sport", "fitness"],
+    "Music & Entertainment": ["music", "entertainment"],
+    "Orgs & Student Acts": ["org", "organization", "student act"],
     "Social Events": ["social"],
+    "Community & Outreach": ["community", "outreach"],
+    Competitions: ["competition", "hackathon"],
+    "Seminars & Workshops": ["seminar", "workshop"],
+    "Arts & Culture": ["art", "culture"],
+    "University & Campuses": ["university", "campus"],
   };
+  function normalizeSource(source) {
+    const value = String(source || "").trim().toLowerCase();
+    return (
+      Object.keys(sourceMatches).find((label) =>
+        sourceMatches[label].includes(value),
+      ) || "Others / External"
+    );
+  }
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -78,7 +92,6 @@ import {
       ? new Date(`${String(eventDate).slice(0, 10)}T00:00:00`)
       : null;
     const openSlots = Number(event.capacity || 0);
-    const sourceValues = sourceMatches[state.source] || [];
     const categoryValues = categoryMatches[state.category] || [];
     const dateMatches =
       state.date === "all" ||
@@ -126,7 +139,7 @@ import {
       (state.view === "all" ||
         String(event.organizerId || "") === String(organizerId)) &&
       (state.source === "All Sources" ||
-        sourceValues.includes(event.source || "Event Organizer")) &&
+        normalizeSource(event.source || event.eventSource) === state.source) &&
       (state.category === "all" ||
         categoryValues.some((value) =>
           String(event.category || event.eventType || "")
@@ -158,7 +171,7 @@ import {
     const totalSlots = Number(event.capacity || 0);
     const openSlots = Number(event.slotsOpen ?? Math.round(totalSlots * 0.6));
     const eventId = escape(event.eventId || event.id || "");
-    return `<article class="published-event-card" id="organizer-event-card-${eventId}" data-event-id="${eventId}"><div class="published-event-date" id="published-event-date-${eventId}" aria-label="${escape(dateLabel)}"><span class="published-event-month" id="published-event-month-${eventId}">${date ? date.toLocaleDateString("en-US", { month: "short" }) : "TBA"}</span><strong class="published-event-day" id="published-event-day-${eventId}">${date ? date.getDate() : ""}</strong><span class="published-event-year" id="published-event-year-${eventId}">${date ? date.getFullYear() : ""}</span></div><div class="published-event-content" id="published-event-content-${eventId}"><div class="published-event-heading"><div><h2 class="published-event-title" id="published-event-title-${eventId}">${escape(event.title)}</h2><p class="published-event-source" id="published-event-source-${eventId}">${escape(event.source || "PUP Biñan")}</p></div></div><div class="published-event-meta" id="published-event-meta-${eventId}"><span id="published-event-date-label-${eventId}" class="visually-hidden">${escape(dateLabel)}</span><span class="published-event-meta-time" id="published-event-time-${eventId}">${escape(event.time || "Time TBA")}</span><span class="published-event-meta-location" id="published-event-location-${eventId}">${escape(event.location || "Location TBA")}${event.room ? `&nbsp;·&nbsp;${escape(event.room)}` : ""}</span></div><div class="published-event-footer"><div class="published-event-summary" id="published-event-summary-${eventId}"><div class="published-event-tags" id="published-event-category-group-${eventId}"><span id="published-event-category-${eventId}">${escape(event.category || "General")}</span></div><span class="published-event-capacity" id="published-event-capacity-${eventId}">${openSlots} of ${totalSlots} Slots Open</span></div><div class="published-event-actions"><button type="button" id="published-event-details-${eventId}" data-preview-id="${eventId}">View Details</button></div></div></div></article>`;
+    return `<article class="published-event-card" id="organizer-event-card-${eventId}" data-event-id="${eventId}"><div class="published-event-date" id="published-event-date-${eventId}" aria-label="${escape(dateLabel)}"><span class="published-event-month" id="published-event-month-${eventId}">${date ? date.toLocaleDateString("en-US", { month: "short" }) : "TBA"}</span><strong class="published-event-day" id="published-event-day-${eventId}">${date ? date.getDate() : ""}</strong><span class="published-event-year" id="published-event-year-${eventId}">${date ? date.getFullYear() : ""}</span></div><div class="published-event-content" id="published-event-content-${eventId}"><div class="published-event-heading"><div><h2 class="published-event-title" id="published-event-title-${eventId}">${escape(event.title)}</h2><p class="published-event-source" id="published-event-source-${eventId}">${escape(normalizeSource(event.source || event.eventSource))}</p></div></div><div class="published-event-meta" id="published-event-meta-${eventId}"><span id="published-event-date-label-${eventId}" class="visually-hidden">${escape(dateLabel)}</span><span class="published-event-meta-time" id="published-event-time-${eventId}">${escape(event.time || "Time TBA")}</span><span class="published-event-meta-location" id="published-event-location-${eventId}">${escape(event.location || "Location TBA")}${event.room ? `&nbsp;·&nbsp;${escape(event.room)}` : ""}</span></div><div class="published-event-footer"><div class="published-event-summary" id="published-event-summary-${eventId}"><div class="published-event-tags" id="published-event-category-group-${eventId}"><span id="published-event-category-${eventId}">${escape(event.category || "General")}</span></div><span class="published-event-capacity" id="published-event-capacity-${eventId}">${openSlots} of ${totalSlots} Slots Open</span></div><div class="published-event-actions"><button type="button" id="published-event-details-${eventId}" data-preview-id="${eventId}">View Details</button></div></div></div></article>`;
   }
 
   function renderList(element, list) {
@@ -215,6 +228,7 @@ import {
       (item) => String(item.eventId || item.id) === String(eventId),
     );
     if (!event) return;
+    event.source = normalizeSource(event.source || event.eventSource);
     const canReview = String(event.organizerId) === String(organizerId);
     window.RecovibeEventDetails?.open(
       event,
@@ -260,20 +274,14 @@ import {
         { value: "all", label: "All Events" },
         { value: "mine", label: "My Events" },
       ]),
-      createDropdown(
-        "sources",
+      createDropdown("sources", "All Sources", [
         "All Sources",
-        [
-          "All Sources",
-          "PUP Official",
-          "PUP Biñan",
-          "PUP CITE",
-          "Organizational",
-          "CSC",
-          "Teacher / Faculty",
-          "Others / External",
-        ].map((value) => ({ value, label: value })),
-      ),
+        "PUP Official",
+        "CSC",
+        "Teacher / Faculty",
+        "Organizational",
+        "Others / External",
+      ].map((value) => ({ value, label: value }))),
       createDropdown("category", "Category", [
         { value: "all", label: "All Categories" },
         ...Object.keys(categoryMatches).map((value) => ({

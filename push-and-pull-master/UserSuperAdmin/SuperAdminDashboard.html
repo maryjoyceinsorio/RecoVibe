@@ -69,23 +69,36 @@
           </time>
         </header>
 
-        <section class="metrics-grid" aria-label="User summary">
-          <article class="metric-card" id="metric-total-users">
-            <strong class="metric-value" id="total-users-value">2,042</strong>
-            <h2 class="metric-label">Total Users</h2>
-          </article>
-          <article class="metric-card" id="metric-active-users">
-            <strong class="metric-value" id="active-users-value">765</strong>
-            <h2 class="metric-label">Active Users</h2>
-          </article>
-          <article class="metric-card" id="metric-total-admins">
-            <strong class="metric-value" id="total-admins-value">3</strong>
-            <h2 class="metric-label">Total Admins</h2>
-          </article>
-          <article class="metric-card" id="metric-total-teachers-eo">
-            <strong class="metric-value" id="teacher-organizer-users-value">22</strong>
-            <h2 class="metric-label">Total Teacher &amp; EO</h2>
-          </article>
+        <section class="event-context accounts-overview" aria-label="Accounts Overview" id="accounts-overview-panel">
+          <div class="accounts-overview-live-badge" aria-hidden="true"><span class="accounts-live-dot"></span> Live</div>
+          <dl class="event-context-list accounts-overview-columns" aria-live="polite" id="accounts-overview-counts">
+            <div>
+              <dt>Student</dt>
+              <dd class="accounts-count" id="ao-student-total"><span class="ao-skeleton"></span></dd>
+              <dd class="accounts-active" id="ao-student-active"><span class="ao-skeleton ao-skeleton-sm"></span></dd>
+            </div>
+            <div>
+              <dt>Teacher</dt>
+              <dd class="accounts-count" id="ao-teacher-total"><span class="ao-skeleton"></span></dd>
+              <dd class="accounts-active" id="ao-teacher-active"><span class="ao-skeleton ao-skeleton-sm"></span></dd>
+            </div>
+            <div>
+              <dt>Event Organizer</dt>
+              <dd class="accounts-count" id="ao-eo-total"><span class="ao-skeleton"></span></dd>
+              <dd class="accounts-active" id="ao-eo-active"><span class="ao-skeleton ao-skeleton-sm"></span></dd>
+            </div>
+            <div>
+              <dt>Admin</dt>
+              <dd class="accounts-count" id="ao-admin-total"><span class="ao-skeleton"></span></dd>
+              <dd class="accounts-active" id="ao-admin-active"><span class="ao-skeleton ao-skeleton-sm"></span></dd>
+            </div>
+            <div>
+              <dt>Active Users</dt>
+              <dd class="accounts-count" id="ao-active-total"><span class="ao-skeleton"></span></dd>
+              <dd class="accounts-active" id="ao-active-status"><span class="ao-skeleton ao-skeleton-sm"></span></dd>
+            </div>
+          </dl>
+          <p class="accounts-overview-error" id="ao-error" hidden>Unable to load <button type="button" id="ao-retry">Retry</button></p>
         </section>
 
         <section class="audit-section" aria-labelledby="audit-heading">
@@ -141,12 +154,6 @@
                   <td data-label="Action"><strong>Password Successfully Reset</strong></td>
                   <td class="audit-action-cell"><button class="audit-detail-button" type="button" data-audit-detail="audit-6" aria-label="View audit record by Mr. Miguel"><span aria-hidden="true">▶</span></button></td>
                 </tr>
-                <tr id="audit-row-7" data-audit-id="audit-7">
-                  <td data-label="Timestamp"><time datetime="2026-09-23T20:30:00"><strong>09/23/26</strong><span>8:30 PM</span></time></td>
-                  <td data-label="User"><strong>Stud142</strong></td>
-                  <td data-label="Action">Wants to <strong>Participate</strong> in [Event Name]</td>
-                  <td class="audit-action-cell"><button class="audit-detail-button" type="button" data-audit-detail="audit-7" aria-label="View audit record by Stud142"><span aria-hidden="true">▶</span></button></td>
-                </tr>
               </tbody>
             </table>
           </div>
@@ -155,24 +162,29 @@
     </div>
     <dialog class="audit-dialog" id="audit-modal-backdrop" aria-labelledby="audit-modal-title">
       <div class="audit-dialog-content">
-        <h2 id="audit-modal-title"></h2>
-        <p class="audit-dialog-kicker">Audit Activity Details</p>
-        <dl class="audit-detail-list">
-          <div><dt>Action:</dt><dd id="audit-detail-action"></dd></div>
-          <div><dt>Performed By:</dt><dd id="audit-detail-performed-by"></dd></div>
-          <div><dt>Date &amp; Time:</dt><dd id="audit-detail-date-time"></dd></div>
-          <div><dt>Event:</dt><dd id="audit-detail-event"></dd></div>
-          <div><dt>Event Organizer:</dt><dd id="audit-detail-organizer"></dd></div>
-          <div><dt>Previous Status:</dt><dd id="audit-detail-previous-status"></dd></div>
-          <div><dt>New Status:</dt><dd id="audit-detail-new-status"></dd></div>
-        </dl>
-        <section class="audit-detail-description" aria-labelledby="audit-detail-description-title">
-          <h3 id="audit-detail-description-title">Details:</h3>
-          <p id="audit-detail-description"></p>
-        </section>
+        <header class="audit-dialog-header">
+          <p class="audit-dialog-kicker">Audit Activity Details</p>
+          <h2 id="audit-modal-title"></h2>
+        </header>
+        <div class="audit-detail-body">
+          <dl class="audit-detail-grid">
+            <div id="row-action"><dt>Action:</dt><dd id="audit-detail-action"></dd></div>
+            <div id="row-performed-by"><dt>Performed By:</dt><dd id="audit-detail-performed-by"></dd></div>
+            <div id="row-date-time"><dt>Date &amp; Time:</dt><dd id="audit-detail-date-time"></dd></div>
+            <div id="row-category"><dt>Category:</dt><dd id="audit-detail-category"></dd></div>
+            <div id="row-event" hidden><dt>Event:</dt><dd id="audit-detail-event"></dd></div>
+            <div id="row-organizer" hidden><dt>Event Organizer:</dt><dd><span id="audit-detail-organizer"></span><small class="audit-organizer-role" id="audit-detail-organizer-role"></small></dd></div>
+            <div id="row-previous-status" hidden><dt>Previous Status:</dt><dd id="audit-detail-previous-status"></dd></div>
+            <div id="row-new-status" hidden><dt>New Status:</dt><dd id="audit-detail-new-status"></dd></div>
+          </dl>
+          <section class="audit-detail-description" id="audit-description-section" hidden>
+            <h3>Additional Details:</h3>
+            <p id="audit-detail-description"></p>
+          </section>
+        </div>
         <pre class="audit-detail-payload" id="audit-detail-payload" hidden></pre>
         <div class="audit-dialog-actions">
-          <a class="audit-dialog-button view-event-button" id="audit-view-event" href="#">View Event</a>
+          <a class="audit-dialog-button view-event-button" id="audit-view-event" href="#" hidden>View Event</a>
           <button class="audit-dialog-button close-audit-button" id="audit-close-modal" type="button">Close</button>
         </div>
       </div>

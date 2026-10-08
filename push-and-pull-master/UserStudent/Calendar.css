@@ -747,10 +747,12 @@ ul {
 .dot-binan {
   background: var(--blue-500);
 }
-.dot-cite {
+.dot-cite,
+.dot-csc {
   background: var(--gold-500);
 }
-.dot-ibits {
+.dot-ibits,
+.dot-organizational {
   background: var(--cat-ibits);
 }
 .dot-holiday {
@@ -1553,10 +1555,12 @@ ul {
 .dot-binan {
   background: var(--cat-binan);
 }
-.dot-cite {
+.dot-cite,
+.dot-csc {
   background: var(--cat-cite);
 }
-.dot-ibits {
+.dot-ibits,
+.dot-organizational {
   background: var(--cat-ibits);
 }
 .dot-faculty {
@@ -2586,11 +2590,13 @@ body {
   background: var(--cat-binan);
 }
 
-#calendarMain .calendar-day-event.dot-cite::before {
+#calendarMain .calendar-day-event.dot-cite::before,
+#calendarMain .calendar-day-event.dot-csc::before {
   background: var(--cat-cite);
 }
 
-#calendarMain .calendar-day-event.dot-ibits::before {
+#calendarMain .calendar-day-event.dot-ibits::before,
+#calendarMain .calendar-day-event.dot-organizational::before {
   background: var(--cat-ibits);
 }
 
@@ -2978,15 +2984,21 @@ body {
   }
 
   #calendarMain .calendar-day-event.dot-cite,
+  #calendarMain .calendar-day-event.dot-csc,
   #calendarMain .day-modal-row.dot-cite,
-  #calendarMain .upcoming-date.dot-cite {
+  #calendarMain .day-modal-row.dot-csc,
+  #calendarMain .upcoming-date.dot-cite,
+  #calendarMain .upcoming-date.dot-csc {
     background: var(--cat-cite);
     color: var(--ink-900);
   }
 
   #calendarMain .calendar-day-event.dot-ibits,
+  #calendarMain .calendar-day-event.dot-organizational,
   #calendarMain .day-modal-row.dot-ibits,
-  #calendarMain .upcoming-date.dot-ibits {
+  #calendarMain .day-modal-row.dot-organizational,
+  #calendarMain .upcoming-date.dot-ibits,
+  #calendarMain .upcoming-date.dot-organizational {
     background: var(--cat-ibits);
     color: #fff;
   }
@@ -3366,11 +3378,13 @@ body {
   background: var(--cat-binan);
 }
 
-#calendarMain .cal-legend .dot-cite {
+#calendarMain .cal-legend .dot-cite,
+#calendarMain .cal-legend .dot-csc {
   background: var(--cat-cite);
 }
 
 #calendarMain .cal-legend .dot-ibits,
+#calendarMain .cal-legend .dot-organizational,
 #calendarMain .cal-legend .dot-organizer {
   background: var(--cat-ibits);
 }

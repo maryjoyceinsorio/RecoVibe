@@ -215,7 +215,13 @@
         >
           <article class="panel personal-panel" id="personalInformationPanel">
             <div class="panel-heading">
-              <h2 id="personalInformationHeading">Personal Information</h2>
+              <div>
+                <h2 id="personalInformationHeading">Personal Information</h2>
+                <div class="account-actions">
+                  <button class="text-button" id="editProfile" type="button">Edit Profile</button>
+                  <button class="button-secondary" id="changePassword" type="button">Change Password</button>
+                </div>
+              </div>
               <span class="status-dot" id="accountStatus">Account</span>
             </div>
             <div class="info-grid">
@@ -271,6 +277,90 @@
                 </div>
               </section>
             </div>
+            <form class="account-form" id="profileForm" novalidate hidden>
+              <div class="account-form-grid">
+                <div class="form-field" id="field-edit-firstname">
+                  <label for="editFirstName">First Name</label>
+                  <input id="editFirstName" required minlength="2" maxlength="50" autocomplete="given-name" aria-describedby="editFirstNameError" />
+                  <div class="error-msg" id="editFirstNameError" role="alert"></div>
+                </div>
+                <div class="form-field" id="field-edit-middlename">
+                  <label for="editMiddleName">Middle Name</label>
+                  <input id="editMiddleName" minlength="2" maxlength="50" autocomplete="additional-name" aria-describedby="editMiddleNameError" />
+                  <div class="error-msg" id="editMiddleNameError" role="alert"></div>
+                </div>
+                <div class="form-field" id="field-edit-lastname">
+                  <label for="editLastName">Last Name</label>
+                  <input id="editLastName" required minlength="2" maxlength="50" autocomplete="family-name" aria-describedby="editLastNameError" />
+                  <div class="error-msg" id="editLastNameError" role="alert"></div>
+                </div>
+                <div class="form-field" id="field-edit-email">
+                  <label for="editEmail">Email Address</label>
+                  <input id="editEmail" type="email" required maxlength="254" autocomplete="email" inputmode="email" autocapitalize="none" spellcheck="false" aria-describedby="editEmailError" />
+                  <div class="error-msg" id="editEmailError" role="alert"></div>
+                </div>
+                <div class="form-field" id="field-edit-contact">
+                  <label for="editContact">Contact Number</label>
+                  <input id="editContact" type="tel" value="09" required pattern="09[0-9]{9}" maxlength="11" inputmode="numeric" autocomplete="tel" aria-describedby="editContactError" />
+                  <div class="error-msg" id="editContactError" role="alert"></div>
+                </div>
+                <div class="form-field" id="field-edit-department">
+                  <label for="editDepartment">Department</label>
+                  <select id="editDepartment" required aria-describedby="editDepartmentError">
+                    <option value="">Select department</option>
+                    <option value="BSIT" title="Bachelor of Science in Information Technology (BSIT)">
+                      Bachelor of Science in Information Technology (BSIT)
+                    </option>
+                    <option value="BSCPE" title="Bachelor of Science in Computer Engineering (BSCPE)">
+                      Bachelor of Science in Computer Engineering (BSCPE)
+                    </option>
+                    <option value="BSBA" title="Bachelor of Science in Business Administration (BSBA)">
+                      Bachelor of Science in Business Administration (BSBA)
+                    </option>
+                    <option value="BSOA" title="Bachelor of Science in Office Administration (BSOA)">
+                      Bachelor of Science in Office Administration (BSOA)
+                    </option>
+                    <option value="BSHM" title="Bachelor of Science in Hospitality Management (BSHM)">
+                      Bachelor of Science in Hospitality Management (BSHM)
+                    </option>
+                    <option value="Other" title="Other">Other</option>
+                  </select>
+                  <div class="error-msg" id="editDepartmentError" role="alert"></div>
+                </div>
+                <div class="form-field" id="field-edit-year">
+                  <label for="editYear">Year</label>
+                  <input id="editYear" placeholder="2-3" required maxlength="3" inputmode="numeric" aria-describedby="editYearError" />
+                  <div class="error-msg" id="editYearError" role="alert"></div>
+                </div>
+                <div class="form-field" id="field-edit-organization">
+                  <label for="editOrganization">Organization</label>
+                  <select id="editOrganization" required aria-describedby="editOrganizationError">
+                    <option value="">Select organization</option>
+                    <option value="IBITS">IBITS</option>
+                    <option value="ORG">ORG</option>
+                    <option value="None">None</option>
+                  </select>
+                  <div class="error-msg" id="editOrganizationError" role="alert"></div>
+                </div>
+              </div>
+              <p class="account-form-status" id="profileFormStatus" role="status" aria-live="polite"></p>
+              <div class="editor-actions">
+                <button class="button-secondary" id="cancelProfileEdit" type="button">Cancel</button>
+                <button class="button-primary" id="saveProfileBtn" type="submit">Save Profile</button>
+              </div>
+            </form>
+            <form class="account-form" id="passwordForm" hidden>
+              <div class="account-form-grid">
+                <label>Current Password<input id="currentPassword" type="password" required autocomplete="current-password" /></label>
+                <label>New Password<input id="newPassword" type="password" required autocomplete="new-password" /></label>
+                <label>Confirm New Password<input id="confirmPassword" type="password" required autocomplete="new-password" /></label>
+              </div>
+              <p class="account-form-status" id="passwordFormStatus" role="alert" aria-live="polite"></p>
+              <div class="editor-actions">
+                <button class="button-secondary" id="cancelPasswordChange" type="button">Cancel</button>
+                <button class="button-primary" type="submit">Update Password</button>
+              </div>
+            </form>
           </article>
 
           <article class="panel preferences-panel" id="preferencesPanel">
@@ -314,6 +404,6 @@
     </div>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <script src="notification-count.js"></script>
-    <script src="StudentProfile.js"></script>
+    <script type="module" src="StudentProfile.js"></script>
   </body>
 </html>

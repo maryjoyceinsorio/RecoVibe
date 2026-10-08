@@ -2,36 +2,7 @@
   const notificationStorageKey = "recovibeTeacherNotifications";
   const deletedStorageKey = "recovibeTeacherDeletedNotifications";
   const deletedLifetime = 7 * 24 * 60 * 60 * 1000;
-  const defaultNotifications = [
-    {
-      id: "teacher-event-schedule",
-      title: "Event Schedule Updated",
-      message: "The PUP Biñan Leadership Seminar schedule has been updated.",
-      time: "2 hours ago",
-      type: "maroon",
-      eventId: "leadership-seminar",
-      from: "Campus Events",
-      read: false,
-    },
-    {
-      id: "teacher-event-approval",
-      title: "Event Submission Received",
-      message: "Your event submission is awaiting approval.",
-      time: "Today",
-      type: "blue",
-      from: "Event Administration",
-      read: false,
-    },
-    {
-      id: "teacher-campus-announcement",
-      title: "Campus Announcement",
-      message: "A new announcement is available from PUP Biñan Campus.",
-      time: "Yesterday",
-      type: "green",
-      from: "PUP Biñan Campus",
-      read: false,
-    },
-  ];
+  const defaultNotifications = [];
 
   function safeReadArray(key) {
     try {

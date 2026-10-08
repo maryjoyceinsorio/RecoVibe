@@ -138,137 +138,189 @@ window.enhanceDropdownSelects =
     }
   };
 
-window.RECOVIBE_EVENTS = [
-  {
-    id: "leadership-seminar",
-    dateISO: "2026-09-11",
-    month: "SEP",
-    day: 11,
-    title: "PUP Biñan Leadership Seminar",
-    location: "PUP Biñan Campus",
-    time: "1:00 PM - 4:00 PM",
-    room: "B2 4th Floor Big Room",
-    source: "PUP Biñan Campus",
-    tag: "Leadership & Career",
-    category: "Student Development / Leadership",
-    capacity: 200,
-    slots: 80,
-    maxSlots: 80,
-    slotsOpen: 80,
-    status: "Available to Join",
-    statusClass: "status-participating",
-    desc: "The PUP Biñan Leadership Seminar is a student development program designed to help students strengthen their leadership skills, communication abilities, decision-making, teamwork, and sense of responsibility within the university community. The seminar will feature discussions and interactive activities focused on practical leadership principles that students can apply in academic organizations, group projects, student activities, and future professional environments.",
-    registrationDeadline: "March 13, 2027 — 11:59 PM",
-    requirements: {
-      required: ["Valid PUP Student ID", "Registration through RECOVIBE"],
-      recommended: [
-        "Notebook and pen",
-        "Mobile device for event-related activities",
-      ],
-    },
-    reminders: [
-      "Please arrive at least 15–30 minutes before the event.",
-      "Bring your valid PUP Student ID.",
-      "Keep your RECOVIBE registration confirmation available if verification is required.",
-      "Follow the instructions of the event organizers and assigned personnel.",
-      "Participants are expected to observe university rules and proper conduct.",
-    ],
-    detailedInfo: [
-      "Leadership and personal development discussions",
-      "Communication and teamwork activities",
-    ],
-    registrationInfo: "Available to Join",
-  },
-  {
-    id: "intramurals-opening",
-    dateISO: "2027-04-02",
-    month: "APR",
-    day: 2,
-    title: "Intramurals Opening Program",
-    location: "PUP Biñan Campus",
-    time: "7:00 AM - 10:00 AM",
-    room: "Open Field",
-    source: "PUP Official",
-    tag: "PUP Biñan Campus",
-    category: "Sports",
-    slots: 120,
-    maxSlots: 200,
-    slotsOpen: 120,
-    status: "Rejected",
-    statusClass: "status-rejected",
-    desc: "The official kick-off of this year's Intramurals with the parade of athletes and opening rites.",
-  },
-  {
-    id: "cite-hackathon",
-    dateISO: "2027-04-18",
-    month: "APR",
-    day: 18,
-    title: "CITE Mini Hackathon",
-    location: "PUP Biñan Campus",
-    time: "9:00 AM - 5:00 PM",
-    room: "Computer Lab 3",
-    source: "PUP CITE",
-    tag: "PUP CITE",
-    category: "Tech",
-    slots: 18,
-    maxSlots: 40,
-    slotsOpen: 18,
-    desc: "A one-day build sprint for CITE students to prototype solutions for real campus problems.",
-  },
-  {
-    id: "ibits-week",
-    dateISO: "2027-04-02",
-    month: "APR",
-    day: 2,
-    title: "IBITS Week",
-    location: "PUP CITE",
-    time: "7:00 AM - 10:00 AM",
-    room: "Open Field",
-    source: "PUP CITE",
-    tag: "IBITS",
-    category: "Arts",
-    slots: 0,
-    maxSlots: 150,
-    slotsOpen: 0,
-    status: "Registration Closed",
-    statusClass: "status-closed",
-    desc: "A week of activities and community events for IBITS students.",
-  },
-  {
-    id: "ibits-general-assembly",
-    dateISO: "2027-05-05",
-    month: "MAY",
-    day: 5,
-    title: "IBITS General Assembly",
-    location: "PUP Biñan Campus",
-    time: "2:00 PM - 4:00 PM",
-    room: "AVR Hall",
-    source: "IBITS",
-    tag: "IBITS",
-    category: "Academic",
-    slots: 45,
-    maxSlots: 60,
-    slotsOpen: 45,
-    desc: "Quarterly general assembly for IBITS members covering organization updates and upcoming activities.",
-  },
-];
+window.RECOVIBE_EVENTS = [];
 
-// Only approved role-created records enter the student feed.
+function getStudentPreferences() {
+  try {
+    const user =
+      JSON.parse(localStorage.getItem("recovibeCurrentUser") || "null") || {};
+    const preferenceKey = "recovibePreferences";
+    const accountPreferenceKey = `recovibePreferences:${user.uid || user.email || "student"}`;
+    const defaultSources = [
+      "PUP Official",
+      "CSC",
+      "Teacher / Faculty",
+      "Organizational",
+      "Others / External",
+    ];
+    const defaults = {
+      categories: ["Academic & Learning", "Tech & Innovation"],
+      sources: defaultSources,
+    };
+    let preferences =
+      user.preferences ||
+      JSON.parse(localStorage.getItem(accountPreferenceKey) || "null") ||
+      JSON.parse(localStorage.getItem(preferenceKey) || "null") ||
+      defaults;
+    if (
+      !preferences ||
+      !Array.isArray(preferences.categories) ||
+      !Array.isArray(preferences.sources)
+    ) {
+      preferences = defaults;
+    }
+    return {
+      categories: preferences.categories
+        .map((c) => String(c).trim().toLowerCase())
+        .filter(Boolean),
+      sources: preferences.sources
+        .map((s) => String(s).trim().toLowerCase())
+        .filter(Boolean),
+    };
+  } catch {
+    return {
+      categories: ["academic & learning", "tech & innovation"],
+      sources: [
+        "pup official",
+        "csc",
+        "teacher / faculty",
+        "organizational",
+        "others / external",
+      ],
+    };
+  }
+}
+
+function normalizeCategory(category) {
+  const cat = String(category || "").trim().toLowerCase();
+  if (cat.includes("academic") || cat.includes("learning"))
+    return "Academic & Learning";
+  if (cat.includes("tech") || cat.includes("innovation"))
+    return "Tech & Innovation";
+  if (
+    cat.includes("leadership") ||
+    cat.includes("career") ||
+    cat.includes("student development")
+  )
+    return "Leadership & Career";
+  if (cat.includes("sport") || cat.includes("fitness"))
+    return "Sports & Fitness";
+  if (cat.includes("music") || cat.includes("entertainment"))
+    return "Music & Entertainment";
+  if (cat.includes("org") || cat.includes("student act"))
+    return "Orgs & Student Acts";
+  if (cat.includes("social")) return "Social Events";
+  if (cat.includes("community") || cat.includes("outreach"))
+    return "Community & Outreach";
+  if (cat.includes("competition") || cat.includes("hackathon"))
+    return "Competitions";
+  if (cat.includes("seminar") || cat.includes("workshop"))
+    return "Seminars & Workshops";
+  if (cat.includes("art") || cat.includes("culture")) return "Arts & Culture";
+  if (cat.includes("university") || cat.includes("campus"))
+    return "University & Campuses";
+  return category || "Academic & Learning";
+}
+
+function normalizeSource(source) {
+  const norm = String(source || "").trim().toLowerCase();
+  if (norm.includes("holiday")) return "Philippine Holiday";
+  if (
+    norm === "csc" ||
+    norm.includes("central student council") ||
+    norm.includes("council")
+  )
+    return "CSC";
+  if (norm.includes("teacher") || norm.includes("faculty"))
+    return "Teacher / Faculty";
+  if (
+    norm.includes("organizer") ||
+    norm.includes("organization") ||
+    norm.includes("organizational") ||
+    /^(ibits|aces|jpcs|pice|iie|jma|jphia|pasoa|chrms|cites)\b/i.test(norm)
+  )
+    return "Organizational";
+  if (
+    norm.includes("pup") ||
+    norm.includes("official") ||
+    norm.includes("campus") ||
+    norm.includes("cite")
+  )
+    return "PUP Official";
+  return "Others / External";
+}
+
+function matchesStudentPreferences(event, preferences) {
+  const id = String(event.eventId || event.id || "");
+  if (
+    id.startsWith("holiday:") ||
+    String(event.source || "").toLowerCase().includes("holiday") ||
+    String(event.category || "").toLowerCase().includes("holiday")
+  ) {
+    return true;
+  }
+  const eventCat = String(
+    event.category || event.categories || event.tag || "",
+  )
+    .trim()
+    .toLowerCase();
+  const normalizedCat = normalizeCategory(eventCat).toLowerCase();
+  const catMatches =
+    preferences.categories.length === 0 ||
+    preferences.categories.some(
+      (c) =>
+        c === eventCat ||
+        c === normalizedCat ||
+        eventCat.includes(c) ||
+        c.includes(eventCat),
+    );
+
+  const eventSrc = String(
+    event.source || event.eventSource || "Organizational",
+  )
+    .trim()
+    .toLowerCase();
+  const normalizedSrc = normalizeSource(eventSrc).toLowerCase();
+  const srcMatches =
+    preferences.sources.length === 0 ||
+    preferences.sources.some(
+      (s) =>
+        s === eventSrc ||
+        s === normalizedSrc ||
+        eventSrc.includes(s) ||
+        s.includes(eventSrc),
+    );
+
+  return catMatches && srcMatches;
+}
+
+const currentStudentPreferences = getStudentPreferences();
+
+// Only approved role-created records matching student preferences enter the student feed.
 try {
+  const rawOrganizer = localStorage.getItem("recovibeOrganizerEvents");
+  if (rawOrganizer && rawOrganizer.includes("demo-event-")) {
+    const cleaned = (JSON.parse(rawOrganizer) || []).filter(
+      (e) => !String(e.eventId || e.id || "").startsWith("demo-event-"),
+    );
+    localStorage.setItem("recovibeOrganizerEvents", JSON.stringify(cleaned));
+  }
   const organizerRecords = JSON.parse(
     localStorage.getItem("recovibeOrganizerEvents") || "[]",
   );
   const knownIds = new Set(window.RECOVIBE_EVENTS.map((event) => event.id));
   organizerRecords.forEach((event) => {
+    const id = String(event.eventId || event.id || "");
+    const status = String(event.status || "").toLowerCase();
     if (
-      ["approved", "published"].includes(
-        String(event.status || "").toLowerCase(),
-      ) &&
-      !knownIds.has(event.eventId)
+      id &&
+      !id.startsWith("demo-event-") &&
+      ["approved", "published", "rescheduled"].includes(status) &&
+      !knownIds.has(id)
     ) {
-      window.RECOVIBE_EVENTS.push({
+      const candidate = {
         ...event,
-        id: event.eventId,
+        id,
         dateISO: event.dateISO,
         title: event.title,
         location: event.location,
@@ -293,11 +345,14 @@ try {
           event.capacityMode === "N/A"
             ? null
             : Number(event.openSlots ?? event.maxCapacity ?? event.capacity),
-        status: "Approved",
+        status: status === "rescheduled" ? "Rescheduled" : "Approved",
         desc: event.description,
         organizerId: event.organizerId,
-      });
-      knownIds.add(event.eventId);
+      };
+      if (matchesStudentPreferences(candidate, currentStudentPreferences)) {
+        window.RECOVIBE_EVENTS.push(candidate);
+        knownIds.add(id);
+      }
     }
   });
 } catch (error) {
@@ -313,18 +368,19 @@ try {
   );
   teacherRecords.forEach((event) => {
     const id = String(event.eventId || event.id || "");
+    const status = String(event.status || "").toLowerCase();
     if (
       id &&
-      ["approved", "published"].includes(
-        String(event.status || "").toLowerCase(),
-      ) &&
+      !id.startsWith("demo-event-") &&
+      ["approved", "published", "rescheduled"].includes(status) &&
       !knownIds.has(id)
     ) {
-      window.RECOVIBE_EVENTS.push({
+      const candidate = {
         ...event,
         id,
         eventId: id,
         dateISO: event.dateISO || event.date,
+        source: event.source || "Teacher / Faculty",
         category: event.categories || event.category || event.tag || "General",
         capacity: event.maxCapacity ?? event.capacity ?? 0,
         maxSlots: event.maxCapacity ?? event.maxSlots ?? event.capacity ?? 0,
@@ -336,9 +392,13 @@ try {
           0,
         description: event.description || event.desc || "",
         desc: event.description || event.desc || "",
-        status: "Approved",
-      });
-      knownIds.add(id);
+        status: status === "rescheduled" ? "Rescheduled" : "Approved",
+        teacherId: event.teacherId || event.organizerId || event.createdBy,
+      };
+      if (matchesStudentPreferences(candidate, currentStudentPreferences)) {
+        window.RECOVIBE_EVENTS.push(candidate);
+        knownIds.add(id);
+      }
     }
   });
 } catch (error) {

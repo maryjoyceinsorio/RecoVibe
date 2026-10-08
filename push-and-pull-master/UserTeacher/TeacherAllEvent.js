@@ -63,12 +63,41 @@
   const todayISO = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
   const isCurrent = (event) => event.dateISO === todayISO;
   const categoryMatches = {
-    Academic: ["academic", "learning"],
-    Arts: ["art", "culture"],
+    "Academic & Learning": ["academic", "learning"],
+    "Tech & Innovation": ["tech", "innovation"],
     "Leadership & Career": ["leadership", "career", "student development"],
-    Sports: ["sport", "fitness"],
-    Tech: ["tech", "innovation"],
+    "Sports & Fitness": ["sport", "fitness"],
+    "Music & Entertainment": ["music", "entertainment"],
+    "Orgs & Student Acts": ["org", "organization", "student act"],
+    "Social Events": ["social"],
+    "Community & Outreach": ["community", "outreach"],
+    Competitions: ["competition", "hackathon"],
+    "Seminars & Workshops": ["seminar", "workshop"],
+    "Arts & Culture": ["art", "culture"],
+    "University & Campuses": ["university", "campus"],
   };
+  function normalizeSource(source) {
+    const value = String(source || "").trim().toLowerCase();
+    if (/\bcsc\b/.test(value)) return "CSC";
+    if (/teacher|faculty/.test(value)) return "Teacher / Faculty";
+    if (/organization|organizational|ibits|event organizer/.test(value))
+      return "Organizational";
+    if (/external|admin|other/.test(value)) return "Others / External";
+    if (/pup|campus|cite/.test(value)) return "PUP Official";
+    return "Others / External";
+  }
+  events.forEach((event) => {
+    event.source = normalizeSource(event.source || event.eventSource);
+  });
+  function eventStatus(event) {
+    const raw = String(event.status || "").trim().toLowerCase();
+    if (raw === "cancelled" || raw === "canceled") return "Cancelled";
+    if (raw === "rescheduled") return "Rescheduled";
+    const openSlots = event.slotsOpen ?? event.availableSlots ?? event.slots;
+    if (raw === "registration closed" || (openSlots != null && Number(openSlots) <= 0))
+      return "Registration Closed";
+    return "Available to Join";
+  }
 
   function matches(event) {
     const query = state.query.trim().toLowerCase();
@@ -107,8 +136,7 @@
       (validDate && state.date === "upcoming" && eventDate >= todayStart) ||
       (validDate && state.date === "past" && eventDate < todayStart);
     const statusMatch =
-      state.status === "all" ||
-      String(event.status || "Available to Join") === state.status;
+      state.status === "all" || eventStatus(event) === state.status;
     const openSlots = event.slotsOpen ?? event.availableSlots;
     const availabilityMatch =
       state.availability === "all" ||
@@ -120,9 +148,7 @@
         Number(openSlots) <= 0) ||
       (state.availability === "unknown" && openSlots === undefined);
     const sourceMatches =
-      state.source === "all" ||
-      event.source === state.source ||
-      (state.source === "PUP Biñan Campus" && event.source === "PUP Biñan");
+      state.source === "all" || normalizeSource(event.source) === state.source;
     const typeMatch =
       state.type === "all" ||
       (state.type === "organization" && organizationEvent) ||
@@ -166,7 +192,7 @@
     const date = dateFor(event);
     return `<article class="teacher-event-card" data-event-id="${escapeHTML(event.id)}" id="teacher-event-card-${escapeHTML(event.id)}">
 			<div class="teacher-date" id="teacher-event-date-${escapeHTML(event.id)}" data-event-field="date"><span id="teacher-event-month-${escapeHTML(event.id)}">${date.toLocaleDateString("en-US", { month: "short" })}</span><strong id="teacher-event-day-${escapeHTML(event.id)}">${date.getDate()}</strong><small>${date.getFullYear()}</small></div>
-			<div class="teacher-event-content" id="teacher-event-content-${escapeHTML(event.id)}"><h3 class="teacher-event-title" id="teacher-event-title-${escapeHTML(event.id)}" data-event-field="title">${escapeHTML(event.title)}</h3><p class="teacher-event-source" id="teacher-event-source-${escapeHTML(event.id)}" data-event-field="source">${escapeHTML(event.source || event.location)}</p><div class="teacher-event-meta" id="teacher-event-meta-${escapeHTML(event.id)}" data-event-field="schedule"><span id="teacher-event-time-${escapeHTML(event.id)}" data-event-field="time"><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.4"/><path d="M10 6v4l2.5 2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>${escapeHTML(event.time || "Schedule to be announced")}</span><span id="teacher-event-location-${escapeHTML(event.id)}" data-event-field="location"><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 17.5S15.5 12.8 15.5 8.5a5.5 5.5 0 1 0-11 0c0 4.3 5.5 9 5.5 9Z" stroke="currentColor" stroke-width="1.4"/><circle cx="10" cy="8.3" r="2" stroke="currentColor" stroke-width="1.4"/></svg>${escapeHTML(event.location || "Location to be announced")} · ${escapeHTML(event.room || "Room TBD")}</span></div><span class="teacher-tag" id="teacher-event-category-${escapeHTML(event.id)}" data-event-field="category">${escapeHTML(event.tag || event.category || "University Event")}</span><p class="teacher-event-slots">${event.slotsOpen !== undefined ? `${escapeHTML(event.slotsOpen)} of ${escapeHTML(event.maxSlots ?? event.capacity ?? event.slotsOpen)} Slots Open` : "Availability not specified"}</p></div>
+			<div class="teacher-event-content" id="teacher-event-content-${escapeHTML(event.id)}"><h3 class="teacher-event-title" id="teacher-event-title-${escapeHTML(event.id)}" data-event-field="title">${escapeHTML(event.title)}</h3><p class="teacher-event-source" id="teacher-event-source-${escapeHTML(event.id)}" data-event-field="source">${escapeHTML(normalizeSource(event.source || event.location))}</p><div class="teacher-event-meta" id="teacher-event-meta-${escapeHTML(event.id)}" data-event-field="schedule"><span id="teacher-event-time-${escapeHTML(event.id)}" data-event-field="time"><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.4"/><path d="M10 6v4l2.5 2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>${escapeHTML(event.time || "Schedule to be announced")}</span><span id="teacher-event-location-${escapeHTML(event.id)}" data-event-field="location"><svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 17.5S15.5 12.8 15.5 8.5a5.5 5.5 0 1 0-11 0c0 4.3 5.5 9 5.5 9Z" stroke="currentColor" stroke-width="1.4"/><circle cx="10" cy="8.3" r="2" stroke="currentColor" stroke-width="1.4"/></svg>${escapeHTML(event.location || "Location to be announced")} · ${escapeHTML(event.room || "Room TBD")}</span></div><span class="teacher-tag" id="teacher-event-category-${escapeHTML(event.id)}" data-event-field="category">${escapeHTML(event.tag || event.category || "University Event")}</span><p class="teacher-event-slots">${event.slotsOpen !== undefined ? `${escapeHTML(event.slotsOpen)} of ${escapeHTML(event.maxSlots ?? event.capacity ?? event.slotsOpen)} Slots Open` : "Availability not specified"}</p></div>
 			<div class="teacher-event-actions" id="teacher-event-actions-${escapeHTML(event.id)}"><button type="button" class="teacher-details-button" id="teacher-event-details-button-${escapeHTML(event.id)}" data-event-details="${escapeHTML(event.id)}" aria-controls="teacherEventOverlay">View Details</button></div>
 		</article>`;
   }

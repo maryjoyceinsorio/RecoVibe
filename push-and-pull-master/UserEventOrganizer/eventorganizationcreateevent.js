@@ -13,11 +13,9 @@ if (!root) {
 
 const SOURCE = [
   "PUP Official",
-  "PUP Biñan",
-  "PUP CITE",
-  "Organizational",
   "CSC",
-  "Teachers / Faculty",
+  "Teacher / Faculty",
+  "Organizational",
   "Others / External",
 ];
 const CATEGORIES = [
@@ -49,6 +47,7 @@ const VENUES = [
   "4th Floor | PUP CITE",
   "Others | Inside PUP",
   "Others | Outside PUP",
+  "Online / Virtual",
 ];
 const TIMES = Array.from({ length: 96 }, (_, index) => {
   const minute = index * 15;
@@ -130,7 +129,7 @@ root.innerHTML = `
       </div>
       <div class="ce-grid ce-grid--4 ce-grid--space">${dropdown("eventType", "Event Type", EVENT_TYPES, "Seminar")}${dropdown("targetDepartment", "Target Department", TARGET_DEPARTMENTS, "All Departments")}${dropdown("targetYear", "Target Year", TARGET_YEARS, "All Years")}</div>
       <div class="ce-grid ce-grid--4 ce-grid--space">${input("eventDate", "Date", "date", "", "required", "", '<p id="holidayNotice" class="ce-holiday-notice" role="status" aria-live="polite" hidden></p>')}${dropdown("venue", "Venue", VENUES)}${dropdown("timeStart", "Time Start", TIMES, "08:00 AM")}${dropdown("timeEnd", "Time End", TIMES, "09:00 AM")}</div>
-      <div class="ce-grid ce-grid--4 ce-grid--space">${input("registrationDeadline", "Registration Deadline", "datetime-local", "", "required")}${dropdown("capacityMode", "Capacity", ["N/A", "Max Cap Depends", "Both Cap and Weather"], "N/A")}${dropdown("weatherContingency", "Weather Contingency", ["N/A", "Indoor", "Outdoor — Might Rain"], "N/A")}${dropdown("attendanceRequired", "Attendance Required", ["Yes", "No"], "Yes")}</div>
+      <div class="ce-grid ce-grid--4 ce-grid--space">${input("registrationDeadline", "Registration Deadline", "datetime-local", "", "required")}${dropdown("capacityMode", "Capacity", ["N/A", "Max Cap Depends", "Both Cap and Weather"], "N/A")}<div class="ce-field"><label for="weatherContingency">Weather Contingency</label><p class="ce-hint" id="weatherContingencyText">Select a venue to determine rain contingency.</p><input id="weatherContingency" name="weatherContingency" type="hidden"></div>${dropdown("attendanceRequired", "Attendance Required", ["Yes", "No"], "Yes")}</div>
       <div id="capacityDetails" class="ce-grid ce-grid--4 ce-grid--space ce-dependent" hidden>
         <div id="maxCapacityWrap">${input("maxCapacity", "Max Capacity", "number", "Positive whole number", 'min="1" step="1"')}</div>
         <div class="ce-field" id="alternateVenueWrap" hidden><label id="label-alternateVenue" for="alternateVenue-button">Alternate Venue</label><div class="ce-dropdown" data-dropdown="alternateVenue"><button class="ce-select" id="alternateVenue-button" type="button" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="label-alternateVenue alternateVenue-button"><span class="ce-select-value">Select...</span><span class="ce-chevron" aria-hidden="true"></span></button><div class="ce-options" id="alternateVenue-options" role="listbox" aria-labelledby="label-alternateVenue" tabindex="-1">${VENUES.map((venue) => `<button class="ce-option" type="button" role="option" aria-selected="false" data-value="${escapeHTML(venue)}" tabindex="-1">${escapeHTML(venue)}</button>`).join("")}</div><input id="alternateVenue" name="alternateVenue" type="hidden"></div><p class="ce-error" id="error-alternateVenue" hidden></p></div>
@@ -223,6 +222,30 @@ function value(id) {
   return String(element(id)?.value || "");
 }
 
+function normalizeSource(source) {
+  const value = String(source || "").trim().toLowerCase();
+  if (!value) return "";
+  if (/\bcsc\b/.test(value)) return "CSC";
+  if (/teacher|faculty/.test(value)) return "Teacher / Faculty";
+  if (/organization|organizational|ibits|event organizer/.test(value))
+    return "Organizational";
+  if (/external|admin|other/.test(value)) return "Others / External";
+  if (/pup|campus|cite/.test(value)) return "PUP Official";
+  return "Others / External";
+}
+
+function updateWeatherContingency() {
+  const venueText = `${value("venue")} ${value("venueOther")}`.toLowerCase();
+  const weather = /open field|outside|outdoor/.test(venueText)
+    ? "Outside – Might Rain."
+    : "No rain concerns.";
+  element("weatherContingency").value = weather;
+  element("weatherContingencyText").textContent = weather;
+  element("weatherContingency").dispatchEvent(
+    new Event("change", { bubbles: true }),
+  );
+}
+
 function selectedCategories() {
   return [...root.querySelectorAll("#categories-options input:checked")].map(
     (checkbox) => checkbox.value,
@@ -233,6 +256,7 @@ function setDropdown(id, selected) {
   const field = element(id);
   const dropdownRoot = field?.closest(".ce-dropdown");
   if (!field || !dropdownRoot) return;
+  if (id === "eventSource") selected = normalizeSource(selected);
   field.value = selected;
   dropdownRoot.querySelector(".ce-select-value").textContent =
     selected || "Select...";
@@ -345,7 +369,7 @@ function setupCapacity() {
   const maxCapacity = element("maxCapacity");
   const alternateWrap = element("alternateVenueWrap");
   const alternateVenue = element("alternateVenue");
-  const alternateNeeded = () => value("weatherContingency") === "Outdoor — Might Rain";
+  const alternateNeeded = () => value("weatherContingency") === "Outside – Might Rain.";
   const update = () => {
     const capacityRequired = mode.value !== "N/A";
     details.hidden = !capacityRequired;
@@ -629,7 +653,7 @@ function getPayload(status) {
     eventName: value("eventName").trim(),
     organizer: value("eventOrganizer").trim(),
     organizerName: value("eventOrganizer").trim(),
-    source: value("eventSource"),
+    source: normalizeSource(value("eventSource")),
     categories,
     category: categories.join(", "),
     eventType: value("eventType"),
@@ -774,11 +798,14 @@ function setupDescriptionCounter() {
 }
 
 setupDropdowns();
+element("venue").addEventListener("change", updateWeatherContingency);
+element("venueOther")?.addEventListener("input", updateWeatherContingency);
 setupCapacity();
 setupRecipientSearch();
 setupDocuments();
 setupDescriptionCounter();
 element("eventDate").addEventListener("change", updateHolidayNotice);
+updateWeatherContingency();
 updateHolidayNotice();
 
 element("saveDraft").addEventListener("click", async () => {
@@ -910,7 +937,7 @@ form.addEventListener("reset", () => {
   setDropdown("timeStart", "08:00 AM");
   setDropdown("timeEnd", "09:00 AM");
   setDropdown("capacityMode", "N/A");
-  setDropdown("weatherContingency", "N/A");
+  updateWeatherContingency();
   setDropdown("attendanceRequired", "Yes");
   setDropdown("alternateVenue", "");
   element("capacityDetails").hidden = true;

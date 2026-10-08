@@ -112,38 +112,72 @@ import { loadCalendarData } from "../calendarDataService.js";
     );
 
   function eventSource(event) {
-    const categories = {
-      pupofficial: "PUP Official",
-      official: "PUP Official",
-      pupbinan: "PUP Biñan Campus",
-      pupbinancampus: "PUP Biñan Campus",
-      pupcite: "PUP CITE",
-      cite: "PUP CITE",
-      ibits: "IBITS",
-      teachersfaculty: "Teachers/Faculty",
-      teacherfaculty: "Teachers/Faculty",
-      faculty: "Teachers/Faculty",
-      othersexternal: "Others/External",
-      otherexternal: "Others/External",
-      eventorganizer: "Others/External",
-      holiday: "Philippine Holiday",
-      philippineholiday: "Philippine Holiday",
-    };
-    const sources = [
+    const rawSources = [
       event.category,
       event.eventSource,
       event.source,
       event.organization,
+      event.organizer,
+      event.organizerName,
+      event.tag,
     ];
-    for (const source of sources) {
-      const normalized = String(source || "")
+
+    for (const s of rawSources) {
+      const norm = String(s || "").trim().toLowerCase();
+      if (norm.includes("holiday")) return "Philippine Holiday";
+    }
+
+    for (const s of rawSources) {
+      const norm = String(s || "")
         .normalize("NFD")
         .replace(/[\u0300-\u036f]/g, "")
         .trim()
         .toLowerCase()
         .replace(/[^a-z0-9]/g, "");
-      if (categories[normalized]) return categories[normalized];
+      if (
+        norm === "csc" ||
+        norm.includes("centralstudentcouncil") ||
+        norm === "centralstudentcouncilcsc"
+      ) {
+        return "CSC";
+      }
     }
+
+    for (const s of rawSources) {
+      const norm = String(s || "").trim().toLowerCase();
+      if (norm.includes("pup official") || norm === "official") return "PUP Official";
+      if (norm.includes("biñan") || norm.includes("binan")) return "PUP Biñan Campus";
+      if (norm.includes("teacher") || norm.includes("faculty")) return "Teachers/Faculty";
+    }
+
+    for (const s of rawSources) {
+      const norm = String(s || "").trim().toLowerCase();
+      if (
+        norm === "organizational" ||
+        norm === "ibits" ||
+        norm === "aces" ||
+        norm === "jpcs" ||
+        norm === "org" ||
+        norm.includes("organization") ||
+        /^(ibits|aces|jpcs|pice|iie|jma|jphia|pasoa|chrms|cites)\b/i.test(norm)
+      ) {
+        return "Organizational";
+      }
+    }
+
+    if (
+      event.organizerId ||
+      event.organization ||
+      event.source === "Event Organizer"
+    ) {
+      return "Organizational";
+    }
+
+    for (const s of rawSources) {
+      const norm = String(s || "").trim().toLowerCase();
+      if (norm.includes("external") || norm.includes("other")) return "Others/External";
+    }
+
     return "Others/External";
   }
 
@@ -152,8 +186,8 @@ import { loadCalendarData } from "../calendarDataService.js";
       {
         "PUP Official": "official",
         "PUP Biñan Campus": "binan",
-        "PUP CITE": "cite",
-        IBITS: "ibits",
+        CSC: "csc",
+        Organizational: "organizational",
         "Teachers/Faculty": "faculty",
         "Others/External": "external",
         "Philippine Holiday": "holiday",

@@ -33,6 +33,7 @@
   const RECOMMENDED = [
     {
       id: "leadership-seminar",
+      source: "PUP Official",
       tagLabel: "PUP Biñan Campus",
       tagClass: "tag-campus",
       title: "PUP Biñan Leadership Seminar",
@@ -41,6 +42,7 @@
     },
     {
       id: "intramurals-opening",
+      source: "PUP Official",
       tagLabel: "Sports",
       tagClass: "tag-sports",
       title: "Intramurals Opening Program",
@@ -49,6 +51,7 @@
     },
     {
       id: "cite-hackathon",
+      source: "PUP Official",
       tagLabel: "PUP CITE",
       tagClass: "tag-academic",
       title: "CITE Mini Hackathon",
@@ -57,6 +60,7 @@
     },
     {
       id: "ibits-general-assembly",
+      source: "Organizational",
       tagLabel: "IBITS",
       tagClass: "tag-campus",
       title: "IBITS General Assembly",
@@ -73,10 +77,6 @@
     {
       text: '<b>"IBITS General Assembly"</b> was cancelled due to internal reasons.',
       time: "40 Hours Ago",
-    },
-    {
-      text: 'Your participation for <b>"IBITS General Assembly"</b> was rejected.',
-      time: "56 Hours Ago",
     },
   ];
 
@@ -219,19 +219,32 @@
   --------------------------------------------------------- */
   function renderRecommended() {
     const grid = document.getElementById("recGrid");
-    grid.innerHTML = RECOMMENDED.map((r) => {
-      const event = EVENTS.find((item) => item.id === r.id) || r;
-      return `
-      <article class="rec-card" id="recommended-card-${r.id}" data-event-id="${r.id}">
-        <h3 id="recommended-title-${r.id}" data-event-field="title">${escapeHTML(event.title || r.title)}</h3>
-        <div class="rec-source" id="recommended-source-${r.id}" data-event-field="source">${escapeHTML(event.source || r.tagLabel)}</div>
-        <div class="rec-when" id="recommended-time-${r.id}" data-event-field="time">${escapeHTML(event.time || r.when)}</div>
-        <div class="rec-match" id="recommended-location-${r.id}" data-event-field="location">${escapeHTML(event.location ? `${event.location} · ${event.room || ""}` : r.match)}</div>
-        <span class="rec-tag ${r.tagClass}" id="recommended-category-${r.id}" data-event-field="category">${escapeHTML(preferredCategory(event.category || r.tagLabel))}</span>
-        <div class="rec-match" id="recommended-participants-${r.id}" data-event-field="participants">${event.slotsOpen !== undefined ? `${event.slotsOpen} of ${event.maxSlots} Slots Open` : escapeHTML(r.match)}</div>
-        <button class="btn-outline" id="recommended-details-button-${r.id}" data-event-id="${r.id}" aria-controls="modalContent">View Details</button>
+    if (!grid) return;
+    const recommendedList = EVENTS.filter((event) => {
+      const status = String(event.status || "").trim().toLowerCase();
+      const id = String(event.id || event.eventId || "");
+      return !id.startsWith("demo-event-") && status !== "cancelled" && status !== "canceled" && status !== "draft";
+    }).slice(0, 4);
+
+    if (!recommendedList.length) {
+      grid.innerHTML = '<p class="rec-empty" style="grid-column: 1 / -1; color: var(--ink-500); text-align: center; padding: 28px 0; font-size: 14px;">No recommended events at this time.</p>';
+      return;
+    }
+
+    grid.innerHTML = recommendedList
+      .map((event) => {
+        const id = event.id || event.eventId;
+        return `
+      <article class="rec-card" id="recommended-card-${id}" data-event-id="${id}">
+        <h3 id="recommended-title-${id}" data-event-field="title">${escapeHTML(event.title || "Untitled event")}</h3>
+        <div class="rec-source" id="recommended-source-${id}" data-event-field="source">${escapeHTML(event.source || "PUP Biñan Campus")}</div>
+        <div class="rec-when" id="recommended-time-${id}" data-event-field="time">${escapeHTML(event.time || "Time TBA")}</div>
+        <div class="rec-match" id="recommended-location-${id}" data-event-field="location">${escapeHTML(event.location ? `${event.location} · ${event.room || ""}` : "Location TBA")}</div>
+        <span class="rec-tag tag-academic" id="recommended-category-${id}" data-event-field="category">${escapeHTML(event.category || event.tag || "Academic & Learning")}</span>
+        <button type="button" class="btn-outline event-details-trigger" id="recommended-details-button-${id}" data-event-id="${id}" aria-controls="detailsDialog">View Details</button>
       </article>`;
-    }).join("");
+      })
+      .join("");
   }
 
   /* ---------------------------------------------------------

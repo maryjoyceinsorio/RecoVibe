@@ -81,6 +81,20 @@
   }
 
   function statusFor(event) {
+    const eventStatus = String(event.status || "").trim().toLowerCase();
+    if (eventStatus === "cancelled" || eventStatus === "canceled") {
+      return "Cancelled";
+    }
+    if (
+      eventStatus === "rescheduled" ||
+      event.isRescheduled === true ||
+      event.rescheduled === true ||
+      Boolean(event.rescheduledDate) ||
+      Boolean(event.rescheduledTime) ||
+      (event.originalDate && event.dateISO && event.dateISO !== event.originalDate)
+    ) {
+      return "Rescheduled";
+    }
     const eventDate = new Date(`${event.dateISO}T00:00:00`);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -127,9 +141,7 @@
         .toLowerCase()
         .includes(query);
     const eventStatus = statusFor(event);
-    const filterStatus =
-      state.filter === "Declined" ? "Rejected" : state.filter;
-    const filterMatch = state.filter === "all" || eventStatus === filterStatus;
+    const filterMatch = state.filter === "all" || eventStatus === state.filter;
     return textMatch && filterMatch;
   }
 
@@ -137,25 +149,38 @@
     const list = document.getElementById("participationList");
     const visible = events
       .filter(matches)
-      .sort((a, b) => a.dateISO.localeCompare(b.dateISO));
+      .sort((a, b) => {
+        const dateA = a.rescheduledDate || a.dateISO || "";
+        const dateB = b.rescheduledDate || b.dateISO || "";
+        return dateA.localeCompare(dateB);
+      });
     document.getElementById("participationCount").textContent =
       `${visible.length} event${visible.length === 1 ? "" : "s"}`;
     if (!visible.length) {
-      list.innerHTML = `<div class="empty-participation">No participation records match your filters.</div>`;
+      const emptyMsg =
+        state.filter === "Rescheduled"
+          ? "No rescheduled events."
+          : state.filter !== "all"
+            ? `No ${state.filter.toLowerCase()} events match your filters.`
+            : "No participation records match your filters.";
+      list.innerHTML = `<div class="empty-participation">${emptyMsg}</div>`;
       return;
     }
 
     list.innerHTML = visible
       .map((event) => {
-        const date = eventDateParts(event.dateISO);
+        const effectiveDateISO = event.rescheduledDate || event.dateISO;
+        const effectiveTime = event.rescheduledTime || event.time;
+        const date = eventDateParts(effectiveDateISO);
+        const isResched = statusFor(event) === "Rescheduled";
         return `
-        <article class="participation-card" id="participation-card-${event.id}" data-event-id="${escapeHTML(event.id)}">
+        <article class="participation-card ${isResched ? "is-rescheduled" : ""}" id="participation-card-${event.id}" data-event-id="${escapeHTML(event.id)}">
           <div class="participation-date" id="participation-date-${event.id}" data-event-field="date"><span class="month" id="participation-month-${event.id}">${date.month}</span><span class="day" id="participation-day-${event.id}">${date.day}</span><span class="year" id="participation-year-${event.id}">${date.year}</span></div>
           <div class="participation-body">
-            <h3 class="participation-title" id="participation-title-${event.id}" data-event-field="title">${escapeHTML(event.title)}</h3>
+            <h3 class="participation-title" id="participation-title-${event.id}" data-event-field="title">${escapeHTML(event.title)} ${isResched ? '<span class="status-badge status-rescheduled" style="font-size:11px;font-weight:600;color:#b45309;background:#fef3c7;padding:2px 6px;border-radius:4px;margin-left:6px;">Rescheduled</span>' : ""}</h3>
             <p class="participation-source" id="participation-source-${event.id}" data-event-field="source">${escapeHTML(event.source)}</p>
             <div class="participation-meta" id="participation-meta-${event.id}">
-              <span id="participation-time-${event.id}" data-event-field="time"><svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.4"/><path d="M10 6v4l2.5 2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>${escapeHTML(event.time)}</span>
+              <span id="participation-time-${event.id}" data-event-field="time"><svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.4"/><path d="M10 6v4l2.5 2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>${escapeHTML(effectiveTime)}</span>
               <span id="participation-location-${event.id}" data-event-field="location"><svg viewBox="0 0 20 20" fill="none"><path d="M10 17.5S15.5 12.8 15.5 8.5a5.5 5.5 0 1 0-11 0c0 4.3 5.5 9 5.5 9Z" stroke="currentColor" stroke-width="1.4"/><circle cx="10" cy="8.3" r="2" stroke="currentColor" stroke-width="1.4"/></svg>${escapeHTML(event.location)} · ${escapeHTML(event.room)}</span>
             </div>
             <span class="category participation-category" id="participation-category-${event.id}" data-event-field="category">${escapeHTML(preferredCategory(event.category))}</span>

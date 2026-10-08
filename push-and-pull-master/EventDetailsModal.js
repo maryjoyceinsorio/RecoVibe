@@ -639,6 +639,15 @@
       const times = eventTimes(event);
       const total = capacity(event);
       const available = openSlots(event);
+      const participants = total === null ? null : Math.max(0, total - available);
+      const weatherContingency =
+        /open field|outside|outdoor/i.test(
+          [event.venue, event.venueOther, event.location, event.room]
+            .filter(Boolean)
+            .join(" "),
+        )
+          ? "Outside – Might Rain."
+          : "No rain concerns.";
       const requirements =
         event.requirements &&
         typeof event.requirements === "object" &&
@@ -693,12 +702,12 @@
       const rules = event.participationRules || event.rules;
       detailContent.innerHTML = `
         <div class="student-event-top"><div><h2 class="student-event-title" id="studentEventTitle">${escapeHTML(event.title || "Untitled event")}</h2><p><strong>Event Organizer:</strong> ${escapeHTML(event.organizerName || event.organizer || event.organization || event.source || "Not specified")}</p><p><strong>Source:</strong> ${escapeHTML([event.source || event.campus || event.office, event.sourceOther].filter(Boolean).join(" · ") || "Not specified")}</p></div><div><p class="student-event-category-label">Categories:</p><div class="student-event-categories">${badgeList.map((category) => `<span class="student-event-pill student-event-pill--${categoryTone(text(category))}">${escapeHTML(text(category))}</span>`).join("")}</div></div></div>
-        <div class="student-event-info"><div>${icon('<rect x="3" y="4.5" width="14" height="13" rx="1.5"/><path d="M6 2.5v4M14 2.5v4M3 8h14"/>')}<strong>Date</strong>${escapeHTML(dateText(event.dateISO || event.date))}</div><div>${icon('<circle cx="10" cy="10" r="7"/><path d="M10 6v4l2.5 2"/>')}<strong>Start time</strong>${escapeHTML(times[0])}</div><div>${icon('<circle cx="10" cy="10" r="7"/><path d="M10 6v4l2.5 2"/>')}<strong>End time</strong>${escapeHTML(times[1])}</div><div>${icon('<path d="M10 17.5S15.5 12.8 15.5 8.5a5.5 5.5 0 1 0-11 0c0 4.3 5.5 9 5.5 9Z"/><circle cx="10" cy="8.3" r="2"/>')}<strong>Venue</strong>${escapeHTML([event.location || event.venue || "Not specified", event.room].filter(Boolean).join(" · "))}</div><div>${icon('<circle cx="7" cy="7" r="2.5"/><path d="M2.5 16a4.5 4.5 0 0 1 9 0M13 5a2.5 2.5 0 0 1 0 4.8M13 12a4 4 0 0 1 4.5 4"/>')}<strong>${total === null ? "Capacity" : `Max Capacity ${total}`}</strong>${total === null ? "No limit" : `${available} slots open`}<small>${total === null ? "Open registration" : `${available} out of ${total} Slots are Open`}</small></div></div>
-        <div class="student-event-facts"><div><strong>Registration Deadline</strong>${escapeHTML(event.registrationDeadline || "Not specified")}</div><div><strong>Alternate Venue</strong>${escapeHTML(event.alternateVenue || "Not specified")}</div><div><strong>Weather Contingency</strong>${escapeHTML(event.weatherContingency || event.weatherPlan || "Not specified")}</div><div><strong>Attendance Required</strong>${escapeHTML(typeof event.attendanceRequired === "boolean" ? (event.attendanceRequired ? "Yes" : "No") : event.attendanceRequired || "Not specified")}</div></div>
+        <div class="student-event-info"><div>${icon('<rect x="3" y="4.5" width="14" height="13" rx="1.5"/><path d="M6 2.5v4M14 2.5v4M3 8h14"/>')}<strong>Date</strong>${escapeHTML(dateText(event.dateISO || event.date))}</div><div>${icon('<circle cx="10" cy="10" r="7"/><path d="M10 6v4l2.5 2"/>')}<strong>Start time</strong>${escapeHTML(times[0])}</div><div>${icon('<circle cx="10" cy="10" r="7"/><path d="M10 6v4l2.5 2"/>')}<strong>End time</strong>${escapeHTML(times[1])}</div><div>${icon('<path d="M10 17.5S15.5 12.8 15.5 8.5a5.5 5.5 0 1 0-11 0c0 4.3 5.5 9 5.5 9Z"/><circle cx="10" cy="8.3" r="2"/>')}<strong>Venue</strong>${escapeHTML([event.location || event.venue || "Not specified", event.room].filter(Boolean).join(" · "))}</div><div>${icon('<circle cx="7" cy="7" r="2.5"/><path d="M2.5 16a4.5 4.5 0 0 1 9 0M13 5a2.5 2.5 0 0 1 0 4.8M13 12a4 4 0 0 1 4.5 4"/>')}<strong>${total === null ? "Capacity" : `Max Capacity ${total}`}</strong>${total === null ? "No limit" : `${available} slots open`}<small>${total === null ? "Open registration" : `${participants} participants · ${available} of ${total} slots open`}</small></div></div>
+        <div class="student-event-facts"><div><strong>Registration Deadline</strong>${escapeHTML(event.registrationDeadline || "Not specified")}</div><div><strong>Weather Contingency</strong>${escapeHTML(weatherContingency)}</div><div><strong>Attendance Required</strong>${escapeHTML(typeof event.attendanceRequired === "boolean" ? (event.attendanceRequired ? "Yes" : "No") : event.attendanceRequired || "Not specified")}</div></div>
         <section class="student-event-section student-event-description"><h3>Event Description</h3>${description.map((paragraph) => `<p>${escapeHTML(paragraph)}</p>`).join("")}</section>
         <div class="student-event-two-col"><section class="student-event-section"><h3>Event Key Details</h3>${bullets(keyDetails)}</section><section class="student-event-section"><h3>Requirements &amp; Reminders</h3>${bullets(requirements)}</section></div>
         <div class="student-event-two-col"><section class="student-event-section"><h3>Participation Rules</h3>${bullets(rules)}</section><section class="student-event-section student-event-contact"><h3>Contact Person</h3><p><strong>${escapeHTML(person)}</strong></p>${role ? `<p>${escapeHTML(role)}</p>` : ""}${email ? `<p><a href="mailto:${escapeHTML(email)}">${escapeHTML(email)}</a></p>` : ""}${phone ? `<p>${escapeHTML(phone)}</p>` : ""}</section></div>
-        <section class="student-event-section"><h3>Participants Should Download &amp; Fill This Up</h3>${attachmentsMarkup(event)}</section>`;
+        <section class="student-event-section"><h3>Participant Documents</h3><p>Participants should download and fill this up before joining the event.</p>${attachmentsMarkup(event)}</section>`;
     }
 
     function updateAction() {

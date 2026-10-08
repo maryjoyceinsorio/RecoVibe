@@ -40,11 +40,9 @@ import { checkPhilippineHoliday } from "../holidayService.js";
   const root = document.getElementById("createEventRoot");
   const SOURCE = [
     "PUP Official",
-    "PUP Biñan",
-    "PUP CITE",
-    "Organizational",
     "CSC",
-    "Teachers / Faculty",
+    "Teacher / Faculty",
+    "Organizational",
     "Others / External",
   ];
   const CATEGORIES = [
@@ -95,6 +93,7 @@ import { checkPhilippineHoliday } from "../holidayService.js";
     "4th Floor | PUP CITE",
     "Others | Inside PUP",
     "Others | Outside PUP",
+    "Online / Virtual",
   ];
   const TIMES = Array.from({ length: 96 }, (_, index) => {
     const minute = index * 15;
@@ -173,7 +172,7 @@ import { checkPhilippineHoliday } from "../holidayService.js";
         <div class="ce-grid ce-grid--4 ce-grid--space">${dropdown("eventType", "Event Type", EVENT_TYPES, "Seminar")}${dropdown("targetDepartment", "Target Department", TARGET_DEPARTMENTS, "All Departments")}${dropdown("targetYear", "Target Year", TARGET_YEARS, "All Years")}</div>
         <div class="ce-grid ce-grid--4 ce-grid--space">${input("eventDate", "Date", "date", "", "required", '<p id="holidayNotice" class="ce-holiday-notice" role="status" aria-live="polite" hidden></p>')}${dropdown("venue", "Venue", VENUES)}${dropdown("timeStart", "Time Start", TIMES, "08:00 AM")}${dropdown("timeEnd", "Time End", TIMES, "09:00 AM")}</div>
         <div id="venueOtherWrap" class="ce-dependent" hidden>${input("venueOther", "Specify location", "text", "Enter the location", "required")}</div><div id="sourceOtherWrap" class="ce-dependent" hidden>${input("sourceOther", "Specify organization", "text", "Enter the organization", "required")}</div>
-        <div class="ce-grid ce-grid--4 ce-grid--space">${input("registrationDeadline", "Registration Deadline", "datetime-local", "", "required")}${dropdown("capacityMode", "Capacity", ["N/A", "Max Cap Depends", "Both Cap and Weather"], "N/A")}${dropdown("weatherContingency", "Weather Contingency", ["N/A", "Indoor", "Outdoor — Might Rain"], "N/A")}${dropdown("attendanceRequired", "Attendance Required", ["Yes", "No"], "Yes")}</div>
+        <div class="ce-grid ce-grid--4 ce-grid--space">${input("registrationDeadline", "Registration Deadline", "datetime-local", "", "required")}${dropdown("capacityMode", "Capacity", ["N/A", "Max Cap Depends", "Both Cap and Weather"], "N/A")}<div class="ce-field"><label for="weatherContingency">Weather Contingency</label><p class="ce-hint" id="weatherContingencyText">Select a venue to determine rain contingency.</p><input id="weatherContingency" name="weatherContingency" type="hidden"></div>${dropdown("attendanceRequired", "Attendance Required", ["Yes", "No"], "Yes")}</div>
         <div id="capacityDetails" class="ce-grid ce-grid--4 ce-grid--space ce-dependent" hidden><div id="maxCapacityWrap">${input("maxCapacity", "Max Capacity", "number", "Positive whole number", 'min="1" step="1"')}</div><div class="ce-field" id="alternateVenueWrap" hidden><label id="label-alternateVenue" for="alternateVenue-button">Alternate Venue</label><div class="ce-dropdown" data-dropdown="alternateVenue"><button class="ce-select" id="alternateVenue-button" type="button" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="label-alternateVenue alternateVenue-button"><span class="ce-select-value">Select...</span><span class="ce-chevron" aria-hidden="true"></span></button><div class="ce-options" id="alternateVenue-options" role="listbox" aria-labelledby="label-alternateVenue" tabindex="-1">${VENUES.map((option) => `<button class="ce-option" type="button" role="option" aria-selected="false" data-value="${attr(option)}" tabindex="-1">${escapeHTML(option)}</button>`).join("")}</div><input id="alternateVenue" type="hidden"></div><p class="ce-error" id="error-alternateVenue" hidden></p></div></div>
         <p id="venueConflict" class="ce-error ce-conflict" role="alert" hidden></p><p id="duplicateWarning" class="ce-warning" role="status" hidden></p>
       </section>
@@ -374,16 +373,39 @@ import { checkPhilippineHoliday } from "../holidayService.js";
     const approvalDocuments = state.approvalDocuments
       .filter((file) => file.status === "ready")
       .map(({ status: _status, ...file }) => file);
+    const participantDocuments = state.participantDocuments
+      .filter((file) => file.status === "ready")
+      .map(({ status: _status, ...file }) => file);
+    const categories = selectedCategories();
+    const maxCapacity = value("maxCapacity")
+      ? Number(value("maxCapacity"))
+      : null;
     const eventData = {
       eventName: value("eventName").trim(),
       eventDescription: value("description").trim(),
       eventType: value("eventType"),
-      category: selectedCategories().join(", "),
+      source: normalizeSource(value("eventSource")),
+      eventSource: normalizeSource(value("eventSource")),
+      sourceOther: value("sourceOther").trim(),
+      categories,
+      category: categories.join(", "),
       eventDate: value("eventDate"),
       registrationDeadline: value("registrationDeadline"),
       startTime: value("timeStart"),
       endTime: value("timeEnd"),
       venue: value("venueOther").trim() || value("venue"),
+      location: value("venueOther").trim() || value("venue"),
+      capacityMode: value("capacityMode"),
+      maxCapacity,
+      capacity: maxCapacity,
+      maxSlots: maxCapacity,
+      slots: maxCapacity,
+      slotsOpen: maxCapacity,
+      openSlots: maxCapacity,
+      alternateVenue: value("alternateVenue"),
+      weatherContingency: value("weatherContingency"),
+      weatherPlan: value("weatherContingency"),
+      attendanceRequired: value("attendanceRequired") === "Yes",
       keyDetails: parseLines("keyDetails"),
       requirements: parseLines("requirements"),
       participationRules: parseLines("participationRules"),
@@ -393,6 +415,8 @@ import { checkPhilippineHoliday } from "../holidayService.js";
         email: value("contactEmail").trim(),
         contactNumber: value("contactPhone").replace(/[\s-]/g, ""),
       },
+      participantDocuments,
+      attachments: participantDocuments,
       approvalDocuments,
       createdBy: user.uid,
       organizerId: user.uid,
@@ -490,9 +514,29 @@ import { checkPhilippineHoliday } from "../holidayService.js";
     }
     state.errors.delete(id);
   }
+  function normalizeSource(source) {
+    const text = String(source || "").trim().toLowerCase();
+    if (!text) return "";
+    if (/\bcsc\b/.test(text)) return "CSC";
+    if (/teacher|faculty/.test(text)) return "Teacher / Faculty";
+    if (/organization|organizational|ibits|event organizer/.test(text))
+      return "Organizational";
+    if (/external|admin|other/.test(text)) return "Others / External";
+    if (/pup|campus|cite/.test(text)) return "PUP Official";
+    return "Others / External";
+  }
+  function updateWeatherContingency() {
+    const venue = `${value("venue")} ${value("venueOther")}`.toLowerCase();
+    const weather = /open field|outside|outdoor/.test(venue)
+      ? "Outside – Might Rain."
+      : "No rain concerns.";
+    el("weatherContingency").value = weather;
+    el("weatherContingencyText").textContent = weather;
+  }
   function setDropdown(id, next) {
     const input = el(id);
     if (!input) return;
+    if (id === "eventSource") next = normalizeSource(next);
     input.value = next || "";
     const rootEl = input.closest(".ce-dropdown");
     if (!rootEl) return;
@@ -657,9 +701,10 @@ import { checkPhilippineHoliday } from "../holidayService.js";
   function conditionalFields() {
     const venue = value("venue");
     const source = value("eventSource");
+    updateWeatherContingency();
     const capacity = value("capacityMode") !== "N/A";
     const weatherAlternate =
-      value("weatherContingency") === "Outdoor — Might Rain";
+      value("weatherContingency") === "Outside – Might Rain.";
     const alternate = capacity || weatherAlternate;
     el("venueOtherWrap").hidden = ![
       "Others | Inside PUP",
@@ -686,6 +731,10 @@ import { checkPhilippineHoliday } from "../holidayService.js";
       clearError("alternateVenue");
     }
   }
+  el("venueOther").addEventListener("input", () => {
+    updateWeatherContingency();
+    conditionalFields();
+  });
   function timeMinutes(text) {
     const match = /^(\d{2}):(\d{2})\s(AM|PM)$/.exec(text || "");
     return match
@@ -1421,10 +1470,7 @@ import { checkPhilippineHoliday } from "../holidayService.js";
       event.capacityMode || (event.maxCapacity ? "Max Cap Depends" : "N/A"),
     );
     el("maxCapacity").value = event.maxCapacity || "";
-    setDropdown(
-      "weatherContingency",
-      event.weatherContingency || event.weatherPlan || "N/A",
-    );
+    updateWeatherContingency();
     setDropdown(
       "attendanceRequired",
       event.attendanceRequired === false || event.attendanceRequired === "No"
@@ -1484,7 +1530,7 @@ import { checkPhilippineHoliday } from "../holidayService.js";
   setDropdown("timeStart", "08:00 AM");
   setDropdown("timeEnd", "09:00 AM");
   setDropdown("capacityMode", "N/A");
-  setDropdown("weatherContingency", "N/A");
+  updateWeatherContingency();
   setDropdown("attendanceRequired", "Yes");
   el("eventOrganizer").value = actorName;
   el("contactName").value = actorName;

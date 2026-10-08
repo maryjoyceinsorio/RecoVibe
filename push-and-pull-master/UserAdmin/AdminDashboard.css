@@ -107,12 +107,29 @@ body {
 .admin-sidebar nav a.active {
   font-weight: 700;
 }
-.admin-sidebar nav b {
+.admin-sidebar nav b,
+.admin-sidebar nav svg {
   display: grid;
   place-items: center;
   width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
   color: var(--admin-gold);
-  font-size: 17px;
+  fill: none;
+  stroke: var(--admin-gold);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.admin-logout svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 .admin-sidebar footer {
   display: flex;
@@ -421,6 +438,12 @@ body {
   margin: 0;
   font-size: 15px;
 }
+.admin-section-description {
+  margin: 4px 0 0;
+  color: var(--admin-muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
 .admin-section-heading a {
   color: var(--admin-maroon);
   font-size: 11px;
@@ -457,6 +480,11 @@ body {
   margin-top: 3px;
   color: var(--admin-muted);
   font-size: 9px;
+}
+.admin-table .admin-organizer-role {
+  color: var(--admin-maroon);
+  font-size: 9px;
+  font-weight: 600;
 }
 .admin-row-action {
   padding: 6px 10px;

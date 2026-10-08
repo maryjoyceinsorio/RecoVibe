@@ -106,12 +106,29 @@ body {
 .admin-sidebar nav a.active {
   font-weight: 700;
 }
-.admin-sidebar nav b {
+.admin-sidebar nav b,
+.admin-sidebar nav svg {
   display: grid;
   place-items: center;
   width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
   color: var(--admin-gold);
-  font-size: 17px;
+  fill: none;
+  stroke: var(--admin-gold);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.admin-logout svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 .admin-sidebar footer {
   display: flex;
@@ -462,67 +479,152 @@ body {
 .admin-event-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.admin-event-card {
+  display: flex;
+  flex-direction: column;
+  padding: 18px 20px;
+  border: 1px solid var(--admin-line);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  transition: box-shadow 140ms ease, transform 140ms ease;
+}
+.admin-event-card:hover {
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+}
+.event-card-header {
+  display: flex;
   gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 8px;
 }
 .event-date-tile {
-  float: left;
+  flex: 0 0 50px;
   display: grid;
   place-items: center;
-  width: 48px;
+  width: 50px;
   height: 54px;
-  margin: 0 11px 7px 0;
-  border-radius: 4px;
-  background: #f2e8e9;
-  color: #6b1220;
+  border-radius: 6px;
+  background: #f4e8e9;
+  border: 1px solid #e5cbcf;
+  color: var(--admin-maroon);
 }
 .event-date-tile small {
-  font-size: 9px;
+  font-size: 10px;
+  font-weight: 700;
   text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 .event-date-tile strong {
-  font-size: 19px;
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1;
+}
+.event-card-titles {
+  flex: 1;
+  min-width: 0;
 }
 .event-card-title {
-  margin: 3px 0;
-  font-size: 14px;
+  margin: 0 0 4px;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--admin-ink);
+}
+.event-organizer-text {
+  margin: 0;
+  font-size: 12px;
+  color: var(--admin-muted);
+}
+.event-organizer-text strong {
+  color: var(--admin-ink);
+}
+.event-source-text {
+  margin: 6px 0 10px;
+  font-size: 12px;
+  color: var(--admin-muted);
+}
+.event-source-text strong {
+  color: var(--admin-ink);
 }
 .event-card-meta {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 5px;
-  margin: 10px 0;
-  font-size: 10px;
+  gap: 6px 12px;
+  margin: 10px 0 12px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: #faf8f5;
+  border: 1px solid #f0ebe4;
+  font-size: 11px;
+  color: #4a4243;
+}
+.event-card-meta span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .event-card-bottom {
   display: flex;
-  justify-content: flex-end;
-  margin-top: 10px;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: auto;
+  padding-top: 10px;
 }
 .admin-pills {
   display: flex;
   flex-wrap: wrap;
   gap: 5px;
+  align-items: center;
 }
 .admin-category-pill {
-  padding: 4px 8px;
+  padding: 3px 9px;
   border-radius: 12px;
-  background: #3a76a6;
+  background: #6b1220;
   color: #fff;
-  font-size: 9px;
+  font-size: 10px;
+  font-weight: 600;
+}
+.admin-category-pill:nth-child(2n) {
+  background: #1e587d;
 }
 .admin-category-pill:nth-child(3n) {
-  background: #31845b;
+  background: #1b6d43;
 }
-.admin-category-pill:nth-child(3n + 1) {
-  background: #6b1220;
+.admin-chip {
+  display: inline-flex;
+  padding: 3px 8px;
+  border-radius: 10px;
+  background: #eee9ea;
+  color: var(--admin-maroon);
+  font-size: 10px;
+  font-weight: 600;
+}
+.admin-chip.chip-full {
+  background: #fce8e6;
+  color: #c5221f;
+}
+.admin-chip.chip-cancelled {
+  background: #fce8e6;
+  color: #c5221f;
+}
+.admin-chip.chip-completed {
+  background: #e8eaed;
+  color: #5f6368;
+}
+.admin-chip.chip-happening {
+  background: #e6f4ea;
+  color: #137333;
 }
 .admin-group-title {
-  margin: 20px 0 9px;
+  margin: 24px 0 12px;
   font:
-    600 17px Fraunces,
+    600 20px Fraunces,
     serif;
-}
-.admin-year-stepper {
+  color: var(--admin-ink);
+}.admin-year-stepper {
   display: flex;
   align-items: center;
   justify-content: space-between;

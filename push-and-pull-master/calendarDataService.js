@@ -2,7 +2,163 @@ import { fetchMonthHolidays } from "./holidayService.js";
 
 let approvedEventsPromise;
 
+function getStudentPreferences() {
+  try {
+    const user =
+      JSON.parse(localStorage.getItem("recovibeCurrentUser") || "null") || {};
+    const preferenceKey = "recovibePreferences";
+    const accountPreferenceKey = `recovibePreferences:${user.uid || user.email || "student"}`;
+    const defaultSources = [
+      "PUP Official",
+      "CSC",
+      "Teacher / Faculty",
+      "Organizational",
+      "Others / External",
+    ];
+    const defaults = {
+      categories: ["Academic & Learning", "Tech & Innovation"],
+      sources: defaultSources,
+    };
+    let preferences =
+      user.preferences ||
+      JSON.parse(localStorage.getItem(accountPreferenceKey) || "null") ||
+      JSON.parse(localStorage.getItem(preferenceKey) || "null") ||
+      defaults;
+    if (
+      !preferences ||
+      !Array.isArray(preferences.categories) ||
+      !Array.isArray(preferences.sources)
+    ) {
+      preferences = defaults;
+    }
+    return {
+      categories: preferences.categories
+        .map((c) => String(c).trim().toLowerCase())
+        .filter(Boolean),
+      sources: preferences.sources
+        .map((s) => String(s).trim().toLowerCase())
+        .filter(Boolean),
+    };
+  } catch {
+    return {
+      categories: ["academic & learning", "tech & innovation"],
+      sources: [
+        "pup official",
+        "csc",
+        "teacher / faculty",
+        "organizational",
+        "others / external",
+      ],
+    };
+  }
+}
+
+function normalizeCategory(category) {
+  const cat = String(category || "").trim().toLowerCase();
+  if (cat.includes("academic") || cat.includes("learning"))
+    return "Academic & Learning";
+  if (cat.includes("tech") || cat.includes("innovation"))
+    return "Tech & Innovation";
+  if (
+    cat.includes("leadership") ||
+    cat.includes("career") ||
+    cat.includes("student development")
+  )
+    return "Leadership & Career";
+  if (cat.includes("sport") || cat.includes("fitness"))
+    return "Sports & Fitness";
+  if (cat.includes("music") || cat.includes("entertainment"))
+    return "Music & Entertainment";
+  if (cat.includes("org") || cat.includes("student act"))
+    return "Orgs & Student Acts";
+  if (cat.includes("social")) return "Social Events";
+  if (cat.includes("community") || cat.includes("outreach"))
+    return "Community & Outreach";
+  if (cat.includes("competition") || cat.includes("hackathon"))
+    return "Competitions";
+  if (cat.includes("seminar") || cat.includes("workshop"))
+    return "Seminars & Workshops";
+  if (cat.includes("art") || cat.includes("culture")) return "Arts & Culture";
+  if (cat.includes("university") || cat.includes("campus"))
+    return "University & Campuses";
+  return category || "Academic & Learning";
+}
+
+function normalizeSource(source) {
+  const norm = String(source || "").trim().toLowerCase();
+  if (norm.includes("holiday")) return "Philippine Holiday";
+  if (
+    norm === "csc" ||
+    norm.includes("central student council") ||
+    norm.includes("council")
+  )
+    return "CSC";
+  if (norm.includes("teacher") || norm.includes("faculty"))
+    return "Teacher / Faculty";
+  if (
+    norm.includes("organizer") ||
+    norm.includes("organization") ||
+    norm.includes("organizational") ||
+    /^(ibits|aces|jpcs|pice|iie|jma|jphia|pasoa|chrms|cites)\b/i.test(norm)
+  )
+    return "Organizational";
+  if (
+    norm.includes("pup") ||
+    norm.includes("official") ||
+    norm.includes("campus") ||
+    norm.includes("cite")
+  )
+    return "PUP Official";
+  return "Others / External";
+}
+
+function matchesStudentPreferences(event, preferences) {
+  const id = String(event.eventId || event.id || "");
+  if (
+    id.startsWith("holiday:") ||
+    String(event.source || "").toLowerCase().includes("holiday") ||
+    String(event.category || "").toLowerCase().includes("holiday")
+  ) {
+    return true;
+  }
+  const eventCat = String(
+    event.category || event.categories || event.tag || "",
+  )
+    .trim()
+    .toLowerCase();
+  const normalizedCat = normalizeCategory(eventCat).toLowerCase();
+  const catMatches =
+    preferences.categories.length === 0 ||
+    preferences.categories.some(
+      (c) =>
+        c === eventCat ||
+        c === normalizedCat ||
+        eventCat.includes(c) ||
+        c.includes(eventCat),
+    );
+
+  const eventSrc = String(
+    event.source || event.eventSource || "Organizational",
+  )
+    .trim()
+    .toLowerCase();
+  const normalizedSrc = normalizeSource(eventSrc).toLowerCase();
+  const srcMatches =
+    preferences.sources.length === 0 ||
+    preferences.sources.some(
+      (s) =>
+        s === eventSrc ||
+        s === normalizedSrc ||
+        eventSrc.includes(s) ||
+        s.includes(eventSrc),
+    );
+
+  return catMatches && srcMatches;
+}
+
 function isPublicCalendarEvent(event, allowUnmarked = false) {
+  const id = String(event.eventId || event.id || "");
+  if (id.startsWith("demo-event-")) return false;
   const status = String(event.status || "")
     .trim()
     .toLowerCase()
@@ -15,11 +171,15 @@ function isPublicCalendarEvent(event, allowUnmarked = false) {
     "canceled",
     "cancelled",
     "private",
+    "deleted",
   ];
   if (unpublishedStatuses.includes(status) || event.published === false) {
     return false;
   }
-  if (["approved", "published"].includes(status) || event.published === true) {
+  if (
+    ["approved", "published", "rescheduled"].includes(status) ||
+    event.published === true
+  ) {
     return true;
   }
   return allowUnmarked && !status;
@@ -88,11 +248,13 @@ export async function loadCalendarData(currentEvents, year, monthIndex) {
     loadApprovedFirestoreEvents(),
     fetchMonthHolidays(year, monthIndex),
   ]);
+  const preferences = getStudentPreferences();
   const seen = new Set();
   const events = [...firestoreEvents, ...currentEvents].filter((event) => {
     if (!isPublicCalendarEvent(event, true)) return false;
     const id = String(event.eventId || event.id || "");
     if (!id || seen.has(id)) return false;
+    if (!matchesStudentPreferences(event, preferences)) return false;
     seen.add(id);
     return true;
   });

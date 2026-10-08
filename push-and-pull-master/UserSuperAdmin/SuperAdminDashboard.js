@@ -34,6 +34,7 @@ import { db, isFirebaseConfigured } from "../UserStudent/firebaseConfig.js";
     dateTime: "audit-detail-date-time",
     eventName: "audit-detail-event",
     organizer: "audit-detail-organizer",
+    organizerRole: "audit-detail-organizer-role",
     previousStatus: "audit-detail-previous-status",
     newStatus: "audit-detail-new-status",
     details: "audit-detail-description",
@@ -98,6 +99,9 @@ import { db, isFirebaseConfigured } from "../UserStudent/firebaseConfig.js";
       organizer: isUserAction
         ? "Not applicable"
         : data.organizer || data.organization || "Not applicable",
+      organizerRole: isUserAction
+        ? ""
+        : data.organizerRole || data.eventOrganizerRole || data.contactRole || "",
       previousStatus: data.previousStatus || "Not applicable",
       newStatus: data.newStatus || "Not applicable",
       details: data.details || action,
@@ -169,29 +173,74 @@ import { db, isFirebaseConfigured } from "../UserStudent/firebaseConfig.js";
   function showRecord(record) {
     const modalTitle = document.getElementById("audit-modal-title");
     if (modalTitle) {
-      modalTitle.textContent = `${record.user} → ${record.actionHeader}`;
+      modalTitle.textContent = record.actionHeader || record.action || "Activity Details";
     }
-    Object.entries(fieldIds).forEach(([field, id]) => {
-      const element = document.getElementById(id);
-      if (element) {
-        element.textContent =
-          field === "dateTime"
-            ? formatDetailTimestamp(record.timestamp)
-            : record[field] || "Not available";
+
+    const actionEl = document.getElementById("audit-detail-action");
+    const performedByEl = document.getElementById("audit-detail-performed-by");
+    const dateTimeEl = document.getElementById("audit-detail-date-time");
+    const categoryEl = document.getElementById("audit-detail-category");
+    const eventEl = document.getElementById("audit-detail-event");
+    const organizerEl = document.getElementById("audit-detail-organizer");
+    const organizerRoleEl = document.getElementById("audit-detail-organizer-role");
+    const prevStatusEl = document.getElementById("audit-detail-previous-status");
+    const newStatusEl = document.getElementById("audit-detail-new-status");
+    const descSection = document.getElementById("audit-description-section");
+    const descText = document.getElementById("audit-detail-description");
+
+    if (actionEl) actionEl.textContent = record.action || "Not specified";
+    if (performedByEl) performedByEl.textContent = record.performedBy || record.user || "System";
+    if (dateTimeEl) dateTimeEl.textContent = formatDetailTimestamp(record.timestamp);
+    if (categoryEl) categoryEl.textContent = record.category || (record.hasEvent ? "Event Management" : "User Management");
+
+    const rowCategory = document.getElementById("row-category");
+    const rowEvent = document.getElementById("row-event");
+    const rowOrganizer = document.getElementById("row-organizer");
+    const rowPrevStatus = document.getElementById("row-previous-status");
+    const rowNewStatus = document.getElementById("row-new-status");
+
+    if (record.hasEvent) {
+      if (rowEvent) rowEvent.hidden = false;
+      if (rowOrganizer) rowOrganizer.hidden = false;
+      if (rowPrevStatus) rowPrevStatus.hidden = !record.previousStatus || record.previousStatus === "Not applicable";
+      if (rowNewStatus) rowNewStatus.hidden = !record.newStatus || record.newStatus === "Not applicable";
+
+      if (eventEl) eventEl.textContent = record.eventName;
+      if (organizerEl) organizerEl.textContent = record.organizer || "Not specified";
+      if (organizerRoleEl) organizerRoleEl.textContent = record.organizerRole ? ` (${record.organizerRole})` : "";
+      if (prevStatusEl) prevStatusEl.textContent = record.previousStatus || "";
+      if (newStatusEl) newStatusEl.textContent = record.newStatus || "";
+    } else {
+      if (rowEvent) rowEvent.hidden = true;
+      if (rowOrganizer) rowOrganizer.hidden = true;
+      if (rowPrevStatus) rowPrevStatus.hidden = true;
+      if (rowNewStatus) rowNewStatus.hidden = true;
+    }
+
+    if (descSection && descText) {
+      if (record.details && record.details !== record.action && record.details !== "Not applicable") {
+        descText.textContent = record.details;
+        descSection.hidden = false;
+      } else {
+        descSection.hidden = true;
       }
-    });
+    }
+
     if (payloadElement) {
-      payloadElement.textContent = JSON.stringify(record.rawData || record, null, 2);
-      payloadElement.hidden = false;
+      payloadElement.textContent = "";
+      payloadElement.hidden = true;
     }
 
     if (viewEventLink) {
-      viewEventLink.href = record.hasEvent
-        ? `../UserAdmin/AdminAllEvents.html?q=${encodeURIComponent(record.eventName)}`
-        : "#";
-      viewEventLink.setAttribute("aria-disabled", String(!record.hasEvent));
-      viewEventLink.tabIndex = record.hasEvent ? 0 : -1;
-      viewEventLink.classList.toggle("is-disabled", !record.hasEvent);
+      if (record.hasEvent) {
+        viewEventLink.href = `../UserAdmin/AdminAllEvents.html?q=${encodeURIComponent(record.eventName)}`;
+        viewEventLink.hidden = false;
+        viewEventLink.style.display = "inline-flex";
+      } else {
+        viewEventLink.href = "#";
+        viewEventLink.hidden = true;
+        viewEventLink.style.display = "none";
+      }
     }
     if (modal?.showModal) modal.showModal();
   }
@@ -203,15 +252,18 @@ import { db, isFirebaseConfigured } from "../UserStudent/firebaseConfig.js";
       const element = document.getElementById(id);
       if (element) element.textContent = "";
     });
+    const categoryEl = document.getElementById("audit-detail-category");
+    if (categoryEl) categoryEl.textContent = "";
+    const descSection = document.getElementById("audit-description-section");
+    if (descSection) descSection.hidden = true;
     if (payloadElement) {
       payloadElement.textContent = "";
       payloadElement.hidden = true;
     }
     if (viewEventLink) {
       viewEventLink.href = "#";
-      viewEventLink.setAttribute("aria-disabled", "true");
-      viewEventLink.tabIndex = -1;
-      viewEventLink.classList.add("is-disabled");
+      viewEventLink.hidden = true;
+      viewEventLink.style.display = "none";
     }
   }
 
@@ -281,30 +333,6 @@ import { db, isFirebaseConfigured } from "../UserStudent/firebaseConfig.js";
     if (sidebarAvatar) sidebarAvatar.textContent = nameInitials(fullName);
   }
 
-  function updateUserMetrics(snapshot) {
-    const users = snapshot.docs.map((documentSnapshot) => documentSnapshot.data());
-    const activeCount = users.filter(
-      (user) => user.status === "Active" || user.isActive === true,
-    ).length;
-    const adminCount = users.filter((user) =>
-      String(user.role || "").toLowerCase().includes("admin"),
-    ).length;
-    const teacherOrganizerCount = users.filter((user) =>
-      /teacher|organizer|\beo\b/i.test(String(user.role || "")),
-    ).length;
-    const metrics = [
-      ["#metric-total-users", snapshot.size],
-      ["#metric-active-users", activeCount],
-      ["#metric-total-admins", adminCount],
-      ["#metric-total-teachers-eo", teacherOrganizerCount],
-    ];
-
-    metrics.forEach(([selector, value]) => {
-      const valueElement = document.querySelector(`${selector} .metric-value`);
-      if (valueElement) valueElement.textContent = value.toLocaleString();
-    });
-  }
-
   function renderTableError(table, message) {
     if (!table?.tbody) return;
     console.info(`[SuperAdminDashboard] ${message}; retaining static audit rows.`);
@@ -357,22 +385,193 @@ import { db, isFirebaseConfigured } from "../UserStudent/firebaseConfig.js";
     if (profile && user) renderAuthenticatedProfile(profile, user);
   });
 
+  /* ── Accounts Overview panel ──────────────────────── */
+
+  const aoPanel = document.getElementById("accounts-overview-panel");
+  const aoErrorEl = document.getElementById("ao-error");
+  const aoRetryBtn = document.getElementById("ao-retry");
+  const aoCountsRegion = document.getElementById("accounts-overview-counts");
+
+  const aoRoleMap = {
+    student:  { totalEl: "ao-student-total",  activeEl: "ao-student-active" },
+    teacher:  { totalEl: "ao-teacher-total",  activeEl: "ao-teacher-active" },
+    eo:       { totalEl: "ao-eo-total",       activeEl: "ao-eo-active" },
+    admin:    { totalEl: "ao-admin-total",    activeEl: "ao-admin-active" },
+  };
+
+  // Map a Firestore role value to our panel keys
+  function classifyRole(role) {
+    const r = String(role || "").trim().toLowerCase().replace(/\s+/g, "");
+    if (r === "student") return "student";
+    if (r === "teacher") return "teacher";
+    if (r === "eventorganizer") return "eo";
+    if (r === "admin") return "admin";
+    if (r === "superadmin") return "admin"; // Super Admins count under Admin column
+    return null;
+  }
+
+  function formatCount(n) {
+    return Number(n).toLocaleString("en-US");
+  }
+
+  // Apply a brief fade transition when a number changes
+  function setCountText(element, text) {
+    if (!element || element.textContent === text) return;
+    element.classList.add("ao-updating");
+    requestAnimationFrame(() => {
+      element.textContent = text;
+      requestAnimationFrame(() => element.classList.remove("ao-updating"));
+    });
+  }
+
+  // Render counts into the DOM
+  function renderAccountCounts(totals, actives, totalActiveUsers) {
+    Object.entries(aoRoleMap).forEach(([key, { totalEl, activeEl }]) => {
+      const tEl = document.getElementById(totalEl);
+      const aEl = document.getElementById(activeEl);
+      const total = totals[key] || 0;
+      const active = actives[key] || 0;
+
+      setCountText(tEl, formatCount(total));
+
+      if (aEl) {
+        aEl.innerHTML = "";
+        const dot = document.createElement("span");
+        dot.className = "accounts-active-dot";
+        dot.setAttribute("aria-hidden", "true");
+        const label = document.createTextNode(`${formatCount(active)} active now`);
+        aEl.append(dot, label);
+      }
+    });
+
+    const activeTotalEl = document.getElementById("ao-active-total");
+    const activeStatusEl = document.getElementById("ao-active-status");
+
+    if (activeTotalEl) {
+      setCountText(activeTotalEl, formatCount(totalActiveUsers));
+    }
+    if (activeStatusEl) {
+      activeStatusEl.innerHTML = "";
+      const dot = document.createElement("span");
+      dot.className = "accounts-active-dot";
+      dot.setAttribute("aria-hidden", "true");
+      const label = document.createTextNode("Actively logged in");
+      activeStatusEl.append(dot, label);
+    }
+  }
+
+  // Show error, hide counts
+  function showAoError() {
+    if (aoErrorEl) aoErrorEl.hidden = false;
+  }
+
+  function hideAoError() {
+    if (aoErrorEl) aoErrorEl.hidden = true;
+  }
+
+  // Data from both collections; we merge and recount on every snapshot
+  let studentUserDocs = [];
+  let adminUserDocs = [];
+
+  function recomputeAndRender() {
+    const totals = { student: 0, teacher: 0, eo: 0, admin: 0 };
+    const actives = { student: 0, teacher: 0, eo: 0, admin: 0 };
+    let totalActiveUsers = 0;
+
+    const allDocs = [...studentUserDocs, ...adminUserDocs];
+    allDocs.forEach((data) => {
+      const key = classifyRole(data.role);
+      if (!key) return;
+      totals[key]++;
+      // Use the existing status/isActive field to determine "active"
+      const status = String(data.status || "").toLowerCase();
+      const isActive = status === "active" || (status === "" && data.isActive === true);
+      if (isActive) {
+        actives[key]++;
+        totalActiveUsers++;
+      }
+    });
+
+    renderAccountCounts(totals, actives, totalActiveUsers);
+    hideAoError();
+  }
+
+  // Subscribe to both user collections with real-time listeners
+  let unsubStudents = null;
+  let unsubStaff = null;
+
+  function subscribeAccountsOverview() {
+    // Clear existing listeners
+    if (unsubStudents) { unsubStudents(); unsubStudents = null; }
+    if (unsubStaff) { unsubStaff(); unsubStaff = null; }
+
+    unsubStudents = onSnapshot(
+      collection(db, "studentUser"),
+      (snapshot) => {
+        studentUserDocs = snapshot.docs.map((d) => d.data());
+        recomputeAndRender();
+      },
+      (error) => {
+        console.info("[SuperAdminDashboard] studentUser listener failed:", error);
+        showAoError();
+      },
+    );
+
+    unsubStaff = onSnapshot(
+      collection(db, "adminUser"),
+      (snapshot) => {
+        adminUserDocs = snapshot.docs.map((d) => d.data());
+        recomputeAndRender();
+      },
+      (error) => {
+        console.info("[SuperAdminDashboard] adminUser listener failed:", error);
+        showAoError();
+      },
+    );
+
+    unsubscribers.push(
+      () => { if (unsubStudents) unsubStudents(); },
+      () => { if (unsubStaff) unsubStaff(); },
+    );
+  }
+
+  if (aoPanel) {
+    subscribeAccountsOverview();
+
+    // Retry button
+    if (aoRetryBtn) {
+      aoRetryBtn.addEventListener("click", () => {
+        hideAoError();
+        // Reset skeletons
+        Object.values(aoRoleMap).forEach(({ totalEl, activeEl }) => {
+          const tEl = document.getElementById(totalEl);
+          const aEl = document.getElementById(activeEl);
+          if (tEl) tEl.innerHTML = '<span class="ao-skeleton"></span>';
+          if (aEl) aEl.innerHTML = '<span class="ao-skeleton ao-skeleton-sm"></span>';
+        });
+        const activeTotalEl = document.getElementById("ao-active-total");
+        const activeStatusEl = document.getElementById("ao-active-status");
+        if (activeTotalEl) activeTotalEl.innerHTML = '<span class="ao-skeleton"></span>';
+        if (activeStatusEl) activeStatusEl.innerHTML = '<span class="ao-skeleton ao-skeleton-sm"></span>';
+        subscribeAccountsOverview();
+      });
+    }
+
+    // Refetch when tab regains focus
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden && aoPanel) {
+        // Listeners are persistent (onSnapshot), so no action needed.
+        // Firestore automatically re-syncs when the tab becomes visible.
+      }
+    });
+  }
+
+  /* ── End Accounts Overview ────────────────────────── */
+
   const recentTable = tables.find(({ table }) => table.id === "recent-audit-table");
   const allAuditTable = tables.find(
     ({ table }) => table.id === "audit-activity-table",
   );
-
-  if (document.getElementById("metric-total-users")) {
-    unsubscribers.push(
-      onSnapshot(
-        collection(db, "studentUser"),
-        updateUserMetrics,
-        (error) => {
-          console.info("[SuperAdminDashboard] Metrics listener failed; retaining static values.", error);
-        },
-      ),
-    );
-  }
 
   if (recentTable) {
     unsubscribers.push(

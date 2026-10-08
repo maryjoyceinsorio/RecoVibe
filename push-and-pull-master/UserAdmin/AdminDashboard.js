@@ -200,7 +200,7 @@ import { db, isFirebaseConfigured } from "../UserStudent/firebaseConfig.js";
   function render() {
     try {
       root.innerHTML =
-        '<div class="admin-metrics"></div><section class="admin-section"><div class="admin-section-heading"><h2>Event Submissions</h2><a href="AdminApproval.html">Open Approval Queue</a></div><div class="admin-table-wrap"><table class="admin-table"><thead><tr><th scope="col">Event</th><th scope="col">Organization</th><th scope="col">Schedule</th><th scope="col">Venue</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead><tbody id="eventRows"></tbody></table></div><div id="eventsEmpty" class="admin-empty" hidden>No event submissions yet.</div></section>';
+        '<div class="admin-metrics"></div><section class="admin-section"><div class="admin-section-heading"><div><h2>Event Submissions</h2><p class="admin-section-description"><strong>Source</strong> is the publishing channel, <strong>Category</strong> is the event topic, and <strong>EO (Event Organizer)</strong> is the responsible person or group. Organizer roles are shown beneath the EO.</p></div><a href="AdminApproval.html">Open Approval Queue</a></div><div class="admin-table-wrap"><table class="admin-table"><thead><tr><th scope="col">Event</th><th scope="col">Source</th><th scope="col">Category</th><th scope="col">Event Organizer (EO)</th><th scope="col">Schedule</th><th scope="col">Venue</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead><tbody id="eventRows"></tbody></table></div><div id="eventsEmpty" class="admin-empty" hidden>No event submissions yet.</div></section>';
       const events = records();
       const all = openItems(events);
       const published = events.filter(
@@ -257,15 +257,48 @@ import { db, isFirebaseConfigured } from "../UserStudent/firebaseConfig.js";
     }
   }
   function eventRow(event) {
-    const category = Array.isArray(event.category)
-      ? event.category.join(", ")
-      : event.category || event.categories || "General";
+    const categories = event.categories || event.category || "General";
+    const category = (Array.isArray(categories) ? categories : [categories])
+      .map((value) =>
+        typeof value === "object"
+          ? value.name || value.title || value.label || ""
+          : value,
+      )
+      .filter(Boolean)
+      .join(", ") || "General";
+    const source = normalizeSource(
+      event.source ||
+        event.eventSource ||
+        event.organizationType,
+      event._role,
+    );
+    const organizer =
+      event.organizerName ||
+      event.eventOrganizer ||
+      event.organizer ||
+      event.organization ||
+      "—";
+    const organizerRole =
+      event.organizerRole ||
+      event.eventOrganizerRole ||
+      event.contactRole ||
+      "";
     const pending = statusOf(event) === "pending_approval";
     const eventId = event.eventId || event.id;
     const scheduleDate = event.eventDate || event.dateISO || event.date || "Date TBA";
     const startTime = event.startTime || "Time TBA";
     const endTime = event.endTime || "Time TBA";
-    return `<tr><td data-label="Event"><span class="admin-item-title">${esc(event.eventName || event.title || "Untitled event")}</span><small>${esc(category)}</small></td><td data-label="Organization">${esc(event.organization || "—")}</td><td data-label="Schedule">${esc(scheduleDate)}<small>${esc(startTime)} - ${esc(endTime)}</small></td><td data-label="Venue">${esc(event.venue || "—")}</td><td data-label="Status"><span class="event-status">${esc(event.status || "Status unavailable")}</span></td><td data-label="Actions">${pending ? `<button class="admin-row-action event-decision approve" type="button" data-event-action="approve" data-event-id="${esc(eventId)}">Approve</button><button class="admin-row-action event-decision reject" type="button" data-event-action="reject" data-event-id="${esc(eventId)}">Reject</button>` : "—"}</td></tr>`;
+    return `<tr><td data-label="Event"><span class="admin-item-title">${esc(event.eventName || event.title || "Untitled event")}</span></td><td data-label="Source">${esc(source)}</td><td data-label="Category">${esc(category)}</td><td data-label="Event Organizer (EO)"><span class="admin-item-title">${esc(organizer)}</span>${organizerRole ? `<small class="admin-organizer-role">EO role: ${esc(organizerRole)}</small>` : ""}</td><td data-label="Schedule">${esc(scheduleDate)}<small>${esc(startTime)} - ${esc(endTime)}</small></td><td data-label="Venue">${esc(event.venue || "—")}</td><td data-label="Status"><span class="event-status">${esc(event.status || "Status unavailable")}</span></td><td data-label="Actions">${pending ? `<button class="admin-row-action event-decision approve" type="button" data-event-action="approve" data-event-id="${esc(eventId)}">Approve</button><button class="admin-row-action event-decision reject" type="button" data-event-action="reject" data-event-id="${esc(eventId)}">Reject</button>` : "—"}</td></tr>`;
+  }
+  function normalizeSource(value, role = "") {
+    const source = String(value || "").trim().toLowerCase();
+    if (!source && role === "Teacher") return "Teacher / Faculty";
+    if (/\bcsc\b/.test(source)) return "CSC";
+    if (/teacher|faculty/.test(source)) return "Teacher / Faculty";
+    if (/ibits|organiz|event.?organizer/.test(source)) return "Organizational";
+    if (/external|other/.test(source)) return "Others / External";
+    if (/pup|campus|cite|polytechnic/.test(source)) return "PUP Official";
+    return "Others / External";
   }
   function age(value) {
     if (!value) return "Submitted date unavailable";

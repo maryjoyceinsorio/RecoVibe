@@ -3,142 +3,7 @@ const deletedNotificationStorageKey = "recovibeDeletedNotifications";
 const notificationExpansionKey = "recovibeNotificationExpansionV1";
 const deletedNotificationLifetime = 7 * 24 * 60 * 60 * 1000;
 
-const defaultNotifications = [
-  {
-    id: "schedule-updated",
-    title: "Event Schedule Updated",
-    message:
-      "PUP Biñan Leadership Seminar has been moved from 1:00 PM to 2:00 PM.",
-    time: "2 hours ago",
-    type: "maroon",
-    eventId: "leadership-seminar",
-    from: "Mr. Archie Arevalo",
-    reason:
-      "Speaker availability: The schedule was adjusted due to the updated availability of the invited speaker.",
-    read: false,
-  },
-  {
-    id: "participation-confirmed",
-    title: "Participation Confirmed",
-    message:
-      "Your participation for PUP Biñan Leadership Seminar has been confirmed.",
-    time: "3 hours ago",
-    type: "maroon",
-    eventId: "leadership-seminar",
-    read: false,
-  },
-  {
-    id: "participation-cancelled",
-    title: "Participation Cancelled",
-    message:
-      "Your participation for IBITS General Assembly has been cancelled successfully.",
-    time: "Yesterday",
-    type: "green",
-    eventId: "ibits-general-assembly",
-    read: false,
-  },
-  {
-    id: "event-tomorrow",
-    title: "Event Tomorrow",
-    message:
-      "You are participating in PUP Biñan Leadership Seminar tomorrow at 1:00 PM.",
-    time: "1 day ago",
-    type: "blue",
-    eventId: "leadership-seminar",
-    read: false,
-  },
-  {
-    id: "event-cancelled",
-    title: "Event Cancelled",
-    message:
-      "IBITS General Assembly scheduled for September 15 has been cancelled by the organizer.",
-    time: "2 days ago",
-    type: "green",
-    eventId: "ibits-general-assembly",
-    read: false,
-  },
-  {
-    id: "new-event-recommendation",
-    title: "New Event Recommendation",
-    message: "A new academic event matches your interests.",
-    time: "Today",
-    type: "blue",
-    read: false,
-  },
-  {
-    id: "registration-opening",
-    title: "Registration Is Open",
-    message: "Registration is now open for the next campus event.",
-    time: "Today",
-    type: "maroon",
-    read: false,
-  },
-  {
-    id: "event-reminder",
-    title: "Event Reminder",
-    message: "Your registered event is coming up soon.",
-    time: "Today",
-    type: "green",
-    read: false,
-  },
-  {
-    id: "profile-update",
-    title: "Profile Update Needed",
-    message:
-      "Review your student profile to keep your recommendations accurate.",
-    time: "Today",
-    type: "blue",
-    read: false,
-  },
-  {
-    id: "schedule-confirmed",
-    title: "Schedule Confirmed",
-    message: "Your event schedule has been confirmed by the organizer.",
-    time: "Today",
-    type: "green",
-    read: false,
-  },
-  {
-    id: "campus-announcement",
-    title: "Campus Announcement",
-    message: "A new announcement is available from PUP Biñan Campus.",
-    time: "Yesterday",
-    type: "maroon",
-    read: false,
-  },
-  {
-    id: "interest-match",
-    title: "Interest Match Found",
-    message: "We found an event related to your selected interests.",
-    time: "Yesterday",
-    type: "blue",
-    read: false,
-  },
-  {
-    id: "participation-update",
-    title: "Participation Update",
-    message: "Your participation record has been updated successfully.",
-    time: "2 days ago",
-    type: "green",
-    read: false,
-  },
-  {
-    id: "organizer-message",
-    title: "Message From Organizer",
-    message: "An event organizer sent you an important update.",
-    time: "2 days ago",
-    type: "maroon",
-    read: false,
-  },
-  {
-    id: "weekly-digest",
-    title: "Weekly Event Digest",
-    message: "Explore this week's recommended activities and events.",
-    time: "3 days ago",
-    type: "blue",
-    read: false,
-  },
-];
+const defaultNotifications = [];
 
 const savedNotifications = JSON.parse(
   localStorage.getItem(notificationStorageKey) || "null",
@@ -149,12 +14,13 @@ let deletedNotifications = JSON.parse(
   ...item,
   expiresAt: item.expiresAt || Date.now() + deletedNotificationLifetime,
 }));
-let notifications = (savedNotifications || []).map((item) => {
-  const defaults = defaultNotifications.find(
-    (notification) => notification.id === item.id,
-  );
-  return defaults ? { ...defaults, ...item } : item;
-});
+let notifications = (savedNotifications || []).filter(
+  (item) =>
+    item &&
+    !String(item.eventId || "").includes("leadership-seminar") &&
+    !String(item.eventId || "").includes("ibits-general-assembly") &&
+    !String(item.id || "").includes("leadership-seminar")
+);
 const existingNotificationIds = new Set(notifications.map((item) => item.id));
 defaultNotifications.forEach((item) => {
   if (!existingNotificationIds.has(item.id)) notifications.push({ ...item });

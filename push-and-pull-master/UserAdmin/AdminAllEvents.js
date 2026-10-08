@@ -41,11 +41,9 @@ import { db, isFirebaseConfigured } from "../UserStudent/firebaseConfig.js";
   ];
   const sources = [
     "PUP Official",
-    "PUP Biñan",
-    "PUP CITE",
-    "Organizational",
     "CSC",
-    "Teachers / Faculty",
+    "Teacher / Faculty",
+    "Organizational",
     "Others / External",
   ];
   const categories = [
@@ -116,6 +114,17 @@ import { db, isFirebaseConfigured } from "../UserStudent/firebaseConfig.js";
     return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(
       date,
     );
+  }
+  function normalizeSource(source, role = "") {
+    const value = String(source || "").trim().toLowerCase();
+    if (!value && role === "Teacher") return "Teacher / Faculty";
+    if (/\bcsc\b/.test(value)) return "CSC";
+    if (/teacher|faculty/.test(value)) return "Teacher / Faculty";
+    if (/organization|organizational|ibits|event organizer|organizer/.test(value))
+      return "Organizational";
+    if (/external|admin|other/.test(value)) return "Others / External";
+    if (/pup|campus|cite/.test(value)) return "PUP Official";
+    return "Others / External";
   }
   function timeMins(value) {
     const text = String(value || "").trim();
@@ -188,20 +197,10 @@ import { db, isFirebaseConfigured } from "../UserStudent/firebaseConfig.js";
         `${state.year}-${String(Number(state.month) + 1).padStart(2, "0")}`,
       );
     const full = openSlots(event) === 0;
-    let source = String(event.source || "");
-    if (
-      ["IBITS", "Event Organizer", "Organization", "Organizer"].includes(source)
-    )
-      source = "Organizational";
-    if (
-      ["Teacher / Faculty", "Teachers/Faculty"].includes(source) ||
-      (event._role === "Teacher" && !source)
-    )
-      source = "Teachers / Faculty";
-    if (!source) source = "Others / External";
+    const source = normalizeSource(event.source, event._role);
     return (
       (!query || text.includes(query)) &&
-      (!state.source || source === state.source) &&
+      (!state.source || source === normalizeSource(state.source)) &&
       (!state.category ||
         (event.categories || event.category || event.tag || "")
           .toString()
@@ -269,6 +268,13 @@ import { db, isFirebaseConfigured } from "../UserStudent/firebaseConfig.js";
       state.availability,
     );
   }
+  function isPublishedEvent(event) {
+    const raw = String(event.status || "").trim().toLowerCase();
+    return (
+      ["published", "approved", "available to join"].includes(raw) ||
+      event.isPublished === true
+    );
+  }
   function card(event) {
     const date = (event.dateISO || event.date || "").slice(0, 10),
       parts = date.split("-"),
@@ -278,24 +284,24 @@ import { db, isFirebaseConfigured } from "../UserStudent/firebaseConfig.js";
       raw = String(event.status || "")
         .toLowerCase()
         .replace(/_/g, " "),
-      stage = ["published", "approved"].includes(raw)
-        ? ""
-        : raw.replace(/\b\w/g, (l) => l.toUpperCase());
+      st = status(event);
     const cats = Array.isArray(event.categories)
       ? event.categories
       : [event.category || event.tag || "General"];
     const chips = [
-      stage && stage !== "Approved" ? stage : "",
-      status(event) === "Cancelled" ? "Cancelled" : "",
-      status(event) === "Completed" ? "Completed" : "",
-      event.isRescheduled && status(event) !== "Completed" ? "Rescheduled" : "",
-      open === 0 ? "Full" : "",
+      st === "Happening" ? '<span class="admin-chip chip-happening">Happening</span>' : "",
+      st === "Cancelled" ? '<span class="admin-chip chip-cancelled">Cancelled</span>' : "",
+      st === "Completed" ? '<span class="admin-chip chip-completed">Completed</span>' : "",
+      event.isRescheduled && st !== "Completed" ? '<span class="admin-chip">Rescheduled</span>' : "",
+      open === 0 ? '<span class="admin-chip chip-full">Full</span>' : "",
     ].filter(Boolean);
     const organizer =
       event._role === "Teacher"
         ? `Teacher - ${event.organizer || event.organizerName || "Teacher"}`
-        : event.organizerName || event.organizer || "Event Organizer";
-    return `<article class="admin-event-card"><div class="event-date-tile"><small>${esc(new Date(`${date}T00:00:00`).toLocaleDateString("en-US", { month: "short", timeZone: "Asia/Manila" }))}</small><strong>${esc(parts[2] || "")}</strong></div><h3 class="event-card-title">${esc(event.title || "Untitled event")}</h3><p><strong>Event Organizer:</strong> ${esc(organizer)}</p><p><strong>Source:</strong> ${esc(event.source || "Others / External")}</p><div class="event-card-meta"><span>Date: ${esc(date)}</span><span>Start: ${esc(time[0])}</span><span>End: ${esc(time[1])}</span><span>Venue: ${esc(event.venueOther || event.location || event.venue || "—")}</span><span>Capacity: ${caps === null ? "No capacity limit" : `${open} out of ${caps} Slots are Open`}</span></div><div class="admin-pills">${cats.map((category) => `<span class="admin-category-pill">${esc(category)}</span>`).join("")} ${chips.map((chip) => `<span class="admin-chip">${esc(chip)}</span>`).join("")}</div><div class="event-card-bottom"><button class="admin-row-action" type="button" data-event-view="${esc(event.eventId || event.id)}">View Details</button></div></article>`;
+        : event.organizerName || event.organizer || event.organization || "Event Organizer";
+    const monthName = date ? new Date(`${date}T00:00:00`).toLocaleDateString("en-US", { month: "short", timeZone: "Asia/Manila" }) : "—";
+    const dayNum = parts[2] ? parts[2].replace(/^0+/, '') || parts[2] : "—";
+    return `<article class="admin-event-card"><div class="event-card-header"><div class="event-date-tile"><small>${esc(monthName)}</small><strong>${esc(parts[2] || "—")}</strong></div><div class="event-card-titles"><h3 class="event-card-title">${esc(event.title || "Untitled event")}</h3><p class="event-organizer-text"><strong>Event Organizer:</strong> ${esc(organizer)}</p><p class="event-source-text"><strong>Source:</strong> ${esc(normalizeSource(event.source, event._role))}</p></div></div><div class="event-card-meta"><span><strong>Date:</strong> ${esc(date || "—")}</span><span><strong>Start:</strong> ${esc(time[0] || "—")}</span><span><strong>End:</strong> ${esc(time[1] || "—")}</span><span><strong>Venue:</strong> ${esc(event.venueOther || event.location || event.venue || "—")}</span><span style="grid-column: 1 / -1;"><strong>Capacity:</strong> ${caps === null ? "No capacity limit" : `${open} out of ${caps} Slots are Open`}</span></div><div class="event-card-bottom"><div class="admin-pills">${cats.map((category) => `<span class="admin-category-pill">${esc(category)}</span>`).join("")} ${chips.join(" ")}</div><button class="admin-row-action" type="button" data-event-view="${esc(event.eventId || event.id)}">View Details</button></div></article>`;
   }
   function dropdown(key, label, options) {
     const current = state[key];
@@ -482,21 +488,24 @@ import { db, isFirebaseConfigured } from "../UserStudent/firebaseConfig.js";
     const unsubscribe = onSnapshot(
       query(collection(db, "events"), orderBy("createdAt", "desc")),
       (snapshot) => {
-        firestoreEvents = snapshot.docs.map((eventDocument) => {
-          const data = eventDocument.data();
-          const eventDate = data.eventDate || data.dateISO || data.date || "";
-          return {
-            ...data,
-            id: eventDocument.id,
-            eventId: eventDocument.id,
-            title: data.eventName || data.title || "Untitled event",
-            date: eventDate,
-            dateISO: eventDate,
-            venue: data.venue || data.location || data.venueOther || "",
-            location: data.venue || data.location || data.venueOther || "",
-            organization: data.organization || data.organizerName || "",
-          };
-        });
+        firestoreEvents = snapshot.docs
+          .map((eventDocument) => {
+            const data = eventDocument.data();
+            if (!isPublishedEvent(data)) return null;
+            const eventDate = data.eventDate || data.dateISO || data.date || "";
+            return {
+              ...data,
+              id: eventDocument.id,
+              eventId: eventDocument.id,
+              title: data.eventName || data.title || "Untitled event",
+              date: eventDate,
+              dateISO: eventDate,
+              venue: data.venue || data.location || data.venueOther || "",
+              location: data.venue || data.location || data.venueOther || "",
+              organization: data.organization || data.organizerName || data.organizer || "",
+            };
+          })
+          .filter(Boolean);
         render();
       },
       (error) => {
@@ -504,7 +513,7 @@ import { db, isFirebaseConfigured } from "../UserStudent/firebaseConfig.js";
         root.innerHTML = `<div class="admin-error">Could not load events. ${esc(error.message || "Please try again later.")}</div>`;
       },
     );
-    window.addEventListener("beforeunload", unsubscribe, { once: true });
+        window.addEventListener("beforeunload", unsubscribe, { once: true });
   }
   init();
 })();
