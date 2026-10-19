@@ -1,6 +1,7 @@
 (function () {
   document.querySelectorAll("a.logout").forEach((link) => {
     link.addEventListener("click", async (event) => {
+      if (link.dataset.customLogout === "true") return;
       event.preventDefault();
       if (link.getAttribute("aria-busy") === "true") return;
 

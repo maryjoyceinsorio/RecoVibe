@@ -121,4 +121,46 @@
   });
   window.addEventListener("recovibeOrganizerEventsChanged", refresh);
   window.addEventListener("recovibeOrganizerNotificationsChanged", renderBadge);
+
+  // Real-time RTDB notifications listener
+  (async () => {
+    try {
+      const config = await import("../UserStudent/firebaseConfig.js");
+      const authModule = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js");
+      const rtdbModule = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js");
+
+      if (config.auth && config.rtdb) {
+        authModule.onAuthStateChanged(config.auth, (user) => {
+          if (!user) return;
+          const notifRef = rtdbModule.ref(config.rtdb, `notifications/${user.uid}`);
+          rtdbModule.onValue(notifRef, (snapshot) => {
+            const data = snapshot.val();
+            let unreadCount = 0;
+            if (data && typeof data === "object") {
+              const notifications = [];
+              Object.entries(data).forEach(([id, val]) => {
+                if (val && typeof val === "object") {
+                  if (!val.read) unreadCount++;
+                  notifications.push({
+                    id,
+                    ...val,
+                    time: val.createdAt ? new Date(val.createdAt).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }) : "Recently",
+                  });
+                }
+              });
+              localStorage.setItem("recovibeOrganizerNotifications", JSON.stringify(notifications));
+              window.dispatchEvent(new Event("recovibeOrganizerNotificationsChanged"));
+            }
+            document.querySelectorAll("#navNotifBadge").forEach((badge) => {
+              badge.textContent = unreadCount ? String(unreadCount) : "";
+              badge.hidden = unreadCount === 0;
+            });
+          });
+        });
+      }
+    } catch (err) {
+      // Offline or fallback to localStorage
+    }
+  })();
 })();
+

@@ -67,6 +67,15 @@ import { fetchMonthHolidays } from "../holidayService.js";
     const source = String(
       event.source || event.organizerName || "Others / External",
     );
+    if (
+      source === "Holiday" ||
+      source === "Philippine Holiday" ||
+      event.isHoliday ||
+      String(event.category || "").toLowerCase().includes("holiday") ||
+      String(event.title || "").toLowerCase().includes("holiday")
+    ) {
+      return "Holiday";
+    }
     if (source === "PUP Biñan" || source === "PUP Biñan Campus")
       return "PUP Biñan";
     if (
@@ -78,6 +87,21 @@ import { fetchMonthHolidays } from "../holidayService.js";
     return "Others / External";
   }
 
+  function isHolidayEvent(event) {
+    if (!event) return false;
+    const id = String(event.id || event.eventId || "");
+    const src = String(event.source || event.organizerName || "").toLowerCase();
+    const cat = String(event.category || "").toLowerCase();
+    return (
+      event.isHoliday === true ||
+      id.startsWith("holiday:") ||
+      src.includes("holiday") ||
+      cat.includes("holiday") ||
+      normalizedSource(event) === "Holiday" ||
+      normalizedSource(event) === "Philippine Holiday"
+    );
+  }
+
   function eventDotClass(event) {
     return (
       {
@@ -86,6 +110,8 @@ import { fetchMonthHolidays } from "../holidayService.js";
         "PUP CITE": "cite",
         "Event Organizer": "organizer",
         "Others / External": "external",
+        "Philippine Holiday": "holiday",
+        Holiday: "holiday",
       }[normalizedSource(event)] || "external"
     );
   }
@@ -125,7 +151,20 @@ import { fetchMonthHolidays } from "../holidayService.js";
           ? date.toLocaleDateString("en-US", { month: "short" }).toUpperCase()
           : "TBA";
         const day = date ? date.getDate() : "";
-        const sourceLabel = event.source || "Event Organizer";
+        const sourceLabel = isHolidayEvent(event)
+          ? "Holiday"
+          : (event.source || "Event Organizer");
+        if (isHolidayEvent(event)) {
+          return `
+            <div class="upcoming-item upcoming-item--holiday" style="cursor: default; pointer-events: none;" aria-label="${escape(event.title || "Holiday")} (Holiday)">
+              <div class="upcoming-date dot-${eventDotClass(event)}"><span>${day}</span><small>${month}</small></div>
+              <div class="upcoming-copy">
+                <strong>${escape(event.title || "Holiday")}</strong>
+                <span>Holiday</span>
+              </div>
+            </div>
+          `;
+        }
         return `
           <div class="upcoming-item" data-event-id="${escape(event.eventId || event.id)}" tabindex="0" role="button">
             <div class="upcoming-date"><span>${day}</span><small>${month}</small></div>
@@ -179,6 +218,10 @@ import { fetchMonthHolidays } from "../holidayService.js";
         const today = cell.iso && cell.iso === todayIso;
         const eventCount =
           cell.events && cell.events.length ? cell.events.length : 0;
+        const isOnlyHoliday =
+          cell.events &&
+          cell.events.length > 0 &&
+          cell.events.every(isHolidayEvent);
         const eventDots = cell.events
           .slice(0, 4)
           .map(
@@ -187,7 +230,7 @@ import { fetchMonthHolidays } from "../holidayService.js";
           )
           .join("");
         return `
-        <div class="cal-day-full ${cell.muted ? "is-muted" : ""} ${eventCount ? "has-event" : ""} ${today ? "is-today" : ""}" ${cell.iso ? `data-date="${cell.iso}" data-iso="${cell.iso}" tabindex="0" aria-label="${cell.iso}: ${eventCount ? `${eventCount} event${eventCount === 1 ? "" : "s"}` : "no events"}"` : ""}>
+        <div class="cal-day-full ${cell.muted ? "is-muted" : ""} ${eventCount ? "has-event" : ""} ${isOnlyHoliday ? "only-holiday" : ""} ${today ? "is-today" : ""}" ${cell.iso ? `data-date="${cell.iso}" data-iso="${cell.iso}" tabindex="0" aria-label="${cell.iso}: ${eventCount ? `${eventCount} event${eventCount === 1 ? "" : "s"}` : "no events"}"` : ""}>
           <span class="day-num">${cell.day || ""}</span>
           ${eventCount ? `<span class="event-dots" aria-hidden="true">${eventDots}</span>` : '<span class="calendar-day-empty">No events</span>'}
           ${
@@ -196,7 +239,7 @@ import { fetchMonthHolidays } from "../holidayService.js";
                   .slice(0, 3)
                   .map(
                     (event) =>
-                      `<span class="calendar-hover-event"><b>${escape(event.title || "Untitled event")}</b><small>${escape(event.time || "Time TBA")}</small></span>`,
+                      `<span class="calendar-hover-event"><b>${escape(event.title || "Untitled event")}</b><small>${isHolidayEvent(event) ? "Holiday" : escape(event.time || "Time TBA")}</small></span>`,
                   )
                   .join("")}</span>`
               : ""
@@ -213,7 +256,7 @@ import { fetchMonthHolidays } from "../holidayService.js";
     const event = events.find(
       (item) => String(item.eventId || item.id) === String(eventId),
     );
-    if (!event) return;
+    if (!event || isHolidayEvent(event)) return;
 
     const date = toDate(event.dateISO || event.date);
     const source = event.source || "Event Organizer";
@@ -256,8 +299,13 @@ import { fetchMonthHolidays } from "../holidayService.js";
       (event) => (event.dateISO || event.date) === iso,
     );
     if (!dayEvents.length) return;
-    if (dayEvents.length === 1) {
-      openEventModal(dayEvents[0].eventId || dayEvents[0].id);
+    const regularEvents = dayEvents.filter((event) => !isHolidayEvent(event));
+    if (!regularEvents.length) {
+      // Day only has holidays: holiday is shown on calendar cell, not clickable
+      return;
+    }
+    if (regularEvents.length === 1 && dayEvents.length === 1) {
+      openEventModal(regularEvents[0].eventId || regularEvents[0].id);
       return;
     }
 
@@ -272,10 +320,12 @@ import { fetchMonthHolidays } from "../holidayService.js";
         })
       : iso;
     dayList.innerHTML = dayEvents
-      .map(
-        (event) =>
-          `<button class="day-modal-row" type="button" data-event-id="${event.eventId || event.id}"><strong>${escape(event.title || "Untitled event")}</strong><small>${escape(event.time || "Time TBA")}</small></button>`,
-      )
+      .map((event) => {
+        if (isHolidayEvent(event)) {
+          return `<div class="day-modal-row day-modal-row--holiday dot-${eventDotClass(event)}" style="cursor: default; pointer-events: none;" aria-label="${escape(event.title || "Holiday")} (Holiday)"><strong>${escape(event.title || "Holiday")}</strong><small>Holiday</small></div>`;
+        }
+        return `<button class="day-modal-row" type="button" data-event-id="${event.eventId || event.id}"><strong>${escape(event.title || "Untitled event")}</strong><small>${escape(event.time || "Time TBA")}</small></button>`;
+      })
       .join("");
     document.getElementById("organizerDayOverlay").classList.add("is-open");
   }
@@ -486,10 +536,14 @@ import { fetchMonthHolidays } from "../holidayService.js";
               Promise.all([
                 Promise.resolve(
                   eventRecords.filter((event) => {
-                    const status = String(event.status || "").toLowerCase();
+                    const status = String(event.status || "")
+                      .trim()
+                      .toLowerCase()
+                      .replace(/[ _-]+/g, " ");
                     return (
-                      ["approved", "published"].includes(status) ||
-                      event.published === true
+                      ["approved", "published", "rescheduled"].includes(
+                        status,
+                      ) || event.published === true
                     );
                   }),
                 ),

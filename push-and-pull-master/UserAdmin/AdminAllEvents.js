@@ -269,10 +269,19 @@ import { db, isFirebaseConfigured } from "../UserStudent/firebaseConfig.js";
     );
   }
   function isPublishedEvent(event) {
-    const raw = String(event.status || "").trim().toLowerCase();
+    const raw = String(event.status || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[ _-]+/g, " ");
     return (
-      ["published", "approved", "available to join"].includes(raw) ||
-      event.isPublished === true
+      [
+        "published",
+        "approved",
+        "available to join",
+        "rescheduled",
+      ].includes(raw) ||
+      event.isPublished === true ||
+      event.published === true
     );
   }
   function card(event) {

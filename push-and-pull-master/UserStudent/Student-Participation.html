@@ -10,6 +10,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="Student-Participation.css" />
+    <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
   </head>
   <body>
     <div class="app" id="participationPage">
@@ -111,6 +112,29 @@
       </aside>
 
       <main class="main" id="participationMain">
+        <section class="participation-metrics" id="participationMetrics" aria-label="Participation statistics">
+          <div class="metric-card">
+            <div class="metric-label">In this range</div>
+            <div class="metric-value" id="metricTotal">0</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Completed</div>
+            <div class="metric-value metric-value--attended" id="metricAttended">0</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Absent</div>
+            <div class="metric-value metric-value--absent" id="metricAbsent">0</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Upcoming</div>
+            <div class="metric-value metric-value--upcoming" id="metricUpcoming">0</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Attendance rate</div>
+            <div class="metric-value metric-value--rate" id="metricRate">0%</div>
+          </div>
+        </section>
+
         <section
           class="participation-toolbar"
           id="participationFilterSection"
@@ -144,17 +168,109 @@
               aria-label="Search participation"
             />
           </div>
-          <label class="filter-select-wrap" for="participationFilter"
-            >Filter participation
-            <select id="participationFilter" class="filter-select">
-              <option value="all">All Events</option>
-              <option value="Participating">Participating</option>
-              <option value="Rescheduled">Rescheduled</option>
-              <option value="Cancelled">Cancelled</option>
-              <option value="Completed">Completed</option>
-            </select>
-          </label>
+          <div class="participation-filter-group">
+            <div class="filter-dropdown filter-dropdown--status">
+              <button
+                type="button"
+                class="filter-button"
+                id="statusFilterBtn"
+                data-filter="status"
+                aria-expanded="false"
+              >
+                Participating
+              </button>
+              <div class="filter-menu" data-menu="status" id="statusFilterMenu">
+                <button type="button" class="filter-option active" data-value="participating">Participating</button>
+                <button type="button" class="filter-option" data-value="completed">Completed</button>
+                <button type="button" class="filter-option" data-value="absent">Absent</button>
+                <button type="button" class="filter-option" data-value="rescheduled">Rescheduled</button>
+                <button type="button" class="filter-option" data-value="cancelled">Cancelled</button>
+              </div>
+            </div>
+
+            <div class="filter-dropdown filter-dropdown--date-range" id="dateRangeDropdown">
+              <button
+                type="button"
+                class="filter-button"
+                id="dateRangeBtn"
+                data-filter="date-range"
+                aria-expanded="false"
+                aria-controls="dateRangePanel"
+                aria-haspopup="dialog"
+              >
+                Date range
+              </button>
+              <div
+                class="date-range-panel"
+                id="dateRangePanel"
+                role="dialog"
+                aria-label="Date range selector"
+                hidden
+              >
+                <div class="date-range-panel__sidebar">
+                  <div class="date-range-presets-title">Quick ranges</div>
+                  <div class="date-range-quick-list">
+                    <button type="button" class="date-range-quick-btn" data-preset="today">Today</button>
+                    <button type="button" class="date-range-quick-btn" data-preset="tomorrow">Tomorrow</button>
+                    <button type="button" class="date-range-quick-btn" data-preset="this_week">This week</button>
+                    <button type="button" class="date-range-quick-btn" data-preset="this_weekend">This weekend</button>
+                    <button type="button" class="date-range-quick-btn" data-preset="next_week">Next week</button>
+                    <button type="button" class="date-range-quick-btn active" data-preset="this_month">This month</button>
+                    <button type="button" class="date-range-quick-btn" data-preset="next_month">Next month</button>
+                    <button type="button" class="date-range-quick-btn" data-preset="all">All time</button>
+                  </div>
+                </div>
+                <div class="date-range-panel__main">
+                  <div class="date-range-nav-row">
+                    <button type="button" class="date-cal-nav-btn" id="calNavPrev" aria-label="Previous month">&lsaquo;</button>
+                    <div class="date-cal-nav-spacer"></div>
+                    <button type="button" class="date-cal-nav-btn" id="calNavNext" aria-label="Next month">&rsaquo;</button>
+                  </div>
+                  <div class="date-range-calendars">
+                    <div class="date-cal-month" id="calMonth1">
+                      <div class="date-cal-month__title" id="calTitle1"></div>
+                      <div class="date-cal-day-names">
+                        <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
+                      </div>
+                      <div class="date-cal-grid" id="calGrid1"></div>
+                    </div>
+                    <div class="date-cal-month" id="calMonth2">
+                      <div class="date-cal-month__title" id="calTitle2"></div>
+                      <div class="date-cal-day-names">
+                        <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
+                      </div>
+                      <div class="date-cal-grid" id="calGrid2"></div>
+                    </div>
+                  </div>
+                  <div class="date-range-inputs-row">
+                    <div class="date-range-input-group">
+                      <label for="dateRangeInputStart">From</label>
+                      <input type="text" id="dateRangeInputStart" placeholder="YYYY-MM-DD" autocomplete="off" />
+                    </div>
+                    <div class="date-range-input-group">
+                      <label for="dateRangeInputEnd">To</label>
+                      <input type="text" id="dateRangeInputEnd" placeholder="YYYY-MM-DD" autocomplete="off" />
+                    </div>
+                    <div class="date-range-val-msg" id="dateRangeValidationMsg" role="alert"></div>
+                  </div>
+                  <div class="date-range-footer">
+                    <button type="button" class="date-range-clear-btn" id="dateRangeClearBtn">Clear</button>
+                    <div class="date-range-actions">
+                      <button type="button" class="date-range-cancel-btn" id="dateRangeCancelBtn">Cancel</button>
+                      <button type="button" class="date-range-apply-btn" id="dateRangeApplyBtn">Apply</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </section>
+
+        <div class="active-chips-row" id="activeChipsRow" style="display:none;">
+          <div class="active-chips-list" id="activeChipsList"></div>
+          <button type="button" class="clear-all-chips-btn" id="clearAllChipsBtn">Clear all</button>
+        </div>
+        <div class="filter-live-announcer sr-only" id="filterLiveAnnouncer" aria-live="polite"></div>
 
         <section
           class="participation-panel"
@@ -282,6 +398,71 @@
       })();
     </script>
     <script src="../EventDetailsModal.js"></script>
-    <script src="Student-Participation.js"></script>
+
+    <!-- Full-screen QR Modal (Task 2 & 3) -->
+    <div class="qr-modal-overlay" id="qrModalOverlay" role="dialog" aria-modal="true" aria-labelledby="qrModalTitle" aria-hidden="true" hidden>
+      <div class="qr-modal-backdrop" id="qrModalBackdrop"></div>
+      <div class="qr-modal-container" id="qrModalContainer">
+        <button type="button" class="qr-modal-close" id="qrModalCloseBtn" aria-label="Close modal">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20" aria-hidden="true">
+            <path d="M5 5l10 10M15 5L5 15"/>
+          </svg>
+        </button>
+
+        <div class="qr-modal-header">
+          <h2 id="qrModalTitle" class="qr-modal-title">Attendance QR code</h2>
+          <p class="qr-modal-subtitle" id="qrModalSubtitle">Save this code to your phone and show it at the event.</p>
+          <p class="qr-modal-event" id="qrModalEventName" hidden></p>
+          <p class="qr-modal-student" id="qrModalStudentName"></p>
+        </div>
+
+        <div class="qr-modal-body">
+          <!-- Loading Skeleton -->
+          <div class="qr-modal-skeleton" id="qrModalSkeleton" aria-label="Loading QR code">
+            <div class="qr-modal-skeleton-box">
+              <div class="qr-skeleton-shimmer"></div>
+            </div>
+          </div>
+
+          <!-- Large QR Canvas (approx 260px) on white background -->
+          <div class="qr-modal-canvas-box" id="qrModalCanvasBox" hidden>
+            <canvas id="qrModalCanvas" width="260" height="260" aria-label="Attendance QR code"></canvas>
+          </div>
+
+          <p class="qr-security-note">Don't share this code. Anyone who has it can check in as you.</p>
+
+          <!-- Error State -->
+          <div class="qr-modal-error" id="qrModalError" hidden>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="32" height="32" aria-hidden="true">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="8" x2="12" y2="12"/>
+              <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            <p>Couldn't load your QR code</p>
+            <button type="button" class="button-secondary" id="qrModalRetryBtn">Try again</button>
+          </div>
+        </div>
+
+        <div class="qr-modal-footer">
+          <button type="button" class="button-secondary qr-modal-btn" id="qrModalRefreshBtn">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" width="14" height="14" aria-hidden="true">
+              <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+            <span data-label id="qrModalRefreshLabel">Refresh code</span>
+          </button>
+          <button type="button" class="button-primary qr-modal-btn qr-btn-download" id="qrModalDownloadBtn">
+            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" width="14" height="14" aria-hidden="true">
+              <path d="M4 14v2a2 2 0 002 2h8a2 2 0 002-2v-2M7 10l3 3m0 0l3-3m-3 3V3"/>
+            </svg>
+            Download
+          </button>
+          <button type="button" class="button-secondary qr-modal-btn" id="qrModalCloseActionBtn">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="Student-Participation.js"></script>
   </body>
 </html>

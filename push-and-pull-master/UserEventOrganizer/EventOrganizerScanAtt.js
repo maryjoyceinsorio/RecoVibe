@@ -1,0 +1,2 @@
+import "./EventOrganizerScanAttendance.js";
+

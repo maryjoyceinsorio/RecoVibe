@@ -198,15 +198,34 @@ import { loadCalendarData } from "../calendarDataService.js";
         '<div class="admin-error">Could not load calendar.</div>';
     }
   }
+  function isHolidayEvent(event) {
+    if (!event) return false;
+    const id = String(event.id || event.eventId || "");
+    const src = String(event.source || event.organizerName || "").toLowerCase();
+    const cat = String(event.category || "").toLowerCase();
+    const title = String(event.title || "").toLowerCase();
+    return (
+      event.isHoliday === true ||
+      id.startsWith("holiday:") ||
+      src.includes("holiday") ||
+      cat.includes("holiday") ||
+      title.includes("holiday") ||
+      sourceName(event) === "Philippine Holiday" ||
+      sourceName(event) === "Holiday"
+    );
+  }
   function cell(day, klass, iso, dayEvents = []) {
-    const dots = dayEvents
+    const regularEvents = dayEvents.filter((event) => !isHolidayEvent(event));
+    const isOnlyHoliday = dayEvents.length > 0 && regularEvents.length === 0;
+    const dots = regularEvents
       .slice(0, 4)
       .map(
         (event) =>
           `<span class="admin-dot" style="background:${color(sourceName(event))}" title="${esc(event.title || "Untitled event")}"></span>`,
       )
       .join("");
-    return `<div class="admin-day ${klass}" ${iso ? `data-date="${iso}" data-iso="${iso}"` : ""}><button type="button" ${iso ? `aria-label="${iso}, ${dayEvents.length ? `${dayEvents.length} events` : "no events"}"` : "disabled"}>${day}</button>${dayEvents.length ? `<div class="admin-day-dots" aria-hidden="true">${dots}</div>` : iso ? '<small class="admin-day-empty">No events</small>' : ""}</div>`;
+    const cellClass = ["admin-day", klass, isOnlyHoliday ? "only-holiday" : ""].filter(Boolean).join(" ");
+    return `<div class="${cellClass}" ${iso ? `data-date="${iso}" data-iso="${iso}"` : ""}><button type="button" ${iso ? `aria-label="${iso}, ${regularEvents.length ? `${regularEvents.length} events` : "no events"}"` : "disabled"}>${day}</button>${regularEvents.length ? `<div class="admin-day-dots" aria-hidden="true">${dots}</div>` : iso ? '<small class="admin-day-empty">No events</small>' : ""}</div>`;
   }
   function renderUpcoming(events) {
     const upcoming = events
@@ -217,8 +236,12 @@ import { loadCalendarData } from "../calendarDataService.js";
       ? upcoming
           .map((event) => {
             const date = new Date(`${dateOf(event)}T00:00:00`);
-            const source = sourceName(event);
+            const isHol = isHolidayEvent(event);
+            const source = isHol ? "Holiday" : sourceName(event);
             const id = esc(event.eventId || event.id);
+            if (isHol) {
+              return `<div class="admin-upcoming-item admin-upcoming-item--holiday" style="cursor: default; pointer-events: none;" aria-label="${esc(event.title || "Holiday")} (Holiday)"><span class="admin-upcoming-date"><strong>${date.getDate()}</strong><small>${date.toLocaleDateString("en-US", { month: "short" }).toUpperCase()}</small></span><span class="admin-upcoming-copy"><strong>${esc(event.title || "Holiday")}</strong><small>Holiday</small></span></div>`;
+            }
             return `<div class="admin-upcoming-item" data-iso="${dateOf(event)}" data-event-id="${id}" role="button" tabindex="0"><span class="admin-upcoming-date"><strong>${date.getDate()}</strong><small>${date.toLocaleDateString("en-US", { month: "short" }).toUpperCase()}</small></span><span class="admin-upcoming-copy"><strong>${esc(event.title || "Untitled event")}</strong><small>${esc(source)}</small></span></div>`;
           })
           .join("")
@@ -274,6 +297,8 @@ import { loadCalendarData } from "../calendarDataService.js";
       names.forEach((name) => {
         const badge = document.createElement("span");
         badge.className = "calendar-badge badge-holiday";
+        badge.style.pointerEvents = "none";
+        badge.style.cursor = "default";
         badge.textContent = name;
         badge.title = name;
         day.appendChild(badge);
@@ -310,15 +335,19 @@ import { loadCalendarData } from "../calendarDataService.js";
     render();
   }
   function openDay(iso) {
-    const events = visibleEvents().filter((event) => dateOf(event) === iso);
+    const allDayEvents = visibleEvents().filter((event) => dateOf(event) === iso);
+    const events = allDayEvents.filter((event) => !isHolidayEvent(event));
+    if (!events.length) {
+      // Day only has holidays: holiday is shown on calendar cell, not clickable
+      return;
+    }
     const holidayName = selectedCategories.has("Holiday")
       ? holidays.find((holiday) => holiday.date === iso)?.title
       : "";
-    if (!events.length && !holidayName) return;
     const date = new Date(`${iso}T00:00:00`);
     const overlay = document.createElement("div");
     overlay.className = "admin-day-overlay";
-    overlay.innerHTML = `<section class="admin-day-dialog" role="dialog" aria-modal="true" aria-labelledby="adminDayTitle" tabindex="-1"><button type="button" class="admin-close" aria-label="Close day details">×</button><h2 id="adminDayTitle">${date.toLocaleDateString("en-US", { timeZone: "Asia/Manila", month: "long", day: "numeric", year: "numeric" })}</h2>${holidayName ? `<p class="admin-holiday-note">${esc(holidayName)} · Philippine Holiday</p>` : ""}<div class="admin-day-list">${events
+    overlay.innerHTML = `<section class="admin-day-dialog" role="dialog" aria-modal="true" aria-labelledby="adminDayTitle" tabindex="-1"><button type="button" class="admin-close" aria-label="Close day details">×</button><h2 id="adminDayTitle">${date.toLocaleDateString("en-US", { timeZone: "Asia/Manila", month: "long", day: "numeric", year: "numeric" })}</h2>${holidayName ? `<p class="admin-holiday-note">${esc(holidayName)} · Holiday</p>` : ""}<div class="admin-day-list">${events
       .map((event) => {
         const source = sourceName(event),
           time =

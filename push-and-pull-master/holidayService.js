@@ -280,7 +280,7 @@ export async function fetchMonthHolidays(year, monthIndex) {
       `${lastDate}T23:59:59.999+08:00`,
     );
     const apiHolidays = normalizeHolidayItems(items);
-    holidayLog("Normalized monthly Philippine holidays", apiHolidays);
+    holidayLog("Normalized monthly holidays", apiHolidays);
     const byDate = new Map(fallback.map((holiday) => [holiday.date, holiday]));
     apiHolidays.forEach((holiday) => byDate.set(holiday.date, holiday));
     return [...byDate.values()].sort((first, second) =>
@@ -294,7 +294,7 @@ export async function fetchMonthHolidays(year, monthIndex) {
     monthHolidayCache.set(cacheKey, holidays);
     return holidays.map((holiday) => ({ ...holiday }));
   } catch (error) {
-    console.warn("Unable to load Philippine holidays for the calendar month:", error);
+    console.warn("Unable to load holidays for the calendar month:", error);
     holidayLog("Using built-in monthly holiday fallback", fallback);
     if (monthHolidayCache.get(cacheKey) === request) {
       monthHolidayCache.delete(cacheKey);

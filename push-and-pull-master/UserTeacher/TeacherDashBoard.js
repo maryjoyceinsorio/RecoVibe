@@ -264,6 +264,47 @@
   /* ---------------------------------------------------------
      RENDER: calendar
   --------------------------------------------------------- */
+  function isHolidayEvent(event) {
+    if (!event) return false;
+    const id = String(event.id || event.eventId || "");
+    const src = String(event.source || event.organizerName || "").toLowerCase();
+    const cat = String(event.category || "").toLowerCase();
+    const title = String(event.title || "").toLowerCase();
+    return (
+      event.isHoliday === true ||
+      id.startsWith("holiday:") ||
+      src.includes("holiday") ||
+      cat.includes("holiday") ||
+      title.includes("holiday")
+    );
+  }
+
+  async function syncHolidays(year, month) {
+    try {
+      const { fetchMonthHolidays } = await import("../holidayService.js");
+      const list = await fetchMonthHolidays(year, month);
+      if (Array.isArray(list)) {
+        list.forEach((h) => {
+          const id = h.id || `holiday:${h.date}`;
+          if (!EVENTS.some((e) => String(e.id) === String(id))) {
+            EVENTS.push({
+              id,
+              title: h.title || h.name,
+              dateISO: h.date,
+              time: "Holiday",
+              isHoliday: true,
+              source: "Holiday",
+              category: "Holiday",
+            });
+          }
+        });
+        renderCalendar();
+      }
+    } catch (err) {
+      console.warn("Holidays could not be loaded for Teacher dashboard", err);
+    }
+  }
+
   function renderCalendar() {
     const label = document.getElementById("calMonthLabel");
     label.textContent = `${MONTH_NAMES[state.calMonth]} ${state.calYear}`;
@@ -330,19 +371,25 @@
         if (c.muted) classes.push("is-muted");
         if (c.hasEvent) classes.push("has-event");
         if (c.isToday) classes.push("is-today");
-        const eventId = c.eventIds[0] || "";
         const dayEvents = EVENTS.filter((event) =>
           c.eventIds.includes(event.id),
         );
+        const regularEvents = dayEvents.filter((event) => !isHolidayEvent(event));
+        const isOnlyHoliday = dayEvents.length > 0 && regularEvents.length === 0;
+        if (isOnlyHoliday) classes.push("only-holiday");
+        const eventId = regularEvents[0]?.id || "";
         const preview = dayEvents.length
           ? `
           <span class="dashboard-calendar-preview" role="tooltip">
             <strong>${dayEvents.length} event${dayEvents.length === 1 ? "" : "s"}</strong>
-            ${dayEvents.map((event) => `<span><b>${escapeHTML(event.title)}</b><small>${escapeHTML(event.time)}</small></span>`).join("")}
+            ${dayEvents.map((event) => `<span><b>${escapeHTML(event.title)}</b><small>${isHolidayEvent(event) ? "Holiday" : escapeHTML(event.time)}</small></span>`).join("")}
           </span>`
           : "";
         const cellId = `dashboard-calendar-day-${state.calYear}-${String(state.calMonth + 1).padStart(2, "0")}-${String(c.num).padStart(2, "0")}`;
-        return `<button type="button" id="${cellId}" class="${classes.join(" ")}"${eventId ? ` data-event-id="${eventId}" aria-label="View event on ${MONTH_NAMES[state.calMonth]} ${c.num}"` : ""} data-calendar-field="date"><span id="${cellId}-number">${c.num}</span>${preview}</button>`;
+        const ariaLabel = isOnlyHoliday
+          ? `${dayEvents[0]?.title || "Holiday"} (Holiday) on ${MONTH_NAMES[state.calMonth]} ${c.num}`
+          : (eventId ? `View event on ${MONTH_NAMES[state.calMonth]} ${c.num}` : "");
+        return `<button type="button" id="${cellId}" class="${classes.join(" ")}"${eventId ? ` data-event-id="${eventId}"` : ""}${ariaLabel ? ` aria-label="${escapeHTML(ariaLabel)}"` : ""} data-calendar-field="date"><span id="${cellId}-number">${c.num}</span>${preview}</button>`;
       })
       .join("");
   }
@@ -361,6 +408,7 @@
     state.calMonth = m;
     state.calYear = y;
     renderCalendar();
+    syncHolidays(state.calYear, state.calMonth);
   }
 
   /* ---------------------------------------------------------
@@ -368,7 +416,7 @@
   --------------------------------------------------------- */
   function openEventModal(id) {
     const ev = EVENTS.find((e) => e.id === id) || eventFromRecommended(id);
-    if (!ev) return;
+    if (!ev || isHolidayEvent(ev)) return;
     activeModalEventId = id;
     window.RecovibeEventDetails?.open(ev);
   }
@@ -563,17 +611,67 @@
     const upcomingEventsList = document.getElementById("upcomingEventsList");
     const eventDetailsModal = document.getElementById("eventDetailsModal");
 
+    const hapApproved = (event, number) => {
+      if (!event) return false;
+      const approvalKey = `hap${number}Approved`;
+      const statusKey = `hap_${number}_status`;
+      const legacyKey = `hap${number}`;
+      const nestedApproval = event.approvals?.[`hap${number}`];
+
+      if (event[approvalKey] === true) return true;
+      if (nestedApproval === true) return true;
+      if (
+        typeof nestedApproval === "string" &&
+        nestedApproval.toLowerCase() === "approved"
+      ) {
+        return true;
+      }
+      if (
+        typeof event[statusKey] === "string" &&
+        event[statusKey].toLowerCase() === "approved"
+      ) {
+        return true;
+      }
+      if (event[legacyKey] === true) return true;
+
+      const hasSpecificHapTracking =
+        event.hap1Approved === true ||
+        event.hap2Approved === true ||
+        event.hap3Approved === true ||
+        Boolean(
+          event.approvals?.hap1 || event.approvals?.hap2 || event.approvals?.hap3,
+        ) ||
+        Boolean(event.hap_1_status || event.hap_2_status || event.hap_3_status);
+
+      if (hasSpecificHapTracking) {
+        return false;
+      }
+
+      const normStatus = String(event.status || "").trim().toLowerCase();
+      if (["approved", "published", "completed"].includes(normStatus)) {
+        return true;
+      }
+
+      return false;
+    };
+
     const getStatus = (event) => {
       const status = String(event.status || "Pending")
         .toLowerCase()
         .replace(/[ _-]+/g, " ");
       if (status === "draft") return "Draft";
-      if (status === "pending approval" || status === "pending")
-        return "Pending Approval";
-      if (status === "approved") return "Approved";
       if (status === "published") return "Published";
       if (status === "needs revision") return "Needs Revision";
-      return String(event.status || "Pending");
+      if (status === "rejected") return "Rejected";
+      if (status === "cancelled" || status === "canceled") return "Cancelled";
+      if (status === "completed") return "Completed";
+
+      const hap1 = hapApproved(event, 1);
+      const hap2 = hapApproved(event, 2);
+      const hap3 = hapApproved(event, 3);
+      const checkCount = (hap1 ? 1 : 0) + (hap2 ? 1 : 0) + (hap3 ? 1 : 0);
+
+      return checkCount === 3 ? "Approved" : "Pending Approval";
     };
     const getStatusClass = (status) =>
       status.toLowerCase().replace(/[^a-z0-9_-]/g, "-");
@@ -604,11 +702,6 @@
             year: String(date.getFullYear()),
           };
     };
-    const hapApproved = (event, number) =>
-      event[`hap${number}Approved`] === true ||
-      String(event[`hap_${number}_status`] || "").toLowerCase() ===
-        "approved" ||
-      event[`hap${number}`] === true;
 
     function updateTeacherAccount() {
       const name = String(
@@ -675,9 +768,9 @@
           return `<tr>
           <td><strong>${escapeHTML(event.title || "Untitled event")}</strong><small>${escapeHTML(event.category || "General")}</small></td>
           <td>${escapeHTML(formatDate(event.createdAt, "Today"))}</td>
-          <td><input type="checkbox" aria-label="HAP 1" ${hapApproved(event, 1) ? "checked" : ""} disabled></td>
-          <td><input type="checkbox" aria-label="HAP 2" ${hapApproved(event, 2) ? "checked" : ""} disabled></td>
-          <td><input type="checkbox" aria-label="HAP 3" ${hapApproved(event, 3) ? "checked" : ""} disabled></td>
+          <td><input type="checkbox" class="hap-status" aria-label="HAP 1" ${hapApproved(event, 1) ? "checked" : ""} disabled></td>
+          <td><input type="checkbox" class="hap-status" aria-label="HAP 2" ${hapApproved(event, 2) ? "checked" : ""} disabled></td>
+          <td><input type="checkbox" class="hap-status" aria-label="HAP 3" ${hapApproved(event, 3) ? "checked" : ""} disabled></td>
           <td><span class="organizer-status ${getStatusClass(status)}">${escapeHTML(status)}</span></td>
           <td><button class="event-view-button" type="button" data-event-id="${id}">View</button></td>
         </tr>`;
@@ -766,6 +859,9 @@
     renderStatistics();
     renderActionRequired();
     renderUpcomingEvents();
+    renderCalendar();
+    wireCalendar();
+    syncHolidays(state.calYear, state.calMonth);
 
     actionRows.addEventListener("click", (event) => {
       const button = event.target.closest("[data-event-id]");

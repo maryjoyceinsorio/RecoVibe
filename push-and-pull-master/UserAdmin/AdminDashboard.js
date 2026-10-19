@@ -7,7 +7,20 @@ import {
   updateDoc,
   where,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { db, isFirebaseConfigured } from "../UserStudent/firebaseConfig.js";
+import {
+  ref,
+  onValue,
+  off,
+  update,
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {
+  auth,
+  db,
+  rtdb,
+  isFirebaseConfigured,
+  isRtdbConfigured,
+} from "../UserStudent/firebaseConfig.js";
 
 (() => {
   "use strict";
@@ -26,6 +39,10 @@ import { db, isFirebaseConfigured } from "../UserStudent/firebaseConfig.js";
   let unsubscribeEvents;
   let unsubscribeNotifications;
   let toastTimer;
+  let waitingOnYouCount = 0;
+  let queueListenerRef = null;
+  let rtdbNotifListenerRef = null;
+  let currentAdminUid = localStorage.getItem("recovibeAdminId") || "";
   const today = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Manila",
   }).format(new Date());
@@ -200,7 +217,7 @@ import { db, isFirebaseConfigured } from "../UserStudent/firebaseConfig.js";
   function render() {
     try {
       root.innerHTML =
-        '<div class="admin-metrics"></div><section class="admin-section"><div class="admin-section-heading"><div><h2>Event Submissions</h2><p class="admin-section-description"><strong>Source</strong> is the publishing channel, <strong>Category</strong> is the event topic, and <strong>EO (Event Organizer)</strong> is the responsible person or group. Organizer roles are shown beneath the EO.</p></div><a href="AdminApproval.html">Open Approval Queue</a></div><div class="admin-table-wrap"><table class="admin-table"><thead><tr><th scope="col">Event</th><th scope="col">Source</th><th scope="col">Category</th><th scope="col">Event Organizer (EO)</th><th scope="col">Schedule</th><th scope="col">Venue</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead><tbody id="eventRows"></tbody></table></div><div id="eventsEmpty" class="admin-empty" hidden>No event submissions yet.</div></section>';
+        '<div class="admin-metrics"></div><section class="admin-section"><div class="admin-section-heading"><div><h2>Event Submissions</h2><p class="admin-section-description"><strong>Source</strong> is the publishing channel, <strong>Category</strong> is the event topic, and <strong>EO (Event Organizer)</strong> is the responsible person or group. Organizer roles are shown beneath the EO.</p></div><a href="AdminApproval.html">Open Review Queue</a></div><div class="admin-table-wrap"><table class="admin-table"><thead><tr><th scope="col">Event</th><th scope="col">Source</th><th scope="col">Category</th><th scope="col">Event Organizer (EO)</th><th scope="col">Schedule</th><th scope="col">Venue</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead><tbody id="eventRows"></tbody></table></div><div id="eventsEmpty" class="admin-empty" hidden>No event submissions yet.</div></section>';
       const events = records();
       const all = openItems(events);
       const published = events.filter(
@@ -210,11 +227,9 @@ import { db, isFirebaseConfigured } from "../UserStudent/firebaseConfig.js";
       );
       const metrics = [
         [
-          "Pending Approval",
-          events.filter((e) =>
-            ["pending_approval", "pending"].includes(statusOf(e)),
-          ).length,
-          "AdminApproval.html?filter=pending_approval",
+          "Waiting on you",
+          waitingOnYouCount,
+          "AdminApproval.html",
         ],
         [
           "Finalization Pending",
@@ -247,10 +262,10 @@ import { db, isFirebaseConfigured } from "../UserStudent/firebaseConfig.js";
         .join("");
       root.querySelector("#eventRows").innerHTML = events.map(eventRow).join("");
       root.querySelector("#eventsEmpty").hidden = events.length > 0;
-      document.querySelector("[data-queue-count]").textContent = String(
-        all.length,
-      );
-      document.querySelector("[data-queue-count]").hidden = !all.length;
+      document.querySelectorAll("[data-queue-count]").forEach((badge) => {
+        badge.textContent = String(waitingOnYouCount);
+        badge.hidden = waitingOnYouCount === 0;
+      });
     } catch (error) {
       root.innerHTML = `<div class="admin-error">Could not load dashboard data. <button class="admin-row-action" id="retryDashboard">Retry</button></div>`;
       root.querySelector("#retryDashboard").onclick = render;
@@ -333,7 +348,12 @@ import { db, isFirebaseConfigured } from "../UserStudent/firebaseConfig.js";
     if (!button) return;
     let changes;
     if (button.dataset.eventAction === "approve") {
-      changes = { status: "Approved" };
+      changes = {
+        status: "Approved",
+        hap1Approved: true,
+        hap2Approved: true,
+        hap3Approved: true,
+      };
     } else {
       const remarks = window.prompt("Enter remarks for requesting revisions:");
       if (remarks === null) return;
@@ -365,26 +385,111 @@ import { db, isFirebaseConfigured } from "../UserStudent/firebaseConfig.js";
   });
   window.addEventListener("focus", render);
   window.addEventListener("recovibeAdminEventsChanged", render);
-  function renderNotifications(snapshot) {
-    const items = snapshot.docs.map((item) => ({ id: item.id, ...item.data() }));
-    const unreadCount = items.filter((item) => item.isRead === false).length;
+  function updateQueueBadge(count) {
+    document.querySelectorAll("[data-queue-count]").forEach((badge) => {
+      badge.textContent = String(count);
+      badge.hidden = count === 0;
+    });
+  }
+
+  function subscribeToQueue(uid) {
+    if (!isRtdbConfigured || !rtdb || !uid) return;
+    if (queueListenerRef) {
+      off(queueListenerRef);
+      queueListenerRef = null;
+    }
+    queueListenerRef = ref(rtdb, `approverQueue/${uid}`);
+    onValue(
+      queueListenerRef,
+      (snapshot) => {
+        const data = snapshot.val() || {};
+        const items = Object.values(data);
+        const activeItems = items.filter(
+          (it) => it && it.status !== "paused_for_revision",
+        );
+        waitingOnYouCount = activeItems.length;
+        updateQueueBadge(items.length);
+        render();
+      },
+      (err) => {
+        console.warn("approverQueue listener error:", err);
+      },
+    );
+  }
+
+  let rtdbNotifications = [];
+  let firestoreNotifications = [];
+
+  function subscribeToRtdbNotifications(uid) {
+    if (!isRtdbConfigured || !rtdb || !uid) return;
+    if (rtdbNotifListenerRef) {
+      off(rtdbNotifListenerRef);
+      rtdbNotifListenerRef = null;
+    }
+    rtdbNotifListenerRef = ref(rtdb, `notifications/${uid}`);
+    onValue(
+      rtdbNotifListenerRef,
+      (snapshot) => {
+        const data = snapshot.val() || {};
+        rtdbNotifications = Object.entries(data).map(([id, val]) => ({
+          id,
+          eventId: val.eventId || "",
+          title: val.title || "Notification",
+          message: val.message || "",
+          read: val.read === true,
+          createdAt: val.createdAt || Date.now(),
+          source: "rtdb",
+        }));
+        combineAndRenderNotifications();
+      },
+      (err) => {
+        console.warn("RTDB notifications error:", err);
+      },
+    );
+  }
+
+  function combineAndRenderNotifications() {
+    const combined = [...rtdbNotifications, ...firestoreNotifications].sort(
+      (a, b) => (b.createdAt || 0) - (a.createdAt || 0),
+    );
+    const unreadCount = combined.filter((item) => !item.read).length;
     document.querySelectorAll("[data-notification-count]").forEach((badge) => {
       badge.textContent = String(unreadCount);
       badge.hidden = unreadCount === 0;
     });
     const menu = document.querySelector("[data-notification-menu]");
+    if (!menu) return;
     menu.innerHTML = `<div class="dashboard-notification-heading"><strong>Notifications</strong><a href="AdminNotification.html">View all</a></div>${
-      items.length
-        ? items
+      combined.length
+        ? combined
             .slice(0, 8)
             .map(
               (item) =>
-                `<button type="button" class="dashboard-notification ${item.isRead === false ? "is-unread" : ""}" data-notification-id="${esc(item.id)}"><strong>${esc(item.title || "Notification")}</strong><span>${esc(item.message || "")}</span></button>`,
+                `<button type="button" class="dashboard-notification ${!item.read ? "is-unread" : ""}" data-notification-id="${esc(item.id)}" data-event-id="${esc(item.eventId || "")}" data-source="${esc(item.source || "rtdb")}"><strong>${esc(item.title || "Notification")}</strong><span>${esc(item.message || "")}</span></button>`,
             )
             .join("")
         : '<p class="dashboard-notification-empty">No notifications yet.</p>'
     }`;
   }
+
+  function renderFirestoreNotifications(snapshot) {
+    firestoreNotifications = snapshot.docs.map((docSnap) => {
+      const data = docSnap.data();
+      return {
+        id: docSnap.id,
+        eventId: data.eventId || "",
+        title: data.title || "Notification",
+        message: data.message || "",
+        read: data.isRead === true,
+        createdAt: data.createdAt?.toDate
+          ? data.createdAt.toDate().getTime()
+          : data.createdAt || 0,
+        source: "firestore",
+      };
+    });
+    combineAndRenderNotifications();
+  }
+
   function init() {
     if (!isFirebaseConfigured || !db) {
       root.innerHTML =
@@ -392,6 +497,21 @@ import { db, isFirebaseConfigured } from "../UserStudent/firebaseConfig.js";
       return;
     }
     root.innerHTML = '<div class="admin-loading">Loading event activity…</div>';
+
+    if (auth) {
+      onAuthStateChanged(auth, (user) => {
+        if (user) {
+          currentAdminUid = user.uid;
+          subscribeToQueue(user.uid);
+          subscribeToRtdbNotifications(user.uid);
+        }
+      });
+    }
+    if (currentAdminUid) {
+      subscribeToQueue(currentAdminUid);
+      subscribeToRtdbNotifications(currentAdminUid);
+    }
+
     unsubscribeEvents = onSnapshot(
       query(collection(db, "events"), orderBy("createdAt", "desc")),
       (snapshot) => {
@@ -405,44 +525,60 @@ import { db, isFirebaseConfigured } from "../UserStudent/firebaseConfig.js";
     );
     unsubscribeNotifications = onSnapshot(
       query(collection(db, "notifications"), where("recipientRole", "==", "admin")),
-      renderNotifications,
+      renderFirestoreNotifications,
       (error) => {
-        console.error("Unable to load admin notifications:", error);
-        document.querySelector("[data-notification-menu]").innerHTML =
-          '<p class="dashboard-notification-empty">Notifications are unavailable.</p>';
+        console.warn("Firestore notifications fallback notice:", error);
       },
     );
   }
+
   const notificationToggle = document.querySelector("[data-notification-toggle]");
   notificationToggle.addEventListener("click", () => {
     const menu = document.querySelector("[data-notification-menu]");
     menu.hidden = !menu.hidden;
     notificationToggle.setAttribute("aria-expanded", String(!menu.hidden));
   });
+
   document.addEventListener("click", async (event) => {
     const item = event.target.closest("[data-notification-id]");
     if (item) {
+      const notifId = item.dataset.notificationId;
+      const eventId = item.dataset.eventId;
+      const source = item.dataset.source;
       if (item.classList.contains("is-unread")) {
         try {
-          await updateDoc(doc(db, "notifications", item.dataset.notificationId), {
-            isRead: true,
-          });
+          if (source === "rtdb" && currentAdminUid && rtdb) {
+            await update(ref(rtdb, `notifications/${currentAdminUid}/${notifId}`), {
+              read: true,
+            });
+          } else if (db) {
+            await updateDoc(doc(db, "notifications", notifId), {
+              isRead: true,
+            });
+          }
         } catch (error) {
           console.error("Unable to mark notification as read:", error);
         }
       }
       document.querySelector("[data-notification-menu]").hidden = true;
       notificationToggle.setAttribute("aria-expanded", "false");
+      if (eventId) {
+        location.href = `AdminApproval.html?review=${encodeURIComponent(eventId)}`;
+      }
       return;
     }
     if (!event.target.closest(".dashboard-notifications")) {
-      document.querySelector("[data-notification-menu]").hidden = true;
+      const menu = document.querySelector("[data-notification-menu]");
+      if (menu) menu.hidden = true;
       notificationToggle.setAttribute("aria-expanded", "false");
     }
   });
+
   window.addEventListener("beforeunload", () => {
     unsubscribeEvents?.();
     unsubscribeNotifications?.();
+    if (queueListenerRef) off(queueListenerRef);
+    if (rtdbNotifListenerRef) off(rtdbNotifListenerRef);
   });
   init();
 })();

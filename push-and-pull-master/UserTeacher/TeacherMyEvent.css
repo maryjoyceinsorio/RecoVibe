@@ -276,10 +276,11 @@
 
 .my-events-search {
   height: 40px;
-  gap: 8px;
-  padding: 9px 16px;
-  border: 1px solid #e6e0d3;
+  gap: 10px;
+  padding: 0 16px 0 14px;
+  border: 1px solid #dedbd7;
   border-radius: 999px;
+  box-sizing: border-box;
 }
 
 .my-events-filter {
@@ -369,12 +370,11 @@
   width: 16px;
   height: 16px;
   flex: 0 0 16px;
-  color: #a89d95;
+  color: #949a9f;
 }
 
-.my-events-search input::placeholder,
-.my-events-filter select::placeholder {
-  color: #7a8086;
+.my-events-search input::placeholder {
+  color: #8b8f94;
 }
 
 .my-events-toolbar .organizer-button {
@@ -495,15 +495,51 @@
   white-space: nowrap;
 }
 
-.hap-indicator input {
-  width: 16px;
-  height: 16px;
-  margin: 0;
-  accent-color: var(--maroon);
+.organizer-table th:nth-child(3),
+.organizer-table td:nth-child(3),
+.organizer-table th:nth-child(4),
+.organizer-table td:nth-child(4),
+.organizer-table th:nth-child(5),
+.organizer-table td:nth-child(5) {
+  text-align: center;
 }
 
+.organizer-table .hap-status,
+.organizer-table input[type="checkbox"],
+.hap-indicator input {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid #a89d95;
+  border-radius: 4px;
+  background-color: #ffffff;
+  display: inline-block;
+  vertical-align: middle;
+  position: relative;
+  cursor: default;
+  margin: 0;
+  opacity: 1 !important;
+  box-sizing: border-box;
+  accent-color: var(--maroon-700, #7a1f2e);
+}
+
+.organizer-table .hap-status:disabled,
+.organizer-table input[type="checkbox"]:disabled,
 .hap-indicator input:disabled {
-  opacity: 1;
+  opacity: 1 !important;
+  cursor: default;
+}
+
+.organizer-table .hap-status:checked,
+.organizer-table input[type="checkbox"]:checked,
+.hap-indicator input:checked {
+  background-color: var(--maroon-700, #7a1f2e);
+  border-color: var(--maroon-700, #7a1f2e);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23ffffff'%3E%3Cpath fill-rule='evenodd' d='M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 11px 11px;
 }
 
 .event-actions {

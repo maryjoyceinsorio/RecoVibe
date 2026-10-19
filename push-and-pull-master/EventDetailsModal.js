@@ -154,7 +154,26 @@
     return overlay;
   }
 
+  function isHoliday(event) {
+    if (!event) return true;
+    const id = String(event.id || event.eventId || "");
+    const src = String(
+      event.source || event.eventSource || event.organizerName || "",
+    ).toLowerCase();
+    const cat = String(event.category || "").toLowerCase();
+    const title = String(event.title || event.name || "").toLowerCase();
+    return (
+      event.isHoliday === true ||
+      id.startsWith("holiday:") ||
+      src.includes("holiday") ||
+      cat.includes("holiday") ||
+      title.includes("philippine holiday") ||
+      title.includes("holiday")
+    );
+  }
+
   function render(event, options = {}) {
+    if (!event || isHoliday(event)) return;
     const source =
       event.source ||
       event.organizerName ||
@@ -921,7 +940,7 @@
 
     return {
       open(event) {
-        if (!event) return;
+        if (!event || isHoliday(event)) return;
         selectedEvent = event;
         previousFocus = document.activeElement;
         bodyOverflow = document.body.style.overflow;

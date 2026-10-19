@@ -86,7 +86,7 @@ function normalizeCategory(category) {
 
 function normalizeSource(source) {
   const norm = String(source || "").trim().toLowerCase();
-  if (norm.includes("holiday")) return "Philippine Holiday";
+  if (norm.includes("holiday")) return "Holiday";
   if (
     norm === "csc" ||
     norm.includes("central student council") ||
@@ -156,9 +156,17 @@ function matchesStudentPreferences(event, preferences) {
   return catMatches && srcMatches;
 }
 
-function isPublicCalendarEvent(event, allowUnmarked = false) {
+function isPublicCalendarEvent(event) {
   const id = String(event.eventId || event.id || "");
   if (id.startsWith("demo-event-")) return false;
+  if (
+    id.startsWith("holiday:") ||
+    event.isHoliday ||
+    String(event.source || "").toLowerCase().includes("holiday") ||
+    String(event.category || "").toLowerCase().includes("holiday")
+  ) {
+    return true;
+  }
   const status = String(event.status || "")
     .trim()
     .toLowerCase()
@@ -176,13 +184,10 @@ function isPublicCalendarEvent(event, allowUnmarked = false) {
   if (unpublishedStatuses.includes(status) || event.published === false) {
     return false;
   }
-  if (
+  return (
     ["approved", "published", "rescheduled"].includes(status) ||
     event.published === true
-  ) {
-    return true;
-  }
-  return allowUnmarked && !status;
+  );
 }
 
 export function loadApprovedFirestoreEvents() {
@@ -250,11 +255,14 @@ export async function loadCalendarData(currentEvents, year, monthIndex) {
   ]);
   const preferences = getStudentPreferences();
   const seen = new Set();
+  const isStudent =
+    typeof window !== "undefined" &&
+    window.location.pathname.toLowerCase().includes("userstudent");
   const events = [...firestoreEvents, ...currentEvents].filter((event) => {
-    if (!isPublicCalendarEvent(event, true)) return false;
+    if (!isPublicCalendarEvent(event)) return false;
     const id = String(event.eventId || event.id || "");
     if (!id || seen.has(id)) return false;
-    if (!matchesStudentPreferences(event, preferences)) return false;
+    if (isStudent && !matchesStudentPreferences(event, preferences)) return false;
     seen.add(id);
     return true;
   });

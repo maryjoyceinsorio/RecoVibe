@@ -202,28 +202,50 @@ function removeOrganizerEvent(eventId) {
 }
 
 function isOrganizerEventHapApproved(event, hapNumber) {
-  const nestedApproval = event.approvals?.[`hap${hapNumber}`];
-  if (typeof nestedApproval === "boolean") {
-    return nestedApproval;
-  }
-  if (typeof nestedApproval === "string") {
-    return nestedApproval.toLowerCase() === "approved";
-  }
+  if (!event) return false;
 
   const approvalKey = `hap${hapNumber}Approved`;
   const statusKey = `hap_${hapNumber}_status`;
   const legacyKey = `hap${hapNumber}`;
+  const nestedApproval = event.approvals?.[`hap${hapNumber}`];
 
-  if (typeof event[approvalKey] === "boolean") {
-    return event[approvalKey];
+  if (event[approvalKey] === true) return true;
+  if (nestedApproval === true) return true;
+  if (
+    typeof nestedApproval === "string" &&
+    nestedApproval.toLowerCase() === "approved"
+  ) {
+    return true;
+  }
+  if (
+    typeof event[statusKey] === "string" &&
+    event[statusKey].toLowerCase() === "approved"
+  ) {
+    return true;
+  }
+  if (event[legacyKey] === true) return true;
+
+  const hasSpecificHapTracking =
+    event.hap1Approved === true ||
+    event.hap2Approved === true ||
+    event.hap3Approved === true ||
+    Boolean(
+      event.approvals?.hap1 || event.approvals?.hap2 || event.approvals?.hap3,
+    ) ||
+    Boolean(event.hap_1_status || event.hap_2_status || event.hap_3_status);
+
+  if (hasSpecificHapTracking) {
+    return false;
   }
 
-  if (typeof event[statusKey] === "string") {
-    return event[statusKey].toLowerCase() === "approved";
+  const normStatus = String(event.status || "").trim().toLowerCase();
+  if (["approved", "published", "completed"].includes(normStatus)) {
+    return true;
   }
 
-  return event[legacyKey] === true;
+  return false;
 }
+
 
 function canPublishOrganizerEvent(event) {
   return (

@@ -21,24 +21,20 @@
     roleParts.push(user.organization);
   if (program) roleParts.push(`${program} Ladderized`);
 
-  const role = String(user.role || roleParts.join(" | ") || "Student").trim();
-  const initials = displayName
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join("")
-    .toUpperCase();
+  const role = roleParts.join(" · ") || user.role || user.organization || "Student";
+
+  const firstLetter =
+    Array.from(user.firstName || displayName || "Student")[0]?.toUpperCase() || "S";
   const firstName = user.firstName || displayName.split(/\s+/)[0];
 
-  document.querySelectorAll(".user-name").forEach((element) => {
+  document.querySelectorAll(".user-name, #userName").forEach((element) => {
     element.textContent = displayName;
   });
-  document.querySelectorAll(".user-role").forEach((element) => {
+  document.querySelectorAll(".user-role, #userRole").forEach((element) => {
     element.textContent = role;
   });
-  document.querySelectorAll(".avatar").forEach((element) => {
-    element.textContent = initials;
+  document.querySelectorAll(".avatar, #userAvatar").forEach((element) => {
+    element.textContent = firstLetter;
   });
   document.querySelectorAll("#userFirstName").forEach((element) => {
     element.textContent = firstName;

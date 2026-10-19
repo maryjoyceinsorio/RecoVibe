@@ -775,10 +775,18 @@ ul {
     opacity 0.15s ease,
     transform 0.15s ease;
 }
+.cal-day.has-event:hover .dashboard-calendar-preview,
+.cal-day.has-event:focus-visible .dashboard-calendar-preview,
 .cal-day[data-event-id]:hover .dashboard-calendar-preview,
 .cal-day[data-event-id]:focus-visible .dashboard-calendar-preview {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
+}
+.cal-day.only-holiday {
+  cursor: default !important;
+}
+.cal-day.only-holiday:hover {
+  background: transparent !important;
 }
 .dashboard-calendar-preview strong {
   font-size: 10px;
@@ -1103,4 +1111,40 @@ ul {
   .greeting {
     font-size: 26px;
   }
+}
+
+
+.organizer-table .hap-status,
+.organizer-table input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid #a89d95;
+  border-radius: 4px;
+  background-color: #ffffff;
+  display: inline-block;
+  vertical-align: middle;
+  position: relative;
+  cursor: default;
+  margin: 0;
+  opacity: 1 !important;
+  box-sizing: border-box;
+  accent-color: var(--maroon-700, #7a1f2e);
+}
+
+.organizer-table .hap-status:disabled,
+.organizer-table input[type="checkbox"]:disabled {
+  opacity: 1 !important;
+  cursor: default;
+}
+
+.organizer-table .hap-status:checked,
+.organizer-table input[type="checkbox"]:checked {
+  background-color: var(--maroon-700, #7a1f2e);
+  border-color: var(--maroon-700, #7a1f2e);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23ffffff'%3E%3Cpath fill-rule='evenodd' d='M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 11px 11px;
 }

@@ -138,15 +138,44 @@
   }
 
   function getStatus(event) {
-    return String(event.status || "Draft");
+    const raw = String(event.status || "Draft").trim();
+    const norm = raw.toLowerCase().replace(/[ _-]+/g, " ");
+    if (norm === "cancelled" || norm === "canceled") return "Cancelled";
+    if (norm === "rejected") return "Rejected";
+    if (norm === "needs revision") return "Needs Revision";
+    if (norm === "draft") return "Draft";
+    if (norm === "published") return "Published";
+    if (norm === "completed") return "Completed";
+
+    const hap1 = isOrganizerEventHapApproved(event, 1);
+    const hap2 = isOrganizerEventHapApproved(event, 2);
+    const hap3 = isOrganizerEventHapApproved(event, 3);
+    const checkCount = (hap1 ? 1 : 0) + (hap2 ? 1 : 0) + (hap3 ? 1 : 0);
+
+    return checkCount === 3 ? "Approved" : "Pending";
   }
 
   function getStatusClass(status) {
     return status.toLowerCase().replace(/[^a-z0-9_-]/g, "-");
   }
 
+  function isHoliday(event) {
+    if (!event) return true;
+    const id = String(event.id || event.eventId || "");
+    const src = String(event.source || event.organizerName || "").toLowerCase();
+    const cat = String(event.category || "").toLowerCase();
+    const title = String(event.title || "").toLowerCase();
+    return (
+      event.isHoliday === true ||
+      id.startsWith("holiday:") ||
+      src.includes("holiday") ||
+      cat.includes("holiday") ||
+      title.includes("holiday")
+    );
+  }
+
   function openEventDetails(event) {
-    if (!eventDetailsModal) return;
+    if (!eventDetailsModal || !event || isHoliday(event)) return;
     window.RecovibeEventDetails?.open(event, { showApprovalDocuments: true });
   }
 
@@ -217,9 +246,9 @@
             <small>${escapeHtml(event.category || "General")}</small>
           </td>
           <td>${formatDate(event.createdAt, "Today")}</td>
-          <td><input type="checkbox" aria-label="HAP 1" ${hap1Approved ? "checked" : ""} disabled></td>
-          <td><input type="checkbox" aria-label="HAP 2" ${hap2Approved ? "checked" : ""} disabled></td>
-          <td><input type="checkbox" aria-label="HAP 3" ${hap3Approved ? "checked" : ""} disabled></td>
+          <td><input type="checkbox" class="hap-status" aria-label="HAP 1" ${hap1Approved ? "checked" : ""} disabled></td>
+          <td><input type="checkbox" class="hap-status" aria-label="HAP 2" ${hap2Approved ? "checked" : ""} disabled></td>
+          <td><input type="checkbox" class="hap-status" aria-label="HAP 3" ${hap3Approved ? "checked" : ""} disabled></td>
           <td>
             <span class="organizer-status ${statusClass}">
               ${escapeHtml(status)}

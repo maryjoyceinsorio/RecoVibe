@@ -26,7 +26,7 @@
         </div>
 
         <nav class="nav" id="eventsNavigation" aria-label="Primary">
-          <a class="nav-item is-active" href="Dashboard.html" title="Dashboard"
+          <a class="nav-item is-active" href="Dashboard.html" title="Dashboard" aria-current="page"
             ><span class="nav-icon"
               ><svg viewBox="0 0 20 20" aria-hidden="true">
                 <rect x="2.5" y="2.5" width="6" height="6" rx="1" />
@@ -81,7 +81,6 @@
             class="nav-item"
             href="StudentProfile.html"
             title="Profile"
-            aria-current="page"
             ><span class="nav-icon"
               ><svg viewBox="0 0 20 20" aria-hidden="true">
                 <circle cx="10" cy="6.5" r="3" />
@@ -137,7 +136,7 @@
         <header class="topbar" id="dashboardHeader">
           <div>
             <h1 class="greeting" id="dashboardGreeting">
-              Good Morning, <span id="greetingName">Joshua Lopez</span>
+              Good Morning, <span id="greetingName">Student</span>
             </h1>
           </div>
           <div class="today">
@@ -152,8 +151,8 @@
           aria-labelledby="recommendationsHeading"
         >
           <div class="panel-head">
-            <h2 id="recommendationsHeading">Recommended For You</h2>
-            <span class="hint-label">Based On Your Preferences</span>
+            <h2 id="recommendationsHeading">Recommended for you</h2>
+            <span class="hint-label">Based on your preferences · <a href="StudentProfile.html#preferencesPanel" class="link-edit-pref" id="editPreferencesLink">Edit</a></span>
           </div>
           <div class="rec-grid" id="recGrid"><!-- injected by JS --></div>
         </section>
@@ -170,6 +169,7 @@
               viewBox="0 0 20 20"
               fill="none"
               class="search-icon"
+              aria-hidden="true"
             >
               <circle
                 cx="8.8"
@@ -195,34 +195,41 @@
         </section>
 
         <section class="content-grid" id="dashboardContent">
-          <!-- LEFT COLUMN -->
-          <div class="content-left" id="dashboardEventsColumn">
+          <!-- 1. HAPPENING NOW (New section) -->
+          <div class="content-col content-happening" id="happeningNowColumn">
             <div class="panel-head">
-              <h2>Upcoming Events</h2>
-              <a href="Events.html" class="link-see-all" data-view="events"
-                >See All Events</a
-              >
+              <div class="panel-title-wrap">
+                <h2 id="happeningHeading">Happening now</h2>
+                <span class="live-count-badge" id="happeningLiveBadge" hidden>0 live</span>
+              </div>
             </div>
-
-            <div class="event-list" id="eventList"><!-- injected by JS --></div>
+            <div class="event-list" id="happeningNowList" aria-labelledby="happeningHeading"><!-- injected by JS --></div>
           </div>
 
-          <!-- RIGHT COLUMN -->
-          <div class="content-right" id="dashboardWidgetsColumn">
+          <!-- 2. UPCOMING EVENTS -->
+          <div class="content-col content-upcoming" id="upcomingEventsColumn">
+            <div class="panel-head">
+              <h2 id="upcomingHeading">Upcoming events</h2>
+              <a href="Events.html" class="link-see-all" data-view="events" id="seeAllEventsLink">See all events</a>
+            </div>
+            <div class="event-list" id="upcomingEventsList" aria-labelledby="upcomingHeading"><!-- injected by JS --></div>
+          </div>
+
+          <!-- 3. CALENDAR PREVIEW -->
+          <div class="content-col content-calendar" id="calendarColumn">
             <div class="card calendar-card" id="dashboardCalendarCard">
               <div class="panel-head panel-head--tight">
-                <h2>Calendar Preview</h2>
-                <a href="Calendar.html" class="link-see-all" data-view="calendar"
-                  >Full Calendar</a
-                >
+                <h2 id="calendarHeading">Calendar preview</h2>
+                <a href="Calendar.html" class="link-see-all" data-view="calendar" id="fullCalendarLink">Full calendar</a>
               </div>
               <div class="cal-nav">
                 <button
+                  type="button"
                   class="cal-arrow"
                   id="calPrev"
                   aria-label="Previous month"
                 >
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                     <path
                       d="M10 3L5 8l5 5"
                       stroke="currentColor"
@@ -232,9 +239,14 @@
                     />
                   </svg>
                 </button>
-                <div class="cal-month" id="calMonthLabel">September 2026</div>
-                <button class="cal-arrow" id="calNext" aria-label="Next month">
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                <div class="cal-month" id="calMonthLabel"></div>
+                <button
+                  type="button"
+                  class="cal-arrow"
+                  id="calNext"
+                  aria-label="Next month"
+                >
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                     <path
                       d="M6 3l5 5-5 5"
                       stroke="currentColor"
@@ -245,148 +257,23 @@
                   </svg>
                 </button>
               </div>
-              <div class="cal-grid cal-grid--dow">
-                <span>S</span><span>M</span><span>T</span><span>W</span
-                ><span>Th</span><span>F</span><span>S</span>
+              <div class="cal-grid cal-grid--dow" aria-hidden="true">
+                <span>S</span><span>M</span><span>T</span><span>W</span><span>Th</span><span>F</span><span>S</span>
               </div>
-              <div class="cal-grid" id="calDays"><!-- injected by JS --></div>
+              <div class="cal-grid" id="calDays" role="grid" aria-label="Calendar month days"><!-- injected by JS --></div>
               <div class="cal-day-events" id="calDayEvents" aria-live="polite"></div>
-            </div>
-
-            <div class="card notif-card" id="dashboardNotificationsCard">
-              <div class="panel-head panel-head--tight">
-                <h2>Notifications</h2>
-                <a
-                  href="Notification.html"
-                  class="link-see-all"
-                  data-view="notifications"
-                  >See All</a
-                >
-              </div>
-              <ul class="notif-list" id="notifList">
-                <!-- injected by JS -->
-              </ul>
             </div>
           </div>
         </section>
       </main>
     </div>
 
-    <!-- Event details modal -->
-    <div class="dashboard-modal-overlay" id="modalOverlay" aria-hidden="true">
-      <section
-        class="dashboard-event-dialog"
-        id="detailsDialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="modalTitle"
-        tabindex="-1"
-      >
-        <button
-          type="button"
-          class="dashboard-modal-close"
-          id="modalClose"
-          aria-label="Close event details"
-        >
-          &times;
-        </button>
-        <div class="dashboard-event-content" id="modalContent"></div>
-        <footer class="dashboard-event-footer">
-          <p
-            class="dashboard-action-notice"
-            id="modalActionNotice"
-            role="status"
-          ></p>
-          <button
-            type="button"
-            class="dashboard-participate-button"
-            id="modalAction"
-          ></button>
-        </footer>
-      </section>
-    </div>
-
-    <div
-      class="dashboard-modal-overlay dashboard-confirm-overlay"
-      id="confirmOverlay"
-      aria-hidden="true"
-    >
-      <section
-        class="dashboard-confirm-dialog"
-        id="confirmDialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="confirmTitle"
-        tabindex="-1"
-      >
-        <h2 id="confirmTitle">Join Event?</h2>
-        <p id="confirmMessage"></p>
-        <p class="dashboard-confirm-error" id="confirmError" role="alert"></p>
-        <div class="dashboard-confirm-actions">
-          <button
-            type="button"
-            class="dashboard-confirm-primary"
-            id="confirmPrimary"
-          >
-            Participate
-          </button>
-          <button
-            type="button"
-            class="dashboard-confirm-cancel"
-            id="confirmCancel"
-          >
-            Cancel
-          </button>
-        </div>
-      </section>
-    </div>
-
-    <div class="toast" id="toast"></div>
+    <!-- Live announcer for polite accessibility status updates -->
+    <div id="dashboardLiveAnnouncer" class="sr-only" aria-live="polite"></div>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
     <script src="events-data.js"></script>
     <script src="notification-count.js"></script>
-    <script>
-      (() => {
-        let user = {};
-        try {
-          user = JSON.parse(localStorage.getItem("recovibeCurrentUser") || "null") || {};
-        } catch {
-          user = {};
-        }
-        const firstName = String(user.firstName || "").trim();
-        const fullName = String(user.name || user.fullName || "").trim();
-        const nameFromProfile = [firstName, user.middleName, user.lastName]
-          .map((part) => String(part || "").trim())
-          .filter(Boolean)
-          .join(" ");
-        const displayName = fullName || nameFromProfile || "Student";
-        const first = firstName || fullName.split(/\s+/).filter(Boolean)[0] || "";
-        const fallback = [
-          user.username,
-          user.studentNumber,
-          user.studentId,
-          user.email,
-        ]
-          .map((value) => String(value || "").trim())
-          .find(Boolean) || "";
-        const avatar = Array.from(first || fallback)[0]?.toLocaleUpperCase() || "S";
-        const organization = String(user.organization || "").trim();
-        const role =
-          organization && organization.toLowerCase() !== "none"
-            ? organization
-            : "Student";
-        document.querySelectorAll(".user-name").forEach((item) => item.textContent = displayName);
-        document.querySelectorAll(".user-role").forEach((item) => item.textContent = role);
-        document.querySelectorAll(".avatar").forEach((item) => item.textContent = avatar);
-        document.querySelectorAll("#userFirstName").forEach((item) => item.textContent = first);
-        const greeting = document.getElementById("dashboardGreeting");
-        if (greeting) {
-          const hour = new Date().getHours();
-          const salutation = hour < 12 ? "Good Morning" : hour < 18 ? "Good Noon" : "Good Evening";
-          greeting.textContent = `${salutation}, ${displayName}`;
-        }
-      })();
-    </script>
-    <script src="Dashboard.js"></script>
+    <script type="module" src="Dashboard.js"></script>
   </body>
 </html>

@@ -194,12 +194,7 @@ import {
       return;
     }
     element.innerHTML = list
-      .map((event) =>
-        eventCard(event).replace(
-          '<div class="published-event-meta"',
-          `<span class="published-event-status">${escape(event.status || "Status unavailable")}</span><div class="published-event-meta"`,
-        ),
-      )
+      .map((event) => eventCard(event))
       .join("");
   }
 
@@ -421,36 +416,46 @@ import {
       unsubscribeEvents = onSnapshot(
         collection(db, "events"),
         (snapshot) => {
-          events = snapshot.docs.map((eventDocument) => {
-            const data = eventDocument.data();
-            const eventDate = data.eventDate || data.dateISO || data.date || "";
-            const createdAt = data.createdAt?.toDate
-              ? data.createdAt.toDate().toISOString()
-              : data.createdAt || "";
-            const startTime = data.startTime || "";
-            const endTime = data.endTime || "";
-            return {
-              ...data,
-              id: eventDocument.id,
-              eventId: eventDocument.id,
-              title: data.eventName || data.title || "Untitled",
-              dateISO: eventDate,
-              time:
-                data.time ||
-                [startTime, endTime].filter(Boolean).join(" - ") ||
-                "Time TBA",
-              location: data.venue || data.location || data.venueOther || "",
-              category: data.category || data.eventType || "General",
-              source:
-                data.source ||
-                data.eventSource ||
-                (data.organizerId
-                  ? "Organizational"
-                  : data.organization || data.organizerName || "Others / External"),
-              createdAt,
-              organizerId: data.organizerId || "",
-            };
-          });
+          events = snapshot.docs
+            .map((eventDocument) => {
+              const data = eventDocument.data();
+              const status = String(data.status || "")
+                .trim()
+                .toLowerCase()
+                .replace(/[ _-]+/g, " ");
+              const isPublished =
+                ["approved", "published", "rescheduled"].includes(status) ||
+                data.published === true;
+              if (!isPublished) return null;
+              const eventDate = data.eventDate || data.dateISO || data.date || "";
+              const createdAt = data.createdAt?.toDate
+                ? data.createdAt.toDate().toISOString()
+                : data.createdAt || "";
+              const startTime = data.startTime || "";
+              const endTime = data.endTime || "";
+              return {
+                ...data,
+                id: eventDocument.id,
+                eventId: eventDocument.id,
+                title: data.eventName || data.title || "Untitled",
+                dateISO: eventDate,
+                time:
+                  data.time ||
+                  [startTime, endTime].filter(Boolean).join(" - ") ||
+                  "Time TBA",
+                location: data.venue || data.location || data.venueOther || "",
+                category: data.category || data.eventType || "General",
+                source:
+                  data.source ||
+                  data.eventSource ||
+                  (data.organizerId
+                    ? "Organizational"
+                    : data.organization || data.organizerName || "Others / External"),
+                createdAt,
+                organizerId: data.organizerId || "",
+              };
+            })
+            .filter(Boolean);
           isLoading = false;
           loadError = "";
           render();

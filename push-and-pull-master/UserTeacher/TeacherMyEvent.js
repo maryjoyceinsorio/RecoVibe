@@ -34,17 +34,66 @@
     localStorage.setItem(storageKey, JSON.stringify(events));
   }
 
+  function hapApproved(event, number) {
+    if (!event) return false;
+    const approvalKey = `hap${number}Approved`;
+    const statusKey = `hap_${number}_status`;
+    const legacyKey = `hap${number}`;
+    const nestedApproval = event.approvals?.[`hap${number}`];
+
+    if (event[approvalKey] === true) return true;
+    if (nestedApproval === true) return true;
+    if (
+      typeof nestedApproval === "string" &&
+      nestedApproval.toLowerCase() === "approved"
+    ) {
+      return true;
+    }
+    if (
+      typeof event[statusKey] === "string" &&
+      event[statusKey].toLowerCase() === "approved"
+    ) {
+      return true;
+    }
+    if (event[legacyKey] === true) return true;
+
+    const hasSpecificHapTracking =
+      event.hap1Approved === true ||
+      event.hap2Approved === true ||
+      event.hap3Approved === true ||
+      Boolean(
+        event.approvals?.hap1 || event.approvals?.hap2 || event.approvals?.hap3,
+      ) ||
+      Boolean(event.hap_1_status || event.hap_2_status || event.hap_3_status);
+
+    if (hasSpecificHapTracking) {
+      return false;
+    }
+
+    const normStatus = String(event.status || "").trim().toLowerCase();
+    if (["approved", "published", "completed"].includes(normStatus)) {
+      return true;
+    }
+
+    return false;
+  }
+
   function getStatus(event) {
-    const status = String(event.status || "Pending")
-      .toLowerCase()
-      .replace(/[ _-]+/g, " ");
+    const raw = String(event.status || "Pending").trim();
+    const status = raw.toLowerCase().replace(/[ _-]+/g, " ");
     if (status === "draft") return "Draft";
-    if (status === "pending approval" || status === "pending") return "Pending";
     if (status === "needs revision") return "Needs Revision";
-    if (status === "approved") return "Approved";
     if (status === "published") return "Published";
     if (status === "rejected") return "Rejected";
-    return event.status || "Pending";
+    if (status === "cancelled" || status === "canceled") return "Cancelled";
+    if (status === "completed") return "Completed";
+
+    const hap1 = hapApproved(event, 1);
+    const hap2 = hapApproved(event, 2);
+    const hap3 = hapApproved(event, 3);
+    const checkCount = (hap1 ? 1 : 0) + (hap2 ? 1 : 0) + (hap3 ? 1 : 0);
+
+    return checkCount === 3 ? "Approved" : "Pending";
   }
 
   function formatDate(value, fallback = "Date TBA") {
@@ -137,7 +186,7 @@
         return `<tr data-event-id="${id}">
         <td data-label="Event"><strong>${escapeHTML(event.title || "Untitled event")}</strong><small>${escapeHTML(event.category || "General")}</small></td>
         <td data-label="Date Created">${formatDate(event.createdAt, "Date unavailable")}</td>
-        <td data-label="HAP 1">—</td><td data-label="HAP 2">—</td><td data-label="HAP 3">—</td>
+        <td data-label="HAP 1"><input type="checkbox" class="hap-status" aria-label="HAP 1" ${hapApproved(event, 1) ? "checked" : ""} disabled></td><td data-label="HAP 2"><input type="checkbox" class="hap-status" aria-label="HAP 2" ${hapApproved(event, 2) ? "checked" : ""} disabled></td><td data-label="HAP 3"><input type="checkbox" class="hap-status" aria-label="HAP 3" ${hapApproved(event, 3) ? "checked" : ""} disabled></td>
         <td data-label="Schedule">${escapeHTML(event.time || "Time TBA")}</td>
         <td data-label="Location">${escapeHTML(event.location || "Location TBA")}</td>
         <td data-label="Status"><span class="organizer-status ${status.toLowerCase().replace(/[^a-z0-9_-]/g, "-")}">${escapeHTML(status)}</span></td>

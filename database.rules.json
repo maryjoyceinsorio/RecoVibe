@@ -1,0 +1,149 @@
+{
+  "rules": {
+    "roles": {
+      ".read": "auth != null",
+      ".write": "auth != null && root.child('roles').child(auth.uid).val() === 'admin'",
+      "$uid": {
+        ".validate": "newData.isString() && (newData.val() === 'event_organizer' || newData.val() === 'admin')"
+      }
+    },
+    "qrVersions": {
+      ".read": false,
+      ".write": false
+    },
+    "events": {
+      ".read": "auth != null",
+      ".write": "auth != null && (root.child('roles').child(auth.uid).val() === 'event_organizer' || root.child('roles').child(auth.uid).val() === 'admin')"
+    },
+    "registrations": {
+      "$eventId": {
+        ".read": "auth != null && (root.child('roles').child(auth.uid).val() === 'event_organizer' || root.child('roles').child(auth.uid).val() === 'admin')",
+        "$uid": {
+          ".read": "auth != null && auth.uid === $uid",
+          ".write": false
+        }
+      }
+    },
+    "userRegistrations": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": false
+      }
+    },
+    "attendance": {
+      "$eventId": {
+        ".read": "auth != null && (root.child('roles').child(auth.uid).val() === 'event_organizer' || root.child('roles').child(auth.uid).val() === 'admin')",
+        "$uid": {
+          ".read": "auth != null && (auth.uid === $uid || root.child('roles').child(auth.uid).val() === 'event_organizer' || root.child('roles').child(auth.uid).val() === 'admin')",
+          ".write": false
+        }
+      }
+    },
+    "approverDirectory": {
+      ".read": "auth != null",
+      ".write": "auth != null && root.child('roles').child(auth.uid).val() === 'admin'"
+    },
+    "approvals": {
+      "$eventId": {
+        ".read": "auth != null && (root.child('roles').child(auth.uid).val() === 'admin' || root.child('events').child($eventId).child('organizerId').val() === auth.uid || root.child('organizerEvents').child(auth.uid).child($eventId).exists())",
+        ".write": false
+      }
+    },
+    "organizerEvents": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid === $uid || root.child('roles').child(auth.uid).val() === 'admin')",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+    "publicEvents": {
+      ".read": true,
+      ".write": "auth != null && (root.child('roles').child(auth.uid).val() === 'event_organizer' || root.child('roles').child(auth.uid).val() === 'admin')",
+      ".indexOn": ["startAt"]
+    },
+    "notifications": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && (auth.uid === $uid || root.child('roles').child(auth.uid).val() === 'admin' || root.child('roles').child(auth.uid).val() === 'event_organizer')"
+      }
+    },
+    "absences": {
+      "$eventId": {
+        ".read": "auth != null && (root.child('roles').child(auth.uid).val() === 'event_organizer' || root.child('roles').child(auth.uid).val() === 'admin')",
+        ".write": false
+      }
+    },
+    "approverQueue": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid === $uid || root.child('roles').child(auth.uid).val() === 'admin')",
+        ".write": "auth != null && root.child('roles').child(auth.uid).val() === 'admin'"
+      }
+    },
+    "approverDecisions": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid === $uid || root.child('roles').child(auth.uid).val() === 'admin')",
+        ".write": "auth != null && root.child('roles').child(auth.uid).val() === 'admin'"
+      }
+    },
+    "users": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid === $uid || root.child('roles').child(auth.uid).val() === 'admin')",
+        "firstName": {
+          ".write": "auth != null && auth.uid === $uid",
+          ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 50"
+        },
+        "middleName": {
+          ".write": "auth != null && auth.uid === $uid",
+          ".validate": "newData.isString() && newData.val().length <= 50"
+        },
+        "lastName": {
+          ".write": "auth != null && auth.uid === $uid",
+          ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 50"
+        },
+        "contactNumber": {
+          ".write": "auth != null && auth.uid === $uid",
+          ".validate": "newData.isString() && newData.val().matches(/^09\\d{9}$/)"
+        },
+        "studentNo": {
+          ".write": false
+        },
+        "yearSection": {
+          ".write": false
+        },
+        "department": {
+          ".write": false
+        },
+        "organization": {
+          ".write": false
+        },
+        "email": {
+          ".write": false
+        },
+        "preferences": {
+          ".write": "auth != null && auth.uid === $uid",
+          ".validate": "newData.hasChildren(['categories', 'sources']) && newData.child('categories').hasChildren() && newData.child('sources').hasChildren()",
+          "categories": {
+            "$index": {
+              ".validate": "newData.isString() && (newData.val() === 'Academic & Learning' || newData.val() === 'Tech & Innovation' || newData.val() === 'Seminars & Workshops' || newData.val() === 'Leadership & Career' || newData.val() === 'Orgs & Student Acts' || newData.val() === 'Social Events' || newData.val() === 'University & Campuses' || newData.val() === 'Community & Outreach' || newData.val() === 'Music & Entertainment' || newData.val() === 'Arts & Culture' || newData.val() === 'Sports & Fitness' || newData.val() === 'Competitions')"
+            }
+          },
+          "sources": {
+            "$index": {
+              ".validate": "newData.isString() && (newData.val() === 'PUP Official' || newData.val() === 'CSC' || newData.val() === 'Teacher / Faculty' || newData.val() === 'Organizational' || newData.val() === 'Others / External')"
+            }
+          }
+        },
+        "$other": {
+          ".write": false
+        }
+      }
+    },
+    "correctionRequests": {
+      "$id": {
+        ".read": "auth != null && (data.child('uid').val() === auth.uid || root.child('roles').child(auth.uid).val() === 'admin')",
+        ".write": "auth != null && (!data.exists() ? (newData.child('uid').val() === auth.uid && newData.child('status').val() === 'open') : false)",
+        ".validate": "newData.hasChildren(['uid', 'field', 'message', 'status', 'createdAt']) && newData.child('uid').val() === auth.uid && newData.child('status').val() === 'open' && newData.child('message').isString() && newData.child('message').val().length >= 10"
+      }
+    }
+  }
+}
+

@@ -343,6 +343,19 @@ body {
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
+  pointer-events: none !important;
+  cursor: default !important;
+}
+
+.admin-day.only-holiday button,
+.admin-day.only-holiday:hover button,
+.admin-day.is-holiday:not(:has(.admin-dot)) button {
+  cursor: default !important;
+}
+
+.admin-upcoming-item--holiday {
+  cursor: default !important;
+  pointer-events: none !important;
 }
 .admin-holiday-note {
   margin: 0 0 12px;

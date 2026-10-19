@@ -10,12 +10,52 @@
   margin-bottom: 6px;
 }
 
-.user-management-header h1 {
-  margin: 0;
-  color: #090909;
-  font-size: 21px;
-  font-weight: 800;
-  line-height: 1.25;
+.user-search-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 240px;
+  max-width: 380px;
+  width: 100%;
+  height: 40px;
+  padding: 0 16px 0 14px;
+  background: #ffffff;
+  border: 1px solid #dedbd7;
+  border-radius: 999px;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.user-search-box:focus-within {
+  border-color: #949a9f;
+  box-shadow: 0 0 0 2px rgba(114, 20, 28, 0.08);
+}
+
+.user-search-icon {
+  color: #949a9f;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+}
+
+.user-search-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: #111111;
+  font-size: 14px;
+  font-family: inherit;
+  padding: 0;
+  min-width: 0;
+}
+
+.user-search-input::placeholder {
+  color: #8b8f94;
+}
+
+.user-search-input::-webkit-search-cancel-button {
+  cursor: pointer;
 }
 
 .create-user-button {
@@ -319,11 +359,70 @@
   outline: 2px solid rgb(216 159 58 / 40%);
 }
 
+#new-user-role-suffix {
+  text-transform: uppercase;
+}
+
+.form-field input[readonly],
+.form-field input:disabled,
 .form-field select:disabled {
   background: #efedeb;
   color: #342d2b;
   cursor: not-allowed;
-  opacity: 1;
+  opacity: 0.85;
+}
+
+.form-field-middle-toggle {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 6px;
+}
+
+.form-field-middle-toggle .checkbox-inline {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  margin-top: 0;
+}
+
+.checkbox-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  font-weight: 400;
+  color: #342d2b;
+  cursor: pointer;
+  user-select: none;
+  margin-top: 2px;
+  width: fit-content;
+}
+
+.checkbox-inline span {
+  font-weight: 400;
+}
+
+.form-field .checkbox-inline input[type="checkbox"],
+.checkbox-inline input[type="checkbox"] {
+  width: 16px;
+  min-width: 16px;
+  height: 16px;
+  min-height: 16px;
+  max-height: 16px;
+  padding: 0;
+  margin: 0;
+  border: 1px solid #72141c;
+  border-radius: 3px;
+  cursor: pointer;
+  accent-color: #72141c;
+}
+
+#staff-auth-fields:not([hidden]) {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 16px;
 }
 
 .user-dialog-actions {
@@ -437,9 +536,95 @@
   max-width: 564px;
 }
 
+.user-details-actions #edit-user-button {
+  grid-column: 1 / -1;
+  background: #72141c;
+  color: #fff;
+}
+
+.user-details-actions #edit-user-button:hover,
+.user-details-actions #edit-user-button:focus-visible {
+  background: #5d1017;
+}
+
 .user-details-actions .user-modal-button {
   min-height: 56px;
   font-size: 18px;
+}
+
+.edit-user-dialog {
+  width: min(690px, calc(100vw - 32px));
+}
+
+.confirm-dialog {
+  width: min(490px, calc(100vw - 32px));
+  border-radius: 10px;
+}
+
+.confirm-dialog-content {
+  padding: 28px 24px 24px;
+  text-align: center;
+}
+
+.confirm-dialog-content h2 {
+  margin: 0 0 10px;
+  font-size: 21px;
+  font-weight: 800;
+  color: #72141c;
+}
+
+.confirm-dialog-content p {
+  margin: 0 0 16px;
+  font-size: 14.5px;
+  color: #3d3634;
+  line-height: 1.45;
+}
+
+.confirm-changes-summary {
+  max-height: 190px;
+  overflow-y: auto;
+  margin: 0 0 20px;
+  padding: 10px 14px;
+  border: 1px solid #dcd8d6;
+  border-radius: 6px;
+  background: #fff;
+  text-align: left;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.confirm-change-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 5px 0;
+  border-bottom: 1px dashed #eee8e7;
+}
+
+.confirm-change-item:last-child {
+  border-bottom: none;
+}
+
+.confirm-change-field {
+  font-weight: 700;
+  color: #20191a;
+  white-space: nowrap;
+}
+
+.confirm-change-values {
+  color: #51484a;
+  text-align: right;
+  word-break: break-word;
+}
+
+.confirm-change-values del {
+  color: #928b8a;
+  margin-right: 4px;
+}
+
+.confirm-change-values strong {
+  color: #72141c;
 }
 
 .user-table-empty {
@@ -476,8 +661,10 @@
     align-items: flex-start;
   }
 
-  .user-management-header h1 {
-    font-size: 20px;
+  .user-search-box {
+    min-width: 0;
+    max-width: none;
+    flex: 1;
   }
 
   .create-user-button {

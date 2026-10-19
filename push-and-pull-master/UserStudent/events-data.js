@@ -224,7 +224,7 @@ function normalizeCategory(category) {
 
 function normalizeSource(source) {
   const norm = String(source || "").trim().toLowerCase();
-  if (norm.includes("holiday")) return "Philippine Holiday";
+  if (norm.includes("holiday")) return "Holiday";
   if (
     norm === "csc" ||
     norm.includes("central student council") ||

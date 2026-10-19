@@ -784,6 +784,8 @@ ul {
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
+  pointer-events: none !important;
+  cursor: default !important;
 }
 .cal-legend .dot-holiday {
   background: var(--cat-holiday);
@@ -3152,23 +3154,30 @@ body {
     accent-color: var(--cat-binan);
   }
 
+  #calendarMain .filter-panel .filter-option input[data-source="CSC"],
   #calendarMain .filter-panel .filter-option input[data-source="PUP CITE"] {
     accent-color: var(--cat-cite);
   }
 
-  #calendarMain .filter-panel .filter-option input[data-source="IBITS"] {
+  #calendarMain .filter-panel .filter-option input[data-source="IBITS"],
+  #calendarMain .filter-panel .filter-option input[data-source="Organizational"] {
     accent-color: var(--cat-ibits);
   }
 
-  #calendarMain .filter-panel .filter-option input[data-source="Teachers/Faculty"] {
+  #calendarMain .filter-panel .filter-option input[data-source="Teachers/Faculty"],
+  #calendarMain .filter-panel .filter-option input[data-source*="Faculty"],
+  #calendarMain .filter-panel .filter-option input[data-source*="Teacher"] {
     accent-color: var(--cat-faculty);
   }
 
-  #calendarMain .filter-panel .filter-option input[data-source="Others/External"] {
+  #calendarMain .filter-panel .filter-option input[data-source="Others/External"],
+  #calendarMain .filter-panel .filter-option input[data-source*="External"],
+  #calendarMain .filter-panel .filter-option input[data-source*="Other"] {
     accent-color: var(--cat-external);
   }
 
-  #calendarMain .filter-panel .filter-option input[data-source="Philippine Holiday"] {
+  #calendarMain .filter-panel .filter-option input[data-source="Philippine Holiday"],
+  #calendarMain .filter-panel .filter-option input[data-source="Holiday"] {
     accent-color: var(--cat-holiday);
   }
   #calendarMain .cal-legend {
@@ -3442,22 +3451,64 @@ body {
   accent-color: var(--cat-binan);
 }
 
+#calendarMain .filter-panel .filter-option input[data-source="CSC"],
 #calendarMain .filter-panel .filter-option input[data-source="PUP CITE"] {
   accent-color: var(--cat-cite);
 }
 
-#calendarMain .filter-panel .filter-option input[data-source="IBITS"] {
+#calendarMain .filter-panel .filter-option input[data-source="IBITS"],
+#calendarMain .filter-panel .filter-option input[data-source="Organizational"] {
   accent-color: var(--cat-ibits);
 }
 
-#calendarMain .filter-panel .filter-option input[data-source="Teachers/Faculty"] {
+#calendarMain .filter-panel .filter-option input[data-source="Teachers/Faculty"],
+#calendarMain .filter-panel .filter-option input[data-source*="Faculty"],
+#calendarMain .filter-panel .filter-option input[data-source*="Teacher"] {
   accent-color: var(--cat-faculty);
 }
 
-#calendarMain .filter-panel .filter-option input[data-source="Others/External"] {
+#calendarMain .filter-panel .filter-option input[data-source="Others/External"],
+#calendarMain .filter-panel .filter-option input[data-source*="External"],
+#calendarMain .filter-panel .filter-option input[data-source*="Other"] {
   accent-color: var(--cat-external);
 }
 
-#calendarMain .filter-panel .filter-option input[data-source="Philippine Holiday"] {
+#calendarMain .filter-panel .filter-option input[data-source="Philippine Holiday"],
+#calendarMain .filter-panel .filter-option input[data-source="Holiday"] {
   accent-color: var(--cat-holiday);
 }
+
+/* Holiday non-clickable styles */
+.day-modal-row.day-modal-row--holiday,
+.day-modal-row.is-holiday {
+  cursor: default !important;
+  pointer-events: none;
+}
+.day-modal-row.day-modal-row--holiday:hover,
+.day-modal-row.is-holiday:hover {
+  border-color: var(--line) !important;
+  background: var(--cream-50) !important;
+}
+.upcoming-item.upcoming-item--holiday,
+.upcoming-item.is-holiday {
+  cursor: default !important;
+  pointer-events: none !important;
+}
+.upcoming-item.upcoming-item--holiday:hover,
+.upcoming-item.is-holiday:hover {
+  background: transparent !important;
+  transform: none !important;
+}
+
+.cal-day-full.only-holiday,
+.cal-day-full.only-holiday:hover,
+.cal-day-full.only-holiday:focus-visible {
+  cursor: default !important;
+  transform: none !important;
+}
+
+.calendar-day-event.dot-holiday {
+  cursor: default !important;
+  pointer-events: none !important;
+}
+

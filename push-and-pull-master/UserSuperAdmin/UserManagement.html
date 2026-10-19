@@ -32,6 +32,10 @@
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="m19.4 15 .1.1 1.2 1-1.4 2.4-1.5-.6a8 8 0 0 1-1.5.9l-.3 1.6h-2.8l-.3-1.6a8 8 0 0 1-1.5-.9l-1.5.6-1.4-2.4 1.2-1a7 7 0 0 1 0-1.8l-1.2-1 1.4-2.4 1.5.6a8 8 0 0 1 1.5-.9l.3-1.6h2.8l.3 1.6a8 8 0 0 1 1.5.9l1.5-.6 1.4 2.4-1.2 1a7 7 0 0 1-.1 1.7Z" transform="translate(-1 -1)" /></svg>
             <span>System Settings</span>
           </a>
+                    <a class="nav-link" href="SuperAdminActSum.html">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M7 16V10M12 16V6M17 16V12" /></svg>
+            <span>Activity Summary</span>
+          </a>
           <a class="nav-link" href="SuperAdminNotifications.html">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg>
             <span>Notifications</span>
@@ -55,7 +59,39 @@
 
       <main class="main-content user-management-main" id="main-content">
         <header class="user-management-header">
-          <h1>User table</h1>
+          <h1 class="visually-hidden">User Management</h1>
+          <div class="user-search-box">
+            <svg
+              class="user-search-icon"
+              width="16"
+              height="16"
+              viewBox="0 0 20 20"
+              fill="none"
+              aria-hidden="true"
+            >
+              <circle
+                cx="8.8"
+                cy="8.8"
+                r="5.6"
+                stroke="currentColor"
+                stroke-width="1.6"
+              />
+              <path
+                d="M13 13l4 4"
+                stroke="currentColor"
+                stroke-width="1.6"
+                stroke-linecap="round"
+              />
+            </svg>
+            <input
+              type="search"
+              id="user-search-input"
+              class="user-search-input"
+              placeholder="Search users"
+              aria-label="Search users"
+              autocomplete="off"
+            />
+          </div>
           <button class="create-user-button" id="create-user-button" type="button">Create New User</button>
         </header>
         <section class="user-table-card" aria-labelledby="user-table-heading">
@@ -100,12 +136,27 @@
           <h2 id="create-user-title">Create New User</h2>
           <button class="dialog-dismiss" type="button" data-close-dialog aria-label="Close create user form">×</button>
         </div>
-        <label class="form-field" for="new-user-name">
-          <span>Full Name</span>
-          <input id="new-user-name" name="fullName" type="text" autocomplete="name" required />
+        <label class="form-field" for="new-user-first-name">
+          <span>First Name</span>
+          <input id="new-user-first-name" name="firstName" type="text" autocomplete="given-name" required />
+        </label>
+        <label class="form-field" for="new-user-middle-name">
+          <span>Middle Name</span>
+          <input id="new-user-middle-name" name="middleName" type="text" autocomplete="additional-name" />
+        </label>
+        <div class="form-field form-field-middle-toggle">
+          <span>Middle name</span>
+          <label class="checkbox-inline" for="new-user-no-middle-name">
+            <input type="checkbox" id="new-user-no-middle-name" name="noMiddleName" />
+            <span>I don't have a middle name</span>
+          </label>
+        </div>
+        <label class="form-field" for="new-user-last-name">
+          <span>Last Name</span>
+          <input id="new-user-last-name" name="lastName" type="text" autocomplete="family-name" required />
         </label>
         <label class="form-field" for="new-user-account">
-          <span>Account / Student Number</span>
+          <span id="new-user-account-label">Account Number</span>
           <input id="new-user-account" name="accountNumber" type="text" required />
         </label>
         <label class="form-field" for="new-user-role">
@@ -125,9 +176,13 @@
           <span>Email</span>
           <input id="new-user-email" name="email" type="email" placeholder="Enter your email address" autocomplete="email" inputmode="email" autocapitalize="none" spellcheck="false" maxlength="254" required />
         </label>
+        <label class="form-field" for="new-user-contact">
+          <span>Contact Number</span>
+          <input id="new-user-contact" name="contactNumber" type="tel" value="09" maxlength="11" autocomplete="tel" />
+        </label>
         <div id="staff-auth-fields" hidden>
           <label class="form-field" for="new-user-password">
-            <span>Password (at least 6 characters)</span>
+            <span>Password</span>
             <input id="new-user-password" name="password" type="password" autocomplete="new-password" minlength="6" />
           </label>
           <label class="form-field" for="new-user-password-confirmation">
@@ -135,13 +190,13 @@
             <input id="new-user-password-confirmation" name="passwordConfirmation" type="password" autocomplete="new-password" minlength="6" />
           </label>
         </div>
-        <label class="form-field" for="new-user-contact">
-          <span>Contact Number</span>
-          <input id="new-user-contact" name="contactNumber" type="tel" autocomplete="tel" />
-        </label>
-        <label class="form-field" for="new-user-organization">
+        <label class="form-field" id="field-user-organization" for="new-user-organization">
           <span>Organization / Department</span>
           <input id="new-user-organization" name="organizationDepartment" type="text" />
+        </label>
+        <label class="form-field" id="field-user-suffix" for="new-user-role-suffix" hidden>
+          <span>Role Suffix</span>
+          <input id="new-user-role-suffix" name="roleSuffix" type="text" placeholder="e.g. CSC, IBITS, HAP" maxlength="20" />
         </label>
         <div class="user-dialog-actions">
           <button class="user-modal-button secondary" type="button" data-close-dialog>Cancel</button>
@@ -169,10 +224,104 @@
           </dl>
         </section>
         <div class="user-details-actions">
+          <button class="user-modal-button primary" id="edit-user-button" type="button">Edit User Information</button>
           <button class="user-modal-button danger" id="delete-user-button" type="button">Delete Account</button>
           <button class="user-modal-button primary" id="toggle-user-status-button" type="button">Suspend Account</button>
           <a class="user-modal-button secondary" id="view-user-activity" href="SuperAdminAuditLogs.html">View Activity</a>
           <button class="user-modal-button secondary" type="button" data-close-dialog>Close</button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog class="user-dialog edit-user-dialog" id="edit-user-dialog" aria-labelledby="edit-user-title">
+      <form class="user-dialog-content user-form" id="edit-user-form">
+        <div class="user-dialog-heading">
+          <h2 id="edit-user-title">Edit User Information</h2>
+          <button class="dialog-dismiss" type="button" data-close-dialog aria-label="Close edit user form">×</button>
+        </div>
+        <label class="form-field" for="edit-user-fullname">
+          <span>Full Name</span>
+          <input id="edit-user-fullname" name="fullName" type="text" autocomplete="name" required />
+        </label>
+        <label class="form-field" for="edit-user-account-number">
+          <span>Account / Student Number</span>
+          <input id="edit-user-account-number" name="accountNumber" type="text" />
+        </label>
+        <label class="form-field" for="edit-user-email">
+          <span>Email</span>
+          <input id="edit-user-email" name="email" type="email" autocomplete="email" required />
+        </label>
+        <label class="form-field" for="edit-user-contact">
+          <span>Contact Number</span>
+          <input id="edit-user-contact" name="contactNumber" type="tel" value="09" maxlength="11" autocomplete="tel" />
+        </label>
+        <label class="form-field" for="edit-user-department">
+          <span>Department / Program</span>
+          <input id="edit-user-department" name="department" type="text" />
+        </label>
+        <label class="form-field" for="edit-user-year-section">
+          <span>Year &amp; Section</span>
+          <input id="edit-user-year-section" name="yearSection" type="text" />
+        </label>
+        <label class="form-field" for="edit-user-organization">
+          <span>Organization / Department</span>
+          <input id="edit-user-organization" name="organizationDepartment" type="text" />
+        </label>
+        <label class="form-field" for="edit-user-role">
+          <span>Role</span>
+          <select id="edit-user-role" name="role">
+            <option value="Student">Student</option>
+            <option value="Teacher">Teacher</option>
+            <option value="Event Organizer">Event Organizer</option>
+            <option value="Admin">Admin</option>
+            <option value="Super Admin">Super Admin</option>
+          </select>
+        </label>
+        <label class="form-field" for="edit-user-status">
+          <span>Status</span>
+          <select id="edit-user-status" name="status">
+            <option value="Active">Active</option>
+            <option value="Suspended">Suspended</option>
+            <option value="Inactive">Inactive</option>
+          </select>
+        </label>
+        <div class="user-dialog-actions">
+          <button class="user-modal-button secondary" type="button" data-close-dialog>Cancel</button>
+          <button class="user-modal-button primary" id="save-edit-user-button" type="submit">Save Changes</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="user-dialog confirm-dialog" id="confirm-edit-dialog" aria-labelledby="confirm-edit-title">
+      <div class="user-dialog-content confirm-dialog-content">
+        <h2 id="confirm-edit-title">Confirm Changes</h2>
+        <p id="confirm-edit-message">Are you sure you want to save the changes made to this user's account?</p>
+        <div class="confirm-changes-summary" id="confirm-changes-summary"></div>
+        <div class="user-dialog-actions" style="justify-content: center; gap: 12px;">
+          <button class="user-modal-button secondary" id="cancel-confirm-edit-button" type="button">Cancel</button>
+          <button class="user-modal-button primary" id="confirm-save-edit-button" type="button">Confirm &amp; Save</button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog class="user-dialog confirm-dialog" id="confirm-status-dialog" aria-labelledby="confirm-status-title">
+      <div class="user-dialog-content confirm-dialog-content">
+        <h2 id="confirm-status-title">Suspend Account</h2>
+        <p id="confirm-status-message">Are you sure you want to suspend this user's account?</p>
+        <div class="user-dialog-actions" style="justify-content: center; gap: 12px;">
+          <button class="user-modal-button secondary" id="cancel-confirm-status-button" type="button" data-close-dialog>Cancel</button>
+          <button class="user-modal-button primary" id="confirm-status-action-button" type="button">Confirm</button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog class="user-dialog confirm-dialog" id="confirm-delete-dialog" aria-labelledby="confirm-delete-title">
+      <div class="user-dialog-content confirm-dialog-content">
+        <h2 id="confirm-delete-title" style="color: #b31b1b;">Delete Account</h2>
+        <p id="confirm-delete-message">Are you sure you want to permanently delete this user's account? This action cannot be undone.</p>
+        <div class="user-dialog-actions" style="justify-content: center; gap: 12px;">
+          <button class="user-modal-button secondary" id="cancel-confirm-delete-button" type="button" data-close-dialog>Cancel</button>
+          <button class="user-modal-button danger" id="confirm-delete-action-button" type="button">Delete Account</button>
         </div>
       </div>
     </dialog>

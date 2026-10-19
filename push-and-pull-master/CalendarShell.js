@@ -23,7 +23,7 @@
       ["ibits", "IBITS"],
       ["faculty", "Teachers/Faculty"],
       ["external", "Others/External"],
-      ["holiday", "Philippine Holiday"],
+      ["holiday", "Holiday"],
     ],
     teacher: [
       ["official", "PUP Official"],
@@ -31,7 +31,7 @@
       ["cite", "PUP CITE"],
       ["organizer", "Event Organizer"],
       ["external", "Others/External"],
-      ["holiday", "Philippine Holiday"],
+      ["holiday", "Holiday"],
     ],
     organizer: [
       ["official", "PUP Official"],
@@ -39,7 +39,7 @@
       ["cite", "PUP CITE"],
       ["organizer", "Event Organizer"],
       ["external", "Others/External"],
-      ["holiday", "Philippine Holiday"],
+      ["holiday", "Holiday"],
     ],
   };
 
@@ -164,6 +164,8 @@
         const badge = document.createElement("span");
         badge.className = "calendar-badge badge-holiday";
         badge.setAttribute("role", "note");
+        badge.style.pointerEvents = "none";
+        badge.style.cursor = "default";
         badge.textContent = name;
         badge.title = name;
         cell.appendChild(badge);

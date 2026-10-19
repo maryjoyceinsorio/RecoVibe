@@ -415,6 +415,10 @@ document.addEventListener("DOMContentLoaded", () => {
         item.read = true;
         saveNotifications();
         renderNotifications();
+        if (item.eventId) {
+          window.location.href = `EventOrganizerMyEvents.html?openEvent=${encodeURIComponent(item.eventId)}`;
+          return;
+        }
         openNotificationDetails(item);
       }
     });
@@ -481,6 +485,10 @@ document.addEventListener("DOMContentLoaded", () => {
   if (viewEventButton)
     viewEventButton.addEventListener("click", () => {
       const eventId = viewEventButton.dataset.eventId;
+      if (eventId) {
+        window.location.href = `EventOrganizerMyEvents.html?openEvent=${encodeURIComponent(eventId)}`;
+        return;
+      }
       const event =
         typeof getOrganizerEvents === "function"
           ? getOrganizerEvents().find(

@@ -811,7 +811,27 @@
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
+  pointer-events: none !important;
+  cursor: default !important;
 }
+
+.day-modal-row.day-modal-row--holiday {
+  cursor: default !important;
+  pointer-events: none !important;
+}
+
+.upcoming-item.upcoming-item--holiday {
+  cursor: default !important;
+  pointer-events: none !important;
+}
+
+.cal-day-full.only-holiday,
+.cal-day-full.only-holiday:hover,
+.cal-day-full.only-holiday:focus-visible {
+  cursor: default !important;
+  transform: none !important;
+}
+
 
 .calendar-side {
   position: sticky;

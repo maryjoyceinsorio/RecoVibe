@@ -1,16 +1,34 @@
 (() => {
   "use strict";
 
-  const events = Array.isArray(window.RECOVIBE_EVENTS)
-    ? [...window.RECOVIBE_EVENTS]
-    : [];
+  let events = (
+    Array.isArray(window.RECOVIBE_EVENTS) ? [...window.RECOVIBE_EVENTS] : []
+  ).filter((event) => {
+    const s = String(event.status || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[ _-]+/g, " ");
+    return (
+      ["approved", "published", "rescheduled"].includes(s) ||
+      event.published === true
+    );
+  });
   try {
     const teacherEvents = JSON.parse(
       localStorage.getItem("recovibeTeacherEvents") || "[]",
     );
     if (Array.isArray(teacherEvents)) {
       teacherEvents
-        .filter((event) => ["Approved", "Published"].includes(event.status))
+        .filter((event) => {
+          const s = String(event.status || "")
+            .trim()
+            .toLowerCase()
+            .replace(/[ _-]+/g, " ");
+          return (
+            ["approved", "published", "rescheduled"].includes(s) ||
+            event.published === true
+          );
+        })
         .forEach((event) => {
           const id = event.eventId || event.id;
           if (!events.some((existing) => String(existing.id) === String(id))) {

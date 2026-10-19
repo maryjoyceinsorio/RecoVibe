@@ -1,3 +1,12 @@
+import {
+  ref,
+  onValue,
+  off,
+  update,
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { auth, rtdb, isRtdbConfigured } from "../UserStudent/firebaseConfig.js";
+
 (() => {
   "use strict";
   const profile = read("recovibeAdminProfile", null),
@@ -18,7 +27,11 @@
     deleted = false,
     search = "",
     undoSnapshot = null,
-    undoTimer;
+    undoTimer,
+    currentAdminUid = identity,
+    rtdbNotifications = [],
+    notifListenerRef = null,
+    queueListenerRef = null;
   document.querySelector("[data-name]").textContent = (
     profile.name || identity
   ).toUpperCase();
@@ -150,8 +163,71 @@
             });
         });
     });
+    rtdbNotifications.forEach((item) => {
+      const idx = next.findIndex((x) => x.id === item.id);
+      if (idx !== -1) {
+        next[idx] = { ...next[idx], ...item };
+      } else {
+        next.unshift(item);
+      }
+    });
+    next.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
     localStorage.setItem(key, JSON.stringify(next));
     return next;
+  }
+
+  function subscribeToRtdbNotifications(uid) {
+    if (!isRtdbConfigured || !rtdb || !uid) return;
+    if (notifListenerRef) {
+      off(notifListenerRef);
+      notifListenerRef = null;
+    }
+    notifListenerRef = ref(rtdb, `notifications/${uid}`);
+    onValue(
+      notifListenerRef,
+      (snapshot) => {
+        const data = snapshot.val() || {};
+        rtdbNotifications = Object.entries(data).map(([id, val]) => ({
+          id,
+          eventId: val.eventId || "",
+          type: val.type || "approval",
+          title: val.title || "Notification",
+          message: val.message || "",
+          createdAt: val.createdAt
+            ? new Date(val.createdAt).toISOString()
+            : new Date().toISOString(),
+          read: val.read === true,
+          source: "rtdb",
+        }));
+        render();
+      },
+      (err) => {
+        console.warn("RTDB notifications error:", err);
+      },
+    );
+  }
+
+  function subscribeToQueue(uid) {
+    if (!isRtdbConfigured || !rtdb || !uid) return;
+    if (queueListenerRef) {
+      off(queueListenerRef);
+      queueListenerRef = null;
+    }
+    queueListenerRef = ref(rtdb, `approverQueue/${uid}`);
+    onValue(
+      queueListenerRef,
+      (snapshot) => {
+        const data = snapshot.val() || {};
+        const count = Object.values(data).length;
+        document.querySelectorAll("[data-queue-count]").forEach((b) => {
+          b.textContent = String(count);
+          b.hidden = count === 0;
+        });
+      },
+      (err) => {
+        console.warn("RTDB queue error:", err);
+      },
+    );
   }
   function hasConflict(event) {
     const date = (event.dateISO || event.date || "").slice(0, 10),
@@ -280,18 +356,29 @@
       deleted = !deleted;
       render();
     };
-    root.querySelector("#markRead").onclick = () => {
+    root.querySelector("#markRead").onclick = async () => {
       if (deleted) {
         saveTrash([]);
         render();
         return;
       }
-      const list = read(key, []);
+      const list = snapshots();
       undoSnapshot = list.map((item) => ({ ...item }));
-      save(
-        key,
-        list.map((item) => ({ ...item, read: true })),
-      );
+      if (currentAdminUid && rtdb) {
+        const updates = {};
+        rtdbNotifications.forEach((it) => {
+          if (!it.read) updates[`notifications/${currentAdminUid}/${it.id}/read`] = true;
+        });
+        if (Object.keys(updates).length > 0) {
+          try {
+            await update(ref(rtdb), updates);
+          } catch (e) {
+            console.warn("Unable to update read state in RTDB:", e);
+          }
+        }
+      }
+      const localList = read(key, []);
+      save(localList.map((item) => ({ ...item, read: true })));
       toastUndo("All notifications marked as read.");
       render();
     };
@@ -303,7 +390,6 @@
             item = list.find((note) => note.id === button.dataset.delete);
           if (!item) return;
           save(
-            key,
             list.filter((note) => note.id !== item.id),
           );
           const trash = read(trashKey, []);
@@ -325,7 +411,7 @@
           const { deletedAt, expiresAt, ...rest } = item;
           const list = read(key, []);
           list.unshift(rest);
-          save(key, list);
+          save(list);
           saveTrash(trash.filter((note) => note.id !== item.id));
           render();
         }),
@@ -342,16 +428,32 @@
         }),
     );
     root.querySelectorAll("[data-notification]").forEach((card) => {
-      card.onclick = (event) => {
+      card.onclick = async (event) => {
         if (event.target.closest("button")) return;
-        const list = read(key, []),
+        const list = snapshots(),
           item = list.find((note) => note.id === card.dataset.notification);
         if (!item) return;
         item.read = true;
-        save(key, list);
+        if (item.source === "rtdb" && currentAdminUid && rtdb) {
+          try {
+            await update(ref(rtdb, `notifications/${currentAdminUid}/${item.id}`), {
+              read: true,
+            });
+          } catch (e) {
+            console.warn("Unable to mark notification read in RTDB:", e);
+          }
+        }
+        const localList = read(key, []);
+        const localItem = localList.find((note) => note.id === item.id);
+        if (localItem) {
+          localItem.read = true;
+          save(localList);
+        }
         if (item.eventId) {
-          location.href = `AdminApproval.html?review=${encodeURIComponent(item.eventId)}&type=${encodeURIComponent(issueType(item.type))}`;
-        } else render();
+          location.href = `AdminApproval.html?review=${encodeURIComponent(item.eventId)}`;
+        } else {
+          render();
+        }
       };
       card.onkeydown = (event) => {
         if (["Enter", " "].includes(event.key)) {
@@ -379,7 +481,7 @@
     clearTimeout(undoTimer);
     toast.querySelector("button").onclick = () => {
       if (undoSnapshot) {
-        save(key, undoSnapshot);
+        save(undoSnapshot);
         undoSnapshot = null;
         render();
       }
@@ -392,5 +494,25 @@
       render();
   });
   window.addEventListener("focus", render);
+
+  if (auth) {
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        currentAdminUid = user.uid;
+        subscribeToRtdbNotifications(user.uid);
+        subscribeToQueue(user.uid);
+      }
+    });
+  }
+  if (currentAdminUid) {
+    subscribeToRtdbNotifications(currentAdminUid);
+    subscribeToQueue(currentAdminUid);
+  }
+
+  window.addEventListener("beforeunload", () => {
+    if (notifListenerRef) off(notifListenerRef);
+    if (queueListenerRef) off(queueListenerRef);
+  });
+
   render();
 })();

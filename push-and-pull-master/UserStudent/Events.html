@@ -9,6 +9,7 @@
       href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=Poppins:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
+    <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
     <style>
       :root {
         --maroon-900: #4f1420;
@@ -42,6 +43,7 @@
       }
       html {
         -webkit-text-size-adjust: 100%;
+        overflow-x: hidden;
       }
       body {
         margin: 0;
@@ -49,6 +51,8 @@
         color: var(--ink-900);
         background: var(--cream-50);
         -webkit-font-smoothing: antialiased;
+        overflow-x: hidden;
+        max-width: 100%;
       }
       a {
         color: inherit;
@@ -504,6 +508,19 @@
       }
       .filter-option.active {
         background: #eeeeee;
+      }
+      .sr-only,
+      .filter-live-announcer {
+        position: absolute !important;
+        width: 1px !important;
+        height: 1px !important;
+        padding: 0 !important;
+        margin: -1px !important;
+        overflow: hidden !important;
+        clip: rect(0, 0, 0, 0) !important;
+        white-space: nowrap !important;
+        border: 0 !important;
+        display: none !important;
       }
       .filter-dropdown--events .filter-button {
         min-width: 118px;
@@ -1405,6 +1422,815 @@
           padding: 16px 16px 20px;
         }
       }
+
+      /* ============ DATE RANGE PICKER (MATCHING IMAGE 1) ============ */
+      .filter-dropdown--date-range {
+        position: relative;
+        z-index: 1020;
+      }
+      .date-range-panel {
+        position: absolute;
+        top: calc(100% + 8px);
+        right: 0;
+        left: auto;
+        background: #ffffff;
+        border: 1px solid #ede8df;
+        border-radius: 16px;
+        box-shadow: 0 16px 40px rgba(36, 26, 23, 0.14);
+        z-index: 1050;
+        padding: 0;
+        width: 710px;
+        max-width: calc(100vw - 32px);
+        box-sizing: border-box;
+        display: flex;
+        overflow: hidden;
+        text-align: left;
+      }
+      .date-range-panel[hidden] {
+        display: none !important;
+      }
+
+      /* Sidebar */
+      .date-range-sidebar,
+      .date-range-panel__sidebar {
+        width: 165px;
+        flex-shrink: 0;
+        background: #fbf9f5;
+        border-right: 1px solid #ede8df;
+        padding: 22px 14px;
+        display: flex;
+        flex-direction: column;
+        box-sizing: border-box;
+      }
+      .date-range-presets-title {
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+        color: #7a6d66;
+        margin-bottom: 12px;
+        padding: 0 8px;
+      }
+      .date-range-quick-list {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+      }
+      .date-range-quick-btn {
+        display: block;
+        width: 100%;
+        text-align: left;
+        padding: 8px 12px;
+        border: none;
+        border-radius: 8px;
+        background: transparent;
+        color: #332628;
+        font-size: 13.5px;
+        font-weight: 500;
+        font-family: inherit;
+        cursor: pointer;
+        transition: background 0.15s, color 0.15s;
+        box-sizing: border-box;
+      }
+      .date-range-quick-btn:hover {
+        background: #f4efe4;
+        color: #1f1b18;
+      }
+      .date-range-quick-btn.active {
+        background: #7A1F2E !important;
+        color: #ffffff !important;
+        font-weight: 600 !important;
+      }
+
+      /* Main Area */
+      .date-range-main,
+      .date-range-panel__main {
+        flex: 1;
+        padding: 20px 24px 18px;
+        display: flex;
+        flex-direction: column;
+        box-sizing: border-box;
+        min-width: 0;
+      }
+
+      /* Nav Row (Prev & Next arrows) */
+      .date-range-nav-row {
+        position: relative;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: -32px;
+        z-index: 5;
+        pointer-events: none;
+      }
+      .date-cal-nav-btn {
+        pointer-events: auto;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        border: 1px solid #e2ddd5;
+        background: #ffffff;
+        color: #4a3d38;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-size: 18px;
+        line-height: 1;
+        transition: background 0.15s, border-color 0.15s;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      .date-cal-nav-btn:hover {
+        background: #f4efe4;
+        border-color: #7A1F2E;
+      }
+      .date-cal-nav-spacer {
+        display: none;
+      }
+
+      /* Calendars Row */
+      .date-range-calendars,
+      .date-range-calendars-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 28px;
+      }
+      .date-cal-month {
+        min-width: 0;
+      }
+      .date-cal-month__title,
+      .date-cal-title {
+        text-align: center;
+        font-size: 15px;
+        font-weight: 700;
+        color: #1f1b18;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 12px;
+      }
+      .date-cal-day-names,
+      .date-cal-weekdays {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        text-align: center;
+        font-size: 12px;
+        font-weight: 600;
+        color: #6b635b;
+        margin-bottom: 8px;
+      }
+      .date-cal-day-names span,
+      .date-cal-weekdays span {
+        display: block;
+        padding: 2px 0;
+      }
+      .date-cal-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        row-gap: 4px;
+        column-gap: 0;
+      }
+      .date-cal-day {
+        position: relative;
+        width: 34px;
+        height: 34px;
+        margin: 0 auto;
+        border: none;
+        border-radius: 6px;
+        background: transparent;
+        color: #1f1b18;
+        font-size: 13px;
+        font-weight: 500;
+        font-family: inherit;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.12s, color 0.12s;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      .date-cal-day:hover:not(:disabled) {
+        background: rgba(122, 31, 46, 0.10);
+      }
+      .date-cal-day.empty {
+        visibility: hidden;
+        pointer-events: none;
+      }
+      /* Today outline (maroon ring) */
+      .date-cal-day.today {
+        outline: 1.5px solid #7A1F2E;
+        outline-offset: -1.5px;
+        font-weight: 700;
+      }
+      /* Range start & end (solid maroon circle, white text) */
+      .date-cal-day.range-start,
+      .date-cal-day.range-end {
+        background: #7A1F2E !important;
+        color: #ffffff !important;
+        font-weight: 700 !important;
+        border-radius: 50% !important;
+        border: none !important;
+        outline: none !important;
+      }
+      /* Range between (soft peach/cream fill, dark text) */
+      .date-cal-day.range-between {
+        background: #fbf0e4 !important;
+        color: #1f1b18 !important;
+        border-radius: 4px;
+      }
+      .date-cal-day.today.range-between {
+        outline: 1.5px solid #7A1F2E;
+        outline-offset: -1.5px;
+      }
+
+      /* Bottom area (inputs + footer actions) */
+      .date-range-bottom {
+        margin-top: 18px;
+        padding-top: 14px;
+        border-top: 1px solid #ede8df;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+      .date-range-inputs-row {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        flex-wrap: wrap;
+      }
+      .date-range-input-group,
+      .date-input-group {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13.5px;
+        font-weight: 500;
+        color: #332628;
+      }
+      .date-range-input-group label,
+      .date-input-group label {
+        color: #332628;
+        font-size: 13.5px;
+        font-weight: 500;
+      }
+      .date-range-input-group input,
+      .date-input-group input {
+        width: 120px;
+        height: 34px;
+        border: 1px solid #dcd7ce;
+        border-radius: 8px;
+        padding: 0 10px;
+        font-size: 13px;
+        font-family: inherit;
+        color: #1f1b18;
+        background: #ffffff;
+        outline: none;
+        transition: border-color 0.15s;
+        box-sizing: border-box;
+      }
+      .date-range-input-group input:focus,
+      .date-input-group input:focus {
+        border-color: #7A1F2E;
+      }
+      .date-range-val-msg {
+        font-size: 12px;
+        color: #b91c1c;
+        font-weight: 500;
+      }
+
+      /* Footer row */
+      .date-range-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .date-range-clear-btn {
+        border: none;
+        background: transparent;
+        color: #6b635b;
+        font-size: 13.5px;
+        font-family: inherit;
+        cursor: pointer;
+        padding: 4px 6px;
+        text-decoration: underline;
+        transition: color 0.15s;
+      }
+      .date-range-clear-btn:hover {
+        color: #7A1F2E;
+      }
+      .date-range-actions,
+      .date-range-buttons-right {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .date-range-cancel-btn,
+      .btn-range-cancel {
+        border: 1px solid #e2ddd5;
+        border-radius: 8px;
+        background: #f5f0e6;
+        color: #4a3d38;
+        font-size: 13.5px;
+        font-weight: 600;
+        font-family: inherit;
+        padding: 8px 22px;
+        cursor: pointer;
+        transition: background 0.15s, border-color 0.15s;
+        box-sizing: border-box;
+      }
+      .date-range-cancel-btn:hover,
+      .btn-range-cancel:hover {
+        background: #ebe5d9;
+      }
+      .date-range-apply-btn,
+      .btn-range-apply {
+        border: none;
+        border-radius: 8px;
+        background: #7A1F2E;
+        color: #ffffff;
+        font-size: 13.5px;
+        font-weight: 600;
+        font-family: inherit;
+        padding: 8px 26px;
+        cursor: pointer;
+        transition: background 0.15s, opacity 0.15s;
+        box-sizing: border-box;
+      }
+      .date-range-apply-btn:hover,
+      .btn-range-apply:hover {
+        background: #631925;
+      }
+      .date-range-apply-btn:disabled,
+      .btn-range-apply:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      /* Responsive adjustment */
+      @media (max-width: 860px) {
+        .date-range-panel {
+          left: auto;
+          right: 0;
+        }
+      }
+      @media (max-width: 740px) {
+        .date-range-panel {
+          position: fixed;
+          top: 50%;
+          left: 50%;
+          right: auto;
+          transform: translate(-50%, -50%);
+          width: min(94vw, 360px);
+          max-height: 88vh;
+          overflow-y: auto;
+          flex-direction: column;
+        }
+        .date-range-sidebar,
+        .date-range-panel__sidebar {
+          width: 100%;
+          border-right: none;
+          border-bottom: 1px solid #ede8df;
+          flex-direction: row;
+          flex-wrap: wrap;
+          padding: 12px;
+        }
+        .date-range-presets-title {
+          width: 100%;
+          margin-bottom: 6px;
+        }
+        .date-range-quick-list {
+          flex-direction: row;
+          flex-wrap: wrap;
+          width: 100%;
+        }
+        .date-range-quick-btn {
+          width: auto;
+          flex: 1 1 45%;
+          text-align: center;
+        }
+        .date-range-calendars,
+        .date-range-calendars-row {
+          grid-template-columns: 1fr;
+          gap: 20px;
+        }
+      }
+
+      /* Active filter chips */
+      .active-chips-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin: -14px 0 22px;
+      }
+      .active-chips-row[hidden] {
+        display: none !important;
+      }
+      .filter-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: var(--cream-100, #f4efe4);
+        border: 1px solid var(--line, #e6e0d3);
+        border-radius: 999px;
+        padding: 4px 10px;
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--ink-900, #241a17);
+      }
+      .filter-chip button {
+        border: none;
+        background: transparent;
+        color: var(--ink-500, #7a6d66);
+        font-size: 14px;
+        line-height: 1;
+        cursor: pointer;
+        padding: 0 2px;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .filter-chip button:hover {
+        color: var(--red-500, #c4444a);
+      }
+      .btn-clear-all-chips {
+        border: none;
+        background: transparent;
+        color: var(--maroon-700, #7a1f2e);
+        font-size: 12.5px;
+        font-weight: 600;
+        text-decoration: underline;
+        cursor: pointer;
+        padding: 4px 6px;
+      }
+
+      /* Live Badges and Progress */
+      .live-badge-count {
+        background: #e8590c;
+        color: #fff;
+        font-size: 11px;
+        font-weight: 700;
+        padding: 2px 7px;
+        border-radius: 999px;
+        margin-left: 8px;
+        vertical-align: middle;
+      }
+      .live-pulse-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: #fff4e5;
+        color: #b75500;
+        font-size: 11.5px;
+        font-weight: 700;
+        padding: 3px 9px;
+        border-radius: 999px;
+        border: 1px solid #ffd8a8;
+      }
+      .live-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: #e8590c;
+        box-shadow: 0 0 0 0 rgba(232, 89, 12, 0.7);
+        animation: live-pulse-anim 1.6s infinite;
+      }
+      @keyframes live-pulse-anim {
+        0% {
+          transform: scale(0.95);
+          box-shadow: 0 0 0 0 rgba(232, 89, 12, 0.7);
+        }
+        70% {
+          transform: scale(1);
+          box-shadow: 0 0 0 6px rgba(232, 89, 12, 0);
+        }
+        100% {
+          transform: scale(0.95);
+          box-shadow: 0 0 0 0 rgba(232, 89, 12, 0);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .live-dot {
+          animation: none;
+        }
+      }
+      .live-card {
+        background: var(--paper, #fff);
+        border: 1px solid var(--line, #e6e0d3);
+        border-radius: 14px;
+        padding: 18px 20px;
+        box-shadow: var(--shadow-card);
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        position: relative;
+        transition: border-color 0.2s;
+      }
+      .live-card:hover {
+        border-color: rgba(122, 31, 46, 0.3);
+      }
+      .live-card-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      .live-card-tags {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .live-time-left {
+        font-size: 12.5px;
+        font-weight: 600;
+        color: #b75500;
+      }
+      .live-card-title {
+        font-family: var(--font-display);
+        font-size: 18px;
+        font-weight: 700;
+        color: var(--ink-900, #241a17);
+        margin: 0;
+      }
+      .live-card-meta {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        font-size: 13px;
+        color: var(--ink-500, #7a6d66);
+        flex-wrap: wrap;
+      }
+      .live-progress-container {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .live-progress-bar {
+        width: 100%;
+        height: 7px;
+        background: #f1ebd8;
+        border-radius: 999px;
+        overflow: hidden;
+      }
+      .live-progress-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #7a1f2e, #d9a93b);
+        border-radius: 999px;
+        transition: width 0.3s ease;
+      }
+      .live-progress-label {
+        display: flex;
+        justify-content: space-between;
+        font-size: 12px;
+        color: var(--ink-500, #7a6d66);
+        font-weight: 500;
+      }
+      .badge-checked-in {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        background: #e6f4ea;
+        color: #137333;
+        font-size: 12px;
+        font-weight: 600;
+        padding: 4px 10px;
+        border-radius: 999px;
+        border: 1px solid #ceead6;
+      }
+      .badge-ended {
+        display: inline-flex;
+        align-items: center;
+        background: #e9ecef;
+        color: #495057;
+        font-size: 11px;
+        font-weight: 600;
+        padding: 2px 7px;
+        border-radius: 999px;
+      }
+      .badge-registered {
+        display: inline-flex;
+        align-items: center;
+        background: #fbf0e4;
+        color: var(--maroon-700, #7a1f2e);
+        border: 1px solid rgba(122, 31, 46, 0.2);
+        font-size: 11px;
+        font-weight: 600;
+        padding: 2px 7px;
+        border-radius: 999px;
+      }
+      .badge-cancelled {
+        display: inline-flex;
+        align-items: center;
+        background: #fde8e8;
+        color: #9b1c1c;
+        border: 1px solid rgba(155, 28, 28, 0.2);
+        font-size: 11px;
+        font-weight: 600;
+        padding: 2px 7px;
+        border-radius: 999px;
+      }
+      .badge-rescheduled {
+        display: inline-flex;
+        align-items: center;
+        background: #fef08a;
+        color: #713f12;
+        border: 1px solid rgba(113, 63, 18, 0.2);
+        font-size: 11px;
+        font-weight: 600;
+        padding: 2px 7px;
+        border-radius: 999px;
+      }
+      .live-card-actions {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 10px;
+        padding-top: 8px;
+        border-top: 1px solid #f4efe4;
+      }
+      .live-card-buttons {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .btn-live-qr {
+        background: var(--maroon-700, #7a1f2e);
+        color: #ffffff;
+        border: none;
+        border-radius: 8px;
+        padding: 7px 15px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        font-family: inherit;
+        transition: background 0.15s;
+      }
+      .btn-live-qr:hover {
+        background: var(--maroon-800, #661a29);
+      }
+      .btn-live-reg {
+        background: var(--maroon-700, #7a1f2e);
+        color: #ffffff;
+        border: none;
+        border-radius: 8px;
+        padding: 7px 15px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        font-family: inherit;
+      }
+      .btn-live-reg:disabled {
+        background: #b0a8a0;
+        cursor: not-allowed;
+      }
+      .btn-live-cancel {
+        background: #fbf0e4;
+        color: var(--maroon-700, #7a1f2e);
+        border: 1px solid var(--maroon-700, #7a1f2e);
+        border-radius: 8px;
+        padding: 6px 13px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        font-family: inherit;
+      }
+      .btn-live-details {
+        background: transparent;
+        border: 1px solid var(--line, #e6e0d3);
+        color: var(--ink-700, #4a3d38);
+        border-radius: 8px;
+        padding: 6px 13px;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        font-family: inherit;
+      }
+      .btn-live-details:hover {
+        background: var(--cream-100, #f4efe4);
+      }
+      .inline-qr-panel {
+        background: var(--cream-50, #faf7f1);
+        border: 1px dashed var(--gold-400, #d6ae4a);
+        border-radius: 12px;
+        padding: 16px;
+        text-align: center;
+        margin-top: 8px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+      }
+      .inline-qr-name {
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--ink-900, #241a17);
+      }
+      .inline-qr-num {
+        font-size: 12px;
+        color: var(--ink-500, #7a6d66);
+      }
+      .inline-qr-canvas-box {
+        background: #ffffff;
+        padding: 8px;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+      }
+      .inline-qr-note {
+        font-size: 11.5px;
+        color: var(--ink-500, #7a6d66);
+        margin: 0;
+      }
+      .live-details-expand {
+        background: var(--cream-50, #faf7f1);
+        border-radius: 8px;
+        padding: 12px 14px;
+        margin-top: 6px;
+        font-size: 13px;
+        line-height: 1.5;
+        color: var(--ink-700, #4a3d38);
+      }
+
+      /* Slots Progress Bar */
+      .slots-progress-wrap {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 6px;
+      }
+      .slots-progress-track {
+        width: 110px;
+        height: 6px;
+        background: #eae4d8;
+        border-radius: 999px;
+        overflow: hidden;
+      }
+      .slots-progress-fill {
+        height: 100%;
+        background: var(--gold-500, #c79a2b);
+        border-radius: 999px;
+      }
+      .slots-progress-text {
+        font-size: 12px;
+        color: var(--ink-500, #7a6d66);
+        font-weight: 500;
+      }
+      .btn-show-more-wrap {
+        display: flex;
+        justify-content: center;
+        margin-top: 20px;
+      }
+      .btn-show-more {
+        border: 1px solid var(--maroon-700, #7a1f2e);
+        background: #ffffff;
+        color: var(--maroon-700, #7a1f2e);
+        font-size: 13.5px;
+        font-weight: 600;
+        padding: 9px 24px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-family: inherit;
+        transition: background 0.15s, color 0.15s;
+      }
+      .btn-show-more:hover {
+        background: var(--maroon-700, #7a1f2e);
+        color: #ffffff;
+      }
+      .empty-state-card {
+        padding: 32px 20px;
+        text-align: center;
+        color: var(--ink-500, #7a6d66);
+      }
+      .empty-state-card p {
+        margin: 0 0 10px;
+        font-size: 14.5px;
+      }
+      .empty-next-up {
+        font-size: 13.5px;
+        color: var(--maroon-700, #7a1f2e);
+        font-weight: 600;
+      }
+      .empty-state-btn {
+        margin-top: 8px;
+        border: 1px solid var(--maroon-700, #7a1f2e);
+        border-radius: 8px;
+        background: transparent;
+        color: var(--maroon-700, #7a1f2e);
+        font-size: 13px;
+        font-weight: 600;
+        padding: 6px 16px;
+        cursor: pointer;
+        font-family: inherit;
+      }
+      .empty-state-btn:hover {
+        background: var(--maroon-700, #7a1f2e);
+        color: #fff;
+      }
     </style>
   </head>
   <body>
@@ -1568,6 +2394,7 @@
               <button
                 type="button"
                 class="filter-button"
+                id="sourceFilterBtn"
                 data-filter="source"
                 aria-expanded="false"
               >
@@ -1617,6 +2444,7 @@
               <button
                 type="button"
                 class="filter-button"
+                id="categoryFilterBtn"
                 data-filter="category"
                 aria-expanded="false"
               >
@@ -1705,35 +2533,91 @@
                 </button>
               </div>
             </div>
-            <div class="filter-dropdown filter-dropdown--date">
+            <div class="filter-dropdown filter-dropdown--date-range" id="dateRangeDropdown">
               <button
                 type="button"
                 class="filter-button"
-                data-filter="date"
+                id="dateRangeBtn"
+                data-filter="date-range"
                 aria-expanded="false"
+                aria-controls="dateRangePanel"
+                aria-haspopup="dialog"
               >
                 Date
               </button>
-              <div class="filter-menu" data-menu="date">
-                <button
-                  type="button"
-                  class="filter-option active"
-                  data-value="all"
-                >
-                  Any Date</button
-                ><button type="button" class="filter-option" data-value="today">
-                  Today</button
-                ><button type="button" class="filter-option" data-value="week">
-                  This Week</button
-                ><button type="button" class="filter-option" data-value="month">
-                  This Month
-                </button>
+              <div
+                class="date-range-panel"
+                id="dateRangePanel"
+                role="dialog"
+                aria-label="Date range selector"
+                hidden
+              >
+                <div class="date-range-sidebar">
+                  <div class="date-range-presets-title">QUICK RANGES</div>
+                  <div class="date-range-quick-list">
+                    <button type="button" class="date-range-quick-btn" data-preset="today">Today</button>
+                    <button type="button" class="date-range-quick-btn" data-preset="tomorrow">Tomorrow</button>
+                    <button type="button" class="date-range-quick-btn" data-preset="this_week">This week</button>
+                    <button type="button" class="date-range-quick-btn" data-preset="this_weekend">This weekend</button>
+                    <button type="button" class="date-range-quick-btn" data-preset="next_week">Next week</button>
+                    <button type="button" class="date-range-quick-btn" data-preset="this_month">This month</button>
+                    <button type="button" class="date-range-quick-btn" data-preset="next_month">Next month</button>
+                    <button type="button" class="date-range-quick-btn" data-preset="all">All time</button>
+                  </div>
+                </div>
+                <div class="date-range-main">
+                  <div class="date-range-nav-row">
+                    <button type="button" class="date-cal-nav-btn" id="calNavPrev" aria-label="Previous month">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                    </button>
+                    <button type="button" class="date-cal-nav-btn" id="calNavNext" aria-label="Next month">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    </button>
+                  </div>
+                  <div class="date-range-calendars">
+                    <div class="date-cal-month" id="calMonth1">
+                      <div class="date-cal-month__title" id="calTitle1"></div>
+                      <div class="date-cal-day-names">
+                        <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
+                      </div>
+                      <div class="date-cal-grid" id="calGrid1"></div>
+                    </div>
+                    <div class="date-cal-month" id="calMonth2">
+                      <div class="date-cal-month__title" id="calTitle2"></div>
+                      <div class="date-cal-day-names">
+                        <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
+                      </div>
+                      <div class="date-cal-grid" id="calGrid2"></div>
+                    </div>
+                  </div>
+                  <div class="date-range-bottom">
+                    <div class="date-range-inputs-row">
+                      <div class="date-range-input-group">
+                        <label for="dateRangeInputStart">From</label>
+                        <input type="text" id="dateRangeInputStart" placeholder="YYYY-MM-DD" autocomplete="off" />
+                      </div>
+                      <div class="date-range-input-group">
+                        <label for="dateRangeInputEnd">To</label>
+                        <input type="text" id="dateRangeInputEnd" placeholder="YYYY-MM-DD" autocomplete="off" />
+                      </div>
+                      <div class="date-range-val-msg" id="dateRangeValidationMsg" role="alert"></div>
+                    </div>
+                    <div class="date-range-footer">
+                      <button type="button" class="date-range-clear-btn" id="dateRangeClearBtn">Clear</button>
+                      <div class="date-range-actions">
+                        <button type="button" class="date-range-cancel-btn" id="dateRangeCancelBtn">Cancel</button>
+                        <button type="button" class="date-range-apply-btn" id="dateRangeApplyBtn">Apply</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
             <div class="filter-dropdown filter-dropdown--status">
               <button
                 type="button"
                 class="filter-button"
+                id="regFilterBtn"
                 data-filter="status"
                 aria-expanded="false"
               >
@@ -1749,27 +2633,27 @@
                 ><button
                   type="button"
                   class="filter-option"
-                  data-value="Available to Join"
+                  data-value="upcoming"
                 >
-                  Available to Join</button
+                  Upcoming</button
                 ><button
                   type="button"
                   class="filter-option"
-                  data-value="Registration Closed"
-                >
-                  Registration Closed</button
-                ><button
-                  type="button"
-                  class="filter-option"
-                  data-value="Cancelled"
+                  data-value="cancelled"
                 >
                   Cancelled</button
                 ><button
                   type="button"
                   class="filter-option"
-                  data-value="Rescheduled"
+                  data-value="rescheduled"
                 >
-                  Rescheduled
+                  Rescheduled</button
+                ><button
+                  type="button"
+                  class="filter-option"
+                  data-value="completed"
+                >
+                  Completed
                 </button>
               </div>
             </div>
@@ -1777,10 +2661,11 @@
               <button
                 type="button"
                 class="filter-button"
+                id="availFilterBtn"
                 data-filter="availability"
                 aria-expanded="false"
               >
-                Availability
+                Any Availability
               </button>
               <div class="filter-menu" data-menu="availability">
                 <button
@@ -1794,18 +2679,35 @@
                   class="filter-option"
                   data-value="available"
                 >
-                  Available</button
-                ><button type="button" class="filter-option" data-value="full">
-                  Full
+                  Available to Join</button
+                ><button
+                  type="button"
+                  class="filter-option"
+                  data-value="full"
+                >
+                  Full</button
+                ><button
+                  type="button"
+                  class="filter-option"
+                  data-value="closed"
+                >
+                  Registration Closed
                 </button>
               </div>
             </div>
           </div>
+          <div class="active-chips-row" id="activeChipsRow" style="display:none;">
+            <div class="active-chips-list" id="activeChipsList"></div>
+            <button type="button" class="clear-all-chips-btn" id="clearAllChipsBtn">Clear all</button>
+          </div>
+          <div class="filter-live-announcer sr-only" id="filterLiveAnnouncer" aria-live="polite" style="display:none !important;"></div>
         </section>
 
-        <section class="events-panel" aria-labelledby="happeningNowHeading">
+        <section class="events-panel" id="happeningNowPanel" aria-labelledby="happeningNowHeading">
           <div class="panel-head">
-            <h2 id="happeningNowHeading">Events Happening Now</h2>
+            <h2 id="happeningNowHeading">
+              Events Happening Now <span class="badge-count" id="happeningNowCountBadge" style="display:none;"></span>
+            </h2>
           </div>
           <div
             class="event-list"
@@ -1816,13 +2718,18 @@
 
         <section class="events-panel" aria-labelledby="allEventsHeading">
           <div class="panel-head">
-            <h2 id="allEventsHeading">All Events</h2>
+            <h2 id="allEventsHeading">
+              All Events <span class="showing-count" id="allEventsShowingCount" style="font-size:0.875rem; font-weight:400; color:var(--text-subtle, #666); margin-left:8px;"></span>
+            </h2>
           </div>
           <div
             class="event-list"
             id="upcomingEventsList"
             data-event-group="all-events"
           ></div>
+          <div class="all-events-show-more-wrap" id="allEventsShowMoreWrap" style="display:none; text-align:center; margin:24px 0 12px;">
+            <button type="button" class="btn-show-more" id="allEventsShowMoreBtn">Show more</button>
+          </div>
         </section>
       </main>
     </div>
@@ -1883,7 +2790,167 @@
     <script src="events-data.js"></script>
     <script src="notification-count.js"></script>
     <script src="../EventDetailsModal.js"></script>
-    <script>
+    <script type="module">
+      import { auth, rtdb, functions, isFirebaseConfigured, isRtdbConfigured } from "./firebaseConfig.js";
+      import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+      import {
+        ref,
+        onValue,
+        off,
+        query,
+        orderByChild,
+        startAt,
+        endAt,
+      } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+      import { httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-functions.js";
+
+      /* ---------------------------------------------------------
+         STATE
+      --------------------------------------------------------- */
+      let currentUid = null;
+      let serverTimeOffset = 0;
+      let permanentQrToken = "";
+
+      const studentProfile = {
+        firstName: "Student",
+        middleName: "",
+        lastName: "",
+        fullName: "Student",
+        studentNo: "2025-00790-BN-1",
+        organization: "IBITS",
+        department: "BSIT",
+      };
+
+      const rawEventsMap = new Map(); // id -> normalized event
+      const registeredEventIds = new Set();
+      const attendanceMap = new Map(); // eventId -> attendance data
+      const attendanceListeners = new Map(); // eventId -> unsub function
+      let openQrEventId = null;
+      const openDetailsEventIds = new Set();
+
+      let activePublicEventsRef = null;
+      let activePublicEventsListener = null;
+      let tickInterval = null;
+
+      // Filter State
+      const filterState = {
+        q: "",
+        source: "All Sources",
+        category: "All Categories",
+        from: "", // YYYY-MM-DD
+        to: "", // YYYY-MM-DD
+        quickPreset: "", // "today" | "tomorrow" | "this_week" | "this_weekend" | "next_week" | "this_month" | "next_month" | "all"
+        status: "all", // "all" | "upcoming" | "cancelled" | "rescheduled" | "completed"
+        reg: "all", // legacy alias
+        avail: "all", // "all" | "available" | "full" | "closed"
+        showCount: 20,
+      };
+
+      // Date Range Picker State
+      const datePickerState = {
+        viewYear: 2026,
+        viewMonth: 9, // 0-indexed: 9 = October
+        pendingStart: "", // YYYY-MM-DD
+        pendingEnd: "", // YYYY-MM-DD
+      };
+
+      /* ---------------------------------------------------------
+         HELPERS & FORMATTERS
+      --------------------------------------------------------- */
+      function escapeHTML(value) {
+        return String(value ?? "").replace(
+          /[&<>"']/g,
+          (c) =>
+            ({
+              "&": "&amp;",
+              "<": "&lt;",
+              ">": "&gt;",
+              '"': "&quot;",
+              "'": "&#39;",
+            })[c],
+        );
+      }
+
+      function getNow() {
+        return Date.now() + serverTimeOffset;
+      }
+
+      function toPhDateStr(timestampOrDate) {
+        if (!timestampOrDate) return "";
+        const d = typeof timestampOrDate === "number" ? new Date(timestampOrDate) : new Date(timestampOrDate);
+        if (isNaN(d.getTime())) return "";
+        return new Intl.DateTimeFormat("en-CA", {
+          timeZone: "Asia/Manila",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        }).format(d);
+      }
+
+      function formatPhDateDisplay(dateStr) {
+        if (!dateStr) return "";
+        const parts = String(dateStr).slice(0, 10).split("-").map(Number);
+        if (parts.length < 3 || isNaN(parts[0])) return dateStr;
+        const d = new Date(parts[0], parts[1] - 1, parts[2]);
+        return d.toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        });
+      }
+
+      function formatTime(timestamp) {
+        if (!timestamp) return "TBA";
+        const d = new Date(timestamp);
+        return d.toLocaleTimeString("en-US", {
+          timeZone: "Asia/Manila",
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: true,
+        });
+      }
+
+      function formatWeekday(timestamp) {
+        if (!timestamp) return "";
+        const d = new Date(timestamp);
+        return d.toLocaleDateString("en-US", {
+          timeZone: "Asia/Manila",
+          weekday: "short",
+        });
+      }
+
+      function formatDuration(ms) {
+        if (ms <= 0) return "0m";
+        const totalMinutes = Math.floor(ms / (1000 * 60));
+        const hours = Math.floor(totalMinutes / 60);
+        const minutes = totalMinutes % 60;
+        if (hours > 0 && minutes > 0) return `${hours}h ${minutes}m`;
+        if (hours > 0) return `${hours}h`;
+        return `${minutes}m`;
+      }
+
+      function announce(message) {
+        const announcer = document.getElementById("filterLiveAnnouncer");
+        if (announcer) {
+          announcer.textContent = message;
+        }
+      }
+
+      function showToast(message) {
+        const toast = document.getElementById("toast");
+        if (!toast) return;
+        toast.textContent = message;
+        toast.classList.add("is-visible");
+        window.clearTimeout(showToast.timer);
+        showToast.timer = window.setTimeout(
+          () => toast.classList.remove("is-visible"),
+          2500,
+        );
+      }
+
+      /* ---------------------------------------------------------
+         USER PROFILE & SIDEBAR
+      --------------------------------------------------------- */
       function hydrateUserProfile() {
         const user =
           JSON.parse(localStorage.getItem("recovibeCurrentUser") || "null") ||
@@ -1904,611 +2971,1813 @@
           storedFullName.split(/\s+/).filter(Boolean)[0] ||
           nameFromProfile.split(/\s+/).filter(Boolean)[0] ||
           "";
-        const avatarFallback = [
-          user.username,
-          user.studentNumber,
-          user.studentId,
-          user.email,
-        ]
-          .map((value) => String(value || "").trim())
-          .find(Boolean) || "";
         const avatarLetter =
-          Array.from(firstName || avatarFallback)[0]?.toLocaleUpperCase() ||
-          "S";
+          Array.from(firstName || "S")[0]?.toLocaleUpperCase() || "S";
         const organization = String(user.organization || "").trim();
         const role =
           organization && organization.toLowerCase() !== "none"
             ? organization
             : "Student";
 
-        document.querySelectorAll(".user-name").forEach((element) => {
-          element.textContent = displayName;
+        studentProfile.fullName = displayName;
+        studentProfile.firstName = firstName;
+        if (user.studentNo || user.studentNumber) {
+          studentProfile.studentNo = String(user.studentNo || user.studentNumber).trim();
+        }
+
+        document.querySelectorAll(".user-name").forEach((el) => {
+          el.textContent = displayName;
         });
-        document.querySelectorAll(".user-role").forEach((element) => {
-          element.textContent = role;
+        document.querySelectorAll(".user-role").forEach((el) => {
+          el.textContent = role;
         });
-        document.querySelectorAll(".avatar").forEach((element) => {
-          element.textContent = avatarLetter;
+        document.querySelectorAll(".avatar").forEach((el) => {
+          el.textContent = avatarLetter;
         });
-        document.querySelectorAll("#userFirstName").forEach((element) => {
-          element.textContent = firstName;
+        document.querySelectorAll("#userFirstName").forEach((el) => {
+          el.textContent = firstName;
         });
       }
 
-      (function wireSidebar() {
-        const EVENTS = Array.isArray(window.RECOVIBE_EVENTS)
-          ? window.RECOVIBE_EVENTS
-          : [];
-        hydrateUserProfile();
+      function initSidebarToggle() {
         const sidebar = document.getElementById("sidebar");
         const collapseBtn = document.getElementById("collapseBtn");
-        const today = new Date();
+        if (!sidebar || !collapseBtn) return;
 
-        function escapeHTML(value) {
-          return String(value).replace(
-            /[&<>"']/g,
-            (character) =>
-              ({
-                "&": "&amp;",
-                "<": "&lt;",
-                ">": "&gt;",
-                '"': "&quot;",
-                "'": "&#39;",
-              })[character],
-          );
-        }
-
-        function renderCurrentDate() {
-          const todayDateEl = document.getElementById("todayDate");
-          if (!todayDateEl) return;
-          todayDateEl.textContent = today.toLocaleDateString("en-US", {
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-          });
-        }
-
-        const filterState = {
-          view: "all",
-          source: "All Sources",
-          category: "All Categories",
-          date: "all",
-          status: "all",
-          availability: "all",
-        };
-        const participationStorageKey = "recovibeParticipations";
-
-        const categoryAliases = {
-          "Academic & Learning": ["academic"],
-          "Tech & Innovation": ["tech", "innovation"],
-          "Leadership & Career": [
-            "leadership",
-            "career",
-            "student development",
-          ],
-          "Sports & Fitness": ["sports", "fitness"],
-          "Music & Entertainment": ["music", "entertainment"],
-          "Orgs & Student Acts": ["org", "organization", "student act"],
-          "Social Events": ["social"],
-          "Community & Outreach": ["community", "outreach"],
-          Competitions: ["competition", "hackathon"],
-          "Seminars & Workshops": ["seminar", "workshop"],
-          "Arts & Culture": ["arts", "culture"],
-          "University & Campuses": ["university", "campus"],
-        };
-
-        function normalizeSource(source) {
-          const value = String(source || "").trim().toLowerCase();
-          if (/\bcsc\b/.test(value)) return "CSC";
-          if (/teacher|faculty/.test(value)) return "Teacher / Faculty";
-          if (/organization|organizational|ibits|event organizer/.test(value))
-            return "Organizational";
-          if (/external|admin|other/.test(value)) return "Others / External";
-          if (/pup|campus|cite/.test(value)) return "PUP Official";
-          return "Others / External";
-        }
-        EVENTS.forEach((event) => {
-          event.source = normalizeSource(
-            event.source || event.eventSource || event.campus || event.office,
-          );
-        });
-
-        function getParticipationIds() {
-          try {
-            const saved = JSON.parse(
-              localStorage.getItem(participationStorageKey) || "[]",
-            );
-            return new Set(Array.isArray(saved) ? saved : []);
-          } catch (error) {
-            return new Set();
-          }
-        }
-
-        function getEventSlots(event) {
-          if (event.capacityMode === "N/A") return Infinity;
-          try {
-            const savedSlots = JSON.parse(
-              localStorage.getItem("recovibeEventSlots") || "{}",
-            );
-            const value = savedSlots[String(event.id)];
-            return Math.max(
-              0,
-              Number(
-                value !== undefined
-                  ? value
-                  : (event.slotsOpen ?? event.slots ?? 0),
-              ) || 0,
-            );
-          } catch (error) {
-            return Math.max(
-              0,
-              Number(event.slotsOpen ?? event.slots ?? 0) || 0,
-            );
-          }
-        }
-
-        function getPreferredCategory(category) {
-          const normalized = String(category || "").toLowerCase();
-          return (
-            Object.keys(categoryAliases).find((label) =>
-              categoryAliases[label].some((value) =>
-                normalized.includes(value),
-              ),
-            ) || category
-          );
-        }
-
-        function getCategoryClass(category) {
-          const categoryClassNames = {
-            "Academic & Learning": "academic",
-            "Tech & Innovation": "tech",
-            "Leadership & Career": "leadership",
-            "Sports & Fitness": "sports",
-            "Music & Entertainment": "music",
-            "Orgs & Student Acts": "orgs",
-            "Social Events": "social",
-            "Community & Outreach": "community",
-            Competitions: "competitions",
-            "Seminars & Workshops": "seminars",
-            "Arts & Culture": "arts",
-            "University & Campuses": "university",
-          };
-          return (
-            categoryClassNames[getPreferredCategory(category)] || "academic"
-          );
-        }
-
-        function eventMatches(event) {
-          const query = document
-            .getElementById("searchInput")
-            .value.trim()
-            .toLowerCase();
-          const categoryValues = categoryAliases[filterState.category] || [];
-          const eventDate = new Date(`${event.dateISO}T00:00:00`);
-          const todayDate = new Date();
-          todayDate.setHours(0, 0, 0, 0);
-          const weekStart = new Date(todayDate);
-          weekStart.setDate(todayDate.getDate() - todayDate.getDay());
-          const weekEnd = new Date(weekStart);
-          weekEnd.setDate(weekStart.getDate() + 7);
-          const matchesView =
-            filterState.view === "all" || getParticipationIds().has(event.id);
-          const matchesSource =
-            filterState.source === "All Sources" ||
-            normalizeSource(event.source) === filterState.source;
-          const eventCategory = String(event.category || "").toLowerCase();
-          const matchesCategory =
-            filterState.category === "All Categories" ||
-            categoryValues.some((value) => eventCategory.includes(value));
-          const matchesDate =
-            filterState.date === "all" ||
-            (filterState.date === "today" &&
-              eventDate.getTime() === todayDate.getTime()) ||
-            (filterState.date === "week" &&
-              eventDate >= weekStart &&
-              eventDate < weekEnd) ||
-            (filterState.date === "month" &&
-              eventDate.getFullYear() === todayDate.getFullYear() &&
-              eventDate.getMonth() === todayDate.getMonth()) ||
-            (filterState.date === "upcoming" && eventDate >= todayDate);
-          const rawStatus = String(event.status || "").trim().toLowerCase();
-          const availableSlots = getEventSlots(event);
-          const eventStatus =
-            rawStatus === "cancelled" || rawStatus === "canceled"
-              ? "Cancelled"
-              : rawStatus === "rescheduled"
-                ? "Rescheduled"
-                : rawStatus === "registration closed" || availableSlots <= 0
-                  ? "Registration Closed"
-                  : "Available to Join";
-          const matchesStatus =
-            filterState.status === "all" || eventStatus === filterState.status;
-          const openSlots = getEventSlots(event);
-          const matchesAvailability =
-            filterState.availability === "all" ||
-            (filterState.availability === "available" && openSlots > 20) ||
-            (filterState.availability === "full" && openSlots <= 0);
-          const matchesQuery =
-            !query ||
-            [
-              event.title,
-              event.location,
-              event.source,
-              event.tag,
-              event.category,
-            ].some((value) =>
-              String(value || "")
-                .toLowerCase()
-                .includes(query),
-            );
-          return (
-            matchesView &&
-            matchesSource &&
-            matchesCategory &&
-            matchesDate &&
-            matchesStatus &&
-            matchesAvailability &&
-            matchesQuery
-          );
-        }
-
-        function renderEvent(event) {
-          const displayDate = new Date(`${event.dateISO}T00:00:00`);
-          const displayMonth = displayDate
-            .toLocaleDateString("en-US", { month: "short" })
-            .toUpperCase();
-          const preferredCategory = getPreferredCategory(
-            event.category || "General",
-          );
-          return `<article class="event-card" id="event-card-${event.id}" data-event-id="${event.id}">
-        <div class="event-date" id="event-date-${event.id}" data-event-field="date"><span class="mon" id="event-month-${event.id}">${displayMonth}</span><span class="day" id="event-day-${event.id}">${displayDate.getDate()}</span><span class="year" id="event-year-${event.id}">${displayDate.getFullYear()}</span></div>
-        <div class="event-body">
-          <h3 class="event-title" id="event-title-${event.id}" data-event-field="title">${escapeHTML(event.title)}</h3>
-          <p class="event-source" id="event-source-${event.id}" data-event-field="source">${escapeHTML(normalizeSource(event.source))}</p>
-          <div class="event-meta" id="event-meta-${event.id}" data-event-field="schedule"><span id="event-time-${event.id}" data-event-field="time">🕐 ${escapeHTML(event.time || "Schedule to be announced")}</span><span id="event-location-${event.id}" data-event-field="location">🏛 ${escapeHTML(event.location || "Location TBD")} · ${escapeHTML(event.room || "Room TBD")}</span></div>
-          <div class="event-category-row" id="event-category-row-${event.id}"><span class="category category-${getCategoryClass(event.category)}" id="event-category-${event.id}" data-event-field="category">${escapeHTML(preferredCategory)}</span></div>
-          <div class="event-foot" id="event-footer-${event.id}"><span class="slots" id="event-slots-${event.id}" data-event-field="participants">${event.capacityMode === "N/A" ? "No capacity limit" : `${getEventSlots(event)} of ${event.maxSlots ?? event.capacity ?? 0} Slots Open`}</span><button type="button" class="btn-outline" id="event-details-button-${event.id}" data-event-id="${event.id}" aria-controls="studentEventDetailsDialog">View Details</button></div>
-        </div>
-      </article>`;
-        }
-
-        function getStatusHeadingLabel() {
-          return "All Events";
-        }
-
-        function getHappeningNowEvents() {
-          const todayDate = new Date();
-          todayDate.setHours(0, 0, 0, 0);
-          return EVENTS.filter((event) => {
-            const eventDate = new Date(`${event.dateISO}T00:00:00`);
-            return (
-              !Number.isNaN(eventDate.getTime()) &&
-              eventDate.getTime() === todayDate.getTime()
-            );
-          });
-        }
-
-        function renderEvents() {
-          const filterMatches = EVENTS.filter(eventMatches);
-          const currentEvents = getHappeningNowEvents().filter(eventMatches);
-          const currentIds = new Set(currentEvents.map((event) => event.id));
-          const upcomingEvents = filterMatches.filter(
-            (event) => !currentIds.has(event.id),
-          );
-          const current = document.getElementById("happeningNowList");
-          const upcoming = document.getElementById("upcomingEventsList");
-          current.innerHTML = currentEvents.length
-            ? currentEvents.map(renderEvent).join("")
-            : "<p>No events happening now.</p>";
-          upcoming.innerHTML = upcomingEvents.length
-            ? upcomingEvents.map(renderEvent).join("")
-            : "<p>No events match your filters.</p>";
-        }
-
-        function closeFilterMenus() {
-          document
-            .querySelectorAll(".filter-menu.show")
-            .forEach((menu) => menu.classList.remove("show"));
-          document
-            .querySelectorAll(".filter-button[aria-expanded='true']")
-            .forEach((button) => button.setAttribute("aria-expanded", "false"));
-        }
-
-        function setupFilterDropdowns() {
-          document.querySelectorAll(".filter-dropdown").forEach((dropdown) => {
-            const button = dropdown.querySelector(".filter-button");
-            const menu = dropdown.querySelector(".filter-menu");
-            const filterName = button.dataset.filter;
-            button.addEventListener("click", (event) => {
-              event.stopPropagation();
-              const isOpen = menu.classList.contains("show");
-              closeFilterMenus();
-              if (!isOpen) {
-                menu.classList.add("show");
-                button.setAttribute("aria-expanded", "true");
-              }
-            });
-            menu.addEventListener("click", (event) => {
-              const option = event.target.closest(".filter-option");
-              if (!option) return;
-              event.stopPropagation();
-              filterState[filterName] = option.dataset.value;
-              menu
-                .querySelectorAll(".filter-option")
-                .forEach((item) =>
-                  item.classList.toggle("active", item === option),
-                );
-              button.childNodes[0].textContent = option.textContent;
-              closeFilterMenus();
-              renderEvents();
-            });
-          });
-          document.addEventListener("click", (event) => {
-            if (!event.target.closest(".filter-dropdown")) closeFilterMenus();
-          });
-          document.addEventListener("keydown", (event) => {
-            if (event.key === "Escape") closeFilterMenus();
-          });
-        }
-
-        let selectedEventId = null;
-
-        function renderEventDetailMarkup(event) {
-          const required =
-            (event.requirements && event.requirements.required) || [];
-          const recommended =
-            (event.requirements && event.requirements.recommended) || [];
-          const reminders = event.reminders || [];
-          const details = event.detailedInfo || [];
-          const locationLabel = event.location || "Campus";
-          const capacity = event.capacity || event.maxSlots || event.slots || 0;
-          const registrationStatus =
-            event.registrationInfo || event.status || "Available to Join";
-          const deadline = event.registrationDeadline || "TBA";
-
-          const requiredList = required
-            .map((item) => `<li>${escapeHTML(item)}</li>`)
-            .join("");
-          const recommendedList = recommended
-            .map((item) => `<li>${escapeHTML(item)}</li>`)
-            .join("");
-          const reminderList = reminders
-            .map((item) => `<li>${escapeHTML(item)}</li>`)
-            .join("");
-          const detailList = details
-            .map((item) => `<li>${escapeHTML(item)}</li>`)
-            .join("");
-
-          return `
-        <article class="event-details" id="event-details-${event.id}" data-event-id="${event.id}">
-        <div class="detail-topline" id="event-details-header-${event.id}">
-          <div class="detail-header-copy">
-            <div class="detail-source" id="event-detail-source-${event.id}" data-event-field="source">Event Source: ${escapeHTML(event.source || locationLabel)}</div>
-            <h3 id="event-detail-title-${event.id}" data-event-field="title">${escapeHTML(event.title)}</h3>
-          </div>
-        </div>
-        <div class="detail-meta" id="event-detail-meta-${event.id}">
-          <span class="detail-meta-item" id="event-detail-time-${event.id}" data-event-field="time"><span class="detail-meta-icon">🕐</span><span>${escapeHTML(event.time || "Schedule to be announced")}</span></span>
-          <span class="detail-meta-item" id="event-detail-location-${event.id}" data-event-field="location"><span class="detail-meta-icon">🏛</span><span>${escapeHTML(event.location || locationLabel)} · ${escapeHTML(event.room || "Room TBD")}</span></span>
-        </div>
-        <div class="modal-tag-wrap" id="event-detail-category-wrap-${event.id}"><span class="modal-tag" id="event-detail-category-${event.id}" data-event-field="category">${escapeHTML(getPreferredCategory(event.category || "General"))}</span></div>
-        <div class="detail-grid">
-          <div class="detail-panel" id="event-detail-primary-${event.id}">
-            <div class="detail-section" id="event-detail-about-${event.id}">
-              <h4>About the Event:</h4>
-              <p class="event-description" id="event-detail-description-${event.id}" data-event-field="description">${escapeHTML(event.desc)}</p>
-            </div>
-            <div class="detail-section" id="event-detail-requirements-${event.id}">
-              <h4>Requirements:</h4>
-              <div class="requirements-box">
-                <h5>Required:</h5>
-                <ul>${requiredList || "<li>None specified.</li>"}</ul>
-                <h5>Recommended:</h5>
-                <ul>${recommendedList || "<li>None specified.</li>"}</ul>
-              </div>
-            </div>
-            <div class="detail-section" id="event-detail-reminders-${event.id}">
-              <h4>Important Reminders:</h4>
-              <ul class="reminder-list">${reminderList || "<li>None.</li>"}</ul>
-            </div>
-            <button type="button" class="participate-btn" id="event-detail-participate-${event.id}" data-event-action="participate">Participate</button>
-          </div>
-          <div class="detail-panel detail-panel--secondary" id="event-detail-secondary-${event.id}">
-            <div class="detail-copy-block" id="event-detail-information-${event.id}">
-              <h4>Detailed Event Information:</h4>
-              <p id="event-detail-category-value-${event.id}">Event Category: <strong>${escapeHTML(getPreferredCategory(event.category || "General"))}</strong></p>
-              <p id="event-detail-capacity-${event.id}" data-event-field="capacity">Event Capacity: <strong>${capacity} Participants</strong></p>
-            </div>
-            <div class="detail-copy-block" id="event-detail-registration-${event.id}">
-              <h4>Registration Details:</h4>
-              <p id="event-detail-deadline-${event.id}" data-event-field="registration-deadline">Registration Deadline: <strong>${escapeHTML(deadline)}</strong></p>
-              <p id="event-detail-status-${event.id}" data-event-field="registration-status">Your Status: <strong>${escapeHTML(registrationStatus)}</strong></p>
-            </div>
-            <div class="detail-copy-block" id="event-detail-focus-${event.id}">
-              <h4>Focus Areas:</h4>
-              <ul class="bullets" id="event-detail-focus-list-${event.id}">${detailList || "<li>General event engagement.</li>"}</ul>
-            </div>
-          </div>
-        </div>
-        </article>
-      `;
-        }
-
-        function openEventModal(id) {
-          const event = EVENTS.find((item) => item.id === id);
-          if (!event) return;
-          selectedEventId = event.id;
-          window.RecovibeStudentEventDetails?.open(event);
-        }
-
-        function closeModal() {
-          document.getElementById("modalOverlay").classList.remove("is-open");
-          selectedEventId = null;
-        }
-
-        function openConfirmModal() {
-          const event = EVENTS.find((item) => item.id === selectedEventId);
-          if (!event) return;
-          document.getElementById("confirmEventName").textContent = event.title;
-          document.getElementById("confirmOverlay").classList.add("is-open");
-        }
-
-        function closeConfirmModal() {
-          document.getElementById("confirmOverlay").classList.remove("is-open");
-        }
-
-        renderCurrentDate();
-        renderEvents();
-        document.addEventListener("recovibeParticipationChanged", renderEvents);
-        window.addEventListener("storage", (event) => {
-          if (
-            event.key === "recovibeEventSlots" ||
-            event.key === "recovibeParticipations"
-          ) {
-            renderEvents();
-          }
-        });
-
-        function setSidebarCollapsed(collapsed) {
+        function setCollapsed(collapsed) {
           sidebar.classList.toggle("is-collapsed", collapsed);
+          collapseBtn.setAttribute("aria-expanded", String(!collapsed));
+          collapseBtn.setAttribute(
+            "aria-label",
+            collapsed ? "Expand sidebar" : "Collapse sidebar",
+          );
+          collapseBtn.setAttribute(
+            "title",
+            collapsed ? "Expand sidebar" : "Collapse sidebar",
+          );
           localStorage.setItem("sidebarCollapsed", String(collapsed));
-          if (collapseBtn) {
-            collapseBtn.setAttribute("aria-expanded", String(!collapsed));
-            collapseBtn.setAttribute(
-              "aria-label",
-              collapsed ? "Expand sidebar" : "Collapse sidebar",
-            );
-            collapseBtn.setAttribute(
-              "title",
-              collapsed ? "Expand sidebar" : "Collapse sidebar",
-            );
-          }
         }
 
-        setSidebarCollapsed(
-          window.matchMedia("(max-width: 860px)").matches
+        const isMobile = window.matchMedia("(max-width: 860px)").matches;
+        setCollapsed(
+          isMobile
             ? false
             : localStorage.getItem("sidebarCollapsed") === "true",
         );
         requestAnimationFrame(() => sidebar.classList.add("is-ready"));
-
-        if (collapseBtn) {
-          collapseBtn.addEventListener("click", () => {
-            if (!window.matchMedia("(max-width: 860px)").matches) {
-              setSidebarCollapsed(!sidebar.classList.contains("is-collapsed"));
-            }
-          });
-        }
-
-        document.querySelectorAll(".nav-item[data-view]").forEach((item) => {
-          item.addEventListener("click", (e) => {
-            if (item.getAttribute("href") === "#") e.preventDefault();
-            document
-              .querySelectorAll(".nav-item[data-view]")
-              .forEach((n) => n.classList.remove("is-active"));
-            item.classList.add("is-active");
-            if (item.getAttribute("href") === "#") {
-              showToast(`${item.dataset.label} — coming soon in this preview.`);
-            }
-          });
-        });
-
-        document
-          .querySelector(".nav-item.logout")
-          .addEventListener("click", (e) => {
-            e.preventDefault();
-            showToast("Logged out.");
-          });
-
-        setupFilterDropdowns();
-        document
-          .getElementById("searchInput")
-          .addEventListener("input", renderEvents);
-        document.addEventListener("click", (e) => {
-          const button = e.target.closest("[data-event-id]");
-          if (button) openEventModal(button.dataset.eventId);
-        });
-        document.addEventListener("recovibeParticipationChanged", (event) => {
-          const changed = EVENTS.find(
-            (item) => String(item.id) === String(event.detail.eventId),
-          );
-          if (changed) changed.slotsOpen = event.detail.slotsOpen;
-          renderEvents();
-        });
-        window.addEventListener("storage", (event) => {
-          if (
-            event.key !== participationStorageKey &&
-            event.key !== "recovibeEventSlots"
-          )
-            return;
-          EVENTS.forEach((item) => {
-            item.slotsOpen = getEventSlots(item);
-          });
-          renderEvents();
-        });
-        document
-          .getElementById("modalClose")
-          .addEventListener("click", closeModal);
-        document
-          .getElementById("modalOverlay")
-          .addEventListener("click", (e) => {
-            if (e.target.id === "modalOverlay") closeModal();
-          });
-        document
-          .getElementById("confirmClose")
-          .addEventListener("click", closeConfirmModal);
-        document
-          .getElementById("confirmOverlay")
-          .addEventListener("click", (e) => {
-            if (e.target.id === "confirmOverlay") closeConfirmModal();
-          });
-        document.addEventListener("keydown", (e) => {
-          if (e.key === "Escape") {
-            closeModal();
-            closeConfirmModal();
+        collapseBtn.addEventListener("click", () => {
+          if (!window.matchMedia("(max-width: 860px)").matches) {
+            setCollapsed(!sidebar.classList.contains("is-collapsed"));
           }
         });
-        document
-          .getElementById("confirmCancel")
-          .addEventListener("click", () => {
-            closeConfirmModal();
-          });
-        document
-          .getElementById("confirmParticipate")
-          .addEventListener("click", () => {
-            const title =
-              document.getElementById("confirmEventName").textContent;
-            const participationIds = getParticipationIds();
-            participationIds.add(selectedEventId);
-            localStorage.setItem(
-              participationStorageKey,
-              JSON.stringify([...participationIds]),
-            );
-            closeConfirmModal();
-            renderEvents();
-            showToast(`You joined "${title}".`);
-          });
+      }
 
-        const requestedEventId = new URLSearchParams(
-          window.location.search,
-        ).get("event");
-        if (
-          requestedEventId &&
-          EVENTS.some((event) => event.id === requestedEventId)
-        ) {
-          openEventModal(requestedEventId);
+      /* ---------------------------------------------------------
+         QR TOKEN & RENDERING
+      --------------------------------------------------------- */
+      async function getQRCodeLib() {
+        if (window.QRCode) return window.QRCode;
+        try {
+          const mod = await import("https://esm.sh/qrcode@1.5.4");
+          return mod.default || mod;
+        } catch {
+          if (window.QRCode) return window.QRCode;
+          throw new Error("QR library unavailable.");
+        }
+      }
+
+      async function getStudentQrToken() {
+        if (permanentQrToken) return permanentQrToken;
+        const cached = localStorage.getItem("recovibe_permanent_qr_token");
+        if (cached) {
+          permanentQrToken = cached;
+          return cached;
         }
 
-        function showToast(message) {
-          const toast = document.getElementById("toast");
-          toast.textContent = message;
-          toast.classList.add("is-visible");
-          window.clearTimeout(showToast.timer);
-          showToast.timer = window.setTimeout(
-            () => toast.classList.remove("is-visible"),
-            2400,
+        if (functions && currentUid && isFirebaseConfigured) {
+          try {
+            const callable = httpsCallable(functions, "getMyQrToken");
+            const res = await callable();
+            if (res?.data?.token) {
+              permanentQrToken = res.data.token;
+              localStorage.setItem("recovibe_permanent_qr_token", permanentQrToken);
+              return permanentQrToken;
+            }
+          } catch (err) {
+            console.warn("getMyQrToken notice:", err);
+          }
+        }
+
+        const fallback = `${currentUid || studentProfile.studentNo}.1.fallback_signed_token`;
+        permanentQrToken = fallback;
+        localStorage.setItem("recovibe_permanent_qr_token", fallback);
+        return fallback;
+      }
+
+      async function renderQrToCanvas(canvas, token) {
+        if (!canvas || !token) return;
+        try {
+          const lib = await getQRCodeLib();
+          await lib.toCanvas(canvas, token, {
+            width: 160,
+            margin: 2,
+            color: { dark: "#000000", light: "#ffffff" },
+            errorCorrectionLevel: "M",
+          });
+        } catch (err) {
+          console.error("renderQrToCanvas error:", err);
+        }
+      }
+
+      /* ---------------------------------------------------------
+         EVENT NORMALIZATION & CLASSIFICATION
+      --------------------------------------------------------- */
+      function normalizeSource(source) {
+        const val = String(source || "").trim().toLowerCase();
+        if (/\bcsc\b/.test(val)) return "CSC";
+        if (/teacher|faculty/.test(val)) return "Teacher / Faculty";
+        if (/organization|organizational|ibits|event organizer/.test(val)) return "Organizational";
+        if (/external|admin|other/.test(val)) return "Others / External";
+        if (/pup|campus|cite/.test(val)) return "PUP Official";
+        return "Others / External";
+      }
+
+      function normalizeEvent(id, data) {
+        let startMs = 0;
+        if (typeof data.startAt === "number") {
+          startMs = data.startAt;
+        } else if (data.startAt) {
+          startMs = new Date(data.startAt).getTime();
+        } else if (data.dateISO || data.date) {
+          const dateStr = String(data.dateISO || data.date).slice(0, 10);
+          const timeStr = String(data.time || "09:00 AM");
+          const parsed = Date.parse(`${dateStr} ${timeStr}`);
+          startMs = isNaN(parsed) ? new Date(dateStr).getTime() : parsed;
+        }
+
+        let endMs = 0;
+        if (typeof data.endAt === "number") {
+          endMs = data.endAt;
+        } else if (data.endAt) {
+          endMs = new Date(data.endAt).getTime();
+        } else if (data.eventEndDate || data.endDate) {
+          const dateStr = String(data.eventEndDate || data.endDate).slice(0, 10);
+          endMs = new Date(dateStr).getTime();
+        }
+        if (!endMs && startMs) {
+          endMs = startMs + 3 * 3600 * 1000;
+        }
+
+        const capacityVal = data.capacity !== undefined ? data.capacity : (data.maxCapacity || null);
+        const capacityNum = (capacityVal !== null && capacityVal !== undefined && !isNaN(Number(capacityVal)) && Number(capacityVal) > 0)
+          ? Number(capacityVal)
+          : null;
+
+        const regCount = typeof data.registeredCount === "number" ? data.registeredCount : (Number(data.registeredCount) || 0);
+
+        return {
+          id: String(id),
+          eventId: String(id),
+          name: data.name || data.title || "Untitled Event",
+          title: data.name || data.title || "Untitled Event",
+          venue: data.venue || data.location || "PUP Biñan Campus",
+          location: data.venue || data.location || "PUP Biñan Campus",
+          category: data.category || "University & Campuses",
+          source: normalizeSource(data.source || data.eventSource),
+          startAt: startMs,
+          endAt: endMs,
+          capacity: capacityNum,
+          registeredCount: regCount,
+          checkedInCount: typeof data.checkedInCount === "number" ? data.checkedInCount : undefined,
+          organizerName: data.organizerName || data.organizer || "Event Organizer",
+          organizerUid: data.organizerUid || data.organizerId || "",
+          description: data.description || data.eventDescription || "",
+          status: String(data.status || "published").toLowerCase(),
+          raw: data,
+        };
+      }
+
+      function getEventClassification(ev, now) {
+        if (ev.status === "completed") return "ended";
+        if (now < ev.startAt) return "upcoming";
+        if (now >= ev.endAt) return "ended";
+        return "live";
+      }
+
+      function hasOpenSlots(ev) {
+        if (ev.capacity === null) return true;
+        return ev.capacity - (ev.registeredCount || 0) > 0;
+      }
+
+      /* ---------------------------------------------------------
+         FILTER MATCHING & LOGIC
+      --------------------------------------------------------- */
+      function matchesFilters(ev, isLiveSection = false) {
+        const now = getNow();
+        const classification = getEventClassification(ev, now);
+
+        const evStatus = String(ev.status || "").toLowerCase();
+        const isCancelled = evStatus === "cancelled" || evStatus === "canceled";
+        const isRescheduled = evStatus === "rescheduled" || Boolean(ev.rescheduledFrom || ev.rescheduledDate);
+        const isCompleted = evStatus === "completed" || classification === "ended";
+        const isUpcoming = !isCancelled && !isRescheduled && !isCompleted && (classification === "upcoming" || classification === "live");
+
+        const activeStatus = filterState.status || filterState.reg || "all";
+
+        // Date range matching
+        const hasRange = Boolean(filterState.from && filterState.to);
+        if (!isLiveSection) {
+          if (!hasRange) {
+            // With NO range: ended events are hidden from All Events unless status is explicitly "completed"
+            if (activeStatus !== "completed" && classification === "ended") return false;
+          } else {
+            // With A range: event matches if any part falls inside range
+            // (startDate <= range end and endDate >= range start), whole days inclusive
+            const evStartDay = toPhDateStr(ev.startAt);
+            const evEndDay = toPhDateStr(ev.endAt || ev.startAt);
+            if (!(evStartDay <= filterState.to && evEndDay >= filterState.from)) {
+              return false;
+            }
+          }
+        }
+
+        // Search query
+        if (filterState.q) {
+          const q = filterState.q.toLowerCase();
+          const matchTitle = ev.name.toLowerCase().includes(q);
+          const matchVenue = ev.venue.toLowerCase().includes(q);
+          const matchCategory = ev.category.toLowerCase().includes(q);
+          const matchOrg = ev.organizerName.toLowerCase().includes(q);
+          if (!matchTitle && !matchVenue && !matchCategory && !matchOrg) return false;
+        }
+
+        // Source filter
+        if (filterState.source !== "All Sources") {
+          if (ev.source !== filterState.source) return false;
+        }
+
+        // Category filter
+        if (filterState.category !== "All Categories") {
+          const evCat = ev.category.toLowerCase();
+          const targetCat = filterState.category.toLowerCase();
+          if (evCat !== targetCat && !evCat.includes(targetCat) && !targetCat.includes(evCat)) {
+            return false;
+          }
+        }
+
+        // Status filter: "all" | "upcoming" | "cancelled" | "rescheduled" | "completed"
+        if (activeStatus === "upcoming") {
+          if (!isUpcoming) return false;
+        } else if (activeStatus === "cancelled") {
+          if (!isCancelled) return false;
+        } else if (activeStatus === "rescheduled") {
+          if (!isRescheduled) return false;
+        } else if (activeStatus === "completed") {
+          if (!isCompleted) return false;
+        }
+
+        // Availability filter: "all" | "available" | "full" | "closed"
+        const isSlotsOpen = hasOpenSlots(ev);
+        const isRegClosed = isCompleted || isCancelled || Boolean(ev.registrationClosed) || evStatus === "closed";
+        const isAvailableToJoin = isSlotsOpen && !isRegClosed;
+        const isFull = !isSlotsOpen;
+
+        if (filterState.avail === "available" || filterState.avail === "open") {
+          if (!isAvailableToJoin) return false;
+        } else if (filterState.avail === "full") {
+          if (!isFull) return false;
+        } else if (filterState.avail === "closed") {
+          if (!isRegClosed) return false;
+        }
+
+        return true;
+      }
+
+      /* ---------------------------------------------------------
+         URL SYNC
+      --------------------------------------------------------- */
+      function readUrlParams() {
+        const params = new URLSearchParams(window.location.search);
+        if (params.has("q")) filterState.q = params.get("q").trim();
+        if (params.has("source")) filterState.source = params.get("source").trim();
+        if (params.has("category")) filterState.category = params.get("category").trim();
+        if (params.has("from")) filterState.from = params.get("from").trim();
+        if (params.has("to")) filterState.to = params.get("to").trim();
+        if (params.has("preset")) filterState.quickPreset = params.get("preset").trim();
+        if (params.has("status")) {
+          filterState.status = params.get("status").trim();
+          filterState.reg = filterState.status;
+        } else if (params.has("reg")) {
+          filterState.status = params.get("reg").trim();
+          filterState.reg = filterState.status;
+        }
+        if (params.has("avail")) filterState.avail = params.get("avail").trim();
+
+        if (filterState.from && filterState.to && !filterState.quickPreset) {
+          const todayStr = toPhDateStr(getNow());
+          const [ty, tm, td] = todayStr.split("-").map(Number);
+          const firstDay = `${ty}-${String(tm).padStart(2, "0")}-01`;
+          const lastDay = `${ty}-${String(tm).padStart(2, "0")}-${String(new Date(ty, tm, 0).getDate()).padStart(2, "0")}`;
+          if (filterState.from === firstDay && filterState.to === lastDay) {
+            filterState.quickPreset = "this_month";
+          } else if (filterState.from === todayStr && filterState.to === todayStr) {
+            filterState.quickPreset = "today";
+          }
+        }
+
+        // Sync input field
+        const searchInput = document.getElementById("searchInput");
+        if (searchInput) searchInput.value = filterState.q;
+
+        // Sync dropdown labels
+        updateDropdownButtons();
+      }
+
+      function writeUrlParams() {
+        const url = new URL(window.location);
+        if (filterState.q) url.searchParams.set("q", filterState.q);
+        else url.searchParams.delete("q");
+
+        if (filterState.source && filterState.source !== "All Sources") url.searchParams.set("source", filterState.source);
+        else url.searchParams.delete("source");
+
+        if (filterState.category && filterState.category !== "All Categories") url.searchParams.set("category", filterState.category);
+        else url.searchParams.delete("category");
+
+        if (filterState.from) url.searchParams.set("from", filterState.from);
+        else url.searchParams.delete("from");
+
+        if (filterState.to) url.searchParams.set("to", filterState.to);
+        else url.searchParams.delete("to");
+
+        if (filterState.quickPreset && filterState.quickPreset !== "all") url.searchParams.set("preset", filterState.quickPreset);
+        else url.searchParams.delete("preset");
+
+        const curStatus = filterState.status || filterState.reg || "all";
+        if (curStatus && curStatus !== "all") {
+          url.searchParams.set("status", curStatus);
+          url.searchParams.delete("reg");
+        } else {
+          url.searchParams.delete("status");
+          url.searchParams.delete("reg");
+        }
+
+        if (filterState.avail && filterState.avail !== "all") url.searchParams.set("avail", filterState.avail);
+        else url.searchParams.delete("avail");
+
+        window.history.replaceState(null, "", url.toString());
+      }
+
+      function updateDropdownButtons() {
+        const srcBtn = document.getElementById("sourceFilterBtn");
+        if (srcBtn) srcBtn.textContent = filterState.source;
+
+        const catBtn = document.getElementById("categoryFilterBtn");
+        if (catBtn) catBtn.textContent = filterState.category;
+
+        const dateBtn = document.getElementById("dateRangeBtn");
+        if (dateBtn) {
+          if (filterState.from && filterState.to) {
+            if (filterState.quickPreset === "this_month") {
+              dateBtn.textContent = "This month";
+            } else if (filterState.quickPreset === "today") {
+              dateBtn.textContent = "Today";
+            } else if (filterState.quickPreset === "tomorrow") {
+              dateBtn.textContent = "Tomorrow";
+            } else if (filterState.quickPreset === "this_week") {
+              dateBtn.textContent = "This week";
+            } else if (filterState.quickPreset === "this_weekend") {
+              dateBtn.textContent = "This weekend";
+            } else if (filterState.quickPreset === "next_week") {
+              dateBtn.textContent = "Next week";
+            } else if (filterState.quickPreset === "next_month") {
+              dateBtn.textContent = "Next month";
+            } else {
+              dateBtn.textContent = `${formatPhDateDisplay(filterState.from)} – ${formatPhDateDisplay(filterState.to)}`;
+            }
+          } else {
+            dateBtn.textContent = "Date";
+          }
+        }
+
+        const regBtn = document.getElementById("regFilterBtn") || document.getElementById("statusFilterBtn");
+        if (regBtn) {
+          const st = filterState.status || filterState.reg || "all";
+          if (st === "upcoming") regBtn.textContent = "Upcoming";
+          else if (st === "cancelled") regBtn.textContent = "Cancelled";
+          else if (st === "rescheduled") regBtn.textContent = "Rescheduled";
+          else if (st === "completed") regBtn.textContent = "Completed";
+          else regBtn.textContent = "All Events";
+        }
+
+        const availBtn = document.getElementById("availFilterBtn");
+        if (availBtn) {
+          if (filterState.avail === "available" || filterState.avail === "open") availBtn.textContent = "Available to Join";
+          else if (filterState.avail === "full") availBtn.textContent = "Full";
+          else if (filterState.avail === "closed") availBtn.textContent = "Registration Closed";
+          else availBtn.textContent = "Any Availability";
+        }
+
+        // Highlight active options in menus
+        document.querySelectorAll(".filter-menu").forEach((menu) => {
+          const type = menu.dataset.menu;
+          menu.querySelectorAll(".filter-option").forEach((opt) => {
+            const val = opt.dataset.value;
+            let active = false;
+            if (type === "source") active = (val === filterState.source);
+            if (type === "category") active = (val === filterState.category);
+            if (type === "status" || type === "registration") active = (val === (filterState.status || filterState.reg || "all"));
+            if (type === "availability") {
+              if (filterState.avail === "available" || filterState.avail === "open") {
+                active = (val === "available" || val === "open");
+              } else {
+                active = (val === filterState.avail);
+              }
+            }
+            opt.classList.toggle("active", active);
+          });
+        });
+      }
+
+      /* ---------------------------------------------------------
+         ACTIVE CHIPS
+      --------------------------------------------------------- */
+      function renderActiveChips() {
+        const chipsRow = document.getElementById("activeChipsRow");
+        const chipsList = document.getElementById("activeChipsList");
+        if (!chipsRow || !chipsList) return;
+
+        const chips = [];
+        if (filterState.q) {
+          chips.push({ key: "q", label: `Search: "${filterState.q}"` });
+        }
+        if (filterState.source !== "All Sources") {
+          chips.push({ key: "source", label: `Source: ${filterState.source}` });
+        }
+        if (filterState.category !== "All Categories") {
+          chips.push({ key: "category", label: `Category: ${filterState.category}` });
+        }
+        if (filterState.from && filterState.to) {
+          chips.push({
+            key: "date",
+            label: `Date: ${formatPhDateDisplay(filterState.from)} – ${formatPhDateDisplay(filterState.to)}`,
+          });
+        }
+        const currentStatus = filterState.status || filterState.reg || "all";
+        if (currentStatus !== "all") {
+          let label = "All Events";
+          if (currentStatus === "upcoming") label = "Upcoming";
+          else if (currentStatus === "cancelled") label = "Cancelled";
+          else if (currentStatus === "rescheduled") label = "Rescheduled";
+          else if (currentStatus === "completed") label = "Completed";
+          chips.push({ key: "status", label: `Status: ${label}` });
+        }
+        if (filterState.avail && filterState.avail !== "all") {
+          let label = "Any Availability";
+          if (filterState.avail === "available" || filterState.avail === "open") label = "Available to Join";
+          else if (filterState.avail === "full") label = "Full";
+          else if (filterState.avail === "closed") label = "Registration Closed";
+          chips.push({ key: "avail", label: `Availability: ${label}` });
+        }
+
+        if (!chips.length) {
+          chipsRow.hidden = true;
+          chipsList.innerHTML = "";
+          return;
+        }
+
+        chipsRow.hidden = false;
+        chipsList.innerHTML = chips
+          .map(
+            (c) => `
+              <span class="filter-chip">
+                <span>${escapeHTML(c.label)}</span>
+                <button type="button" data-chip-key="${c.key}" aria-label="Remove ${escapeHTML(c.label)} filter">&times;</button>
+              </span>
+            `,
+          )
+          .join("");
+      }
+
+      function clearAllFilters() {
+        filterState.q = "";
+        filterState.source = "All Sources";
+        filterState.category = "All Categories";
+        filterState.from = "";
+        filterState.to = "";
+        filterState.quickPreset = "all";
+        filterState.status = "all";
+        filterState.reg = "all";
+        filterState.avail = "all";
+        filterState.showCount = 20;
+
+        const searchInput = document.getElementById("searchInput");
+        if (searchInput) searchInput.value = "";
+
+        updateDropdownButtons();
+        writeUrlParams();
+        renderActiveChips();
+        announce("All filters cleared.");
+        loadEvents();
+      }
+
+      /* ---------------------------------------------------------
+         DATE RANGE PICKER
+      --------------------------------------------------------- */
+      function initDateRangePicker() {
+        const btn = document.getElementById("dateRangeBtn");
+        const panel = document.getElementById("dateRangePanel");
+        const prevBtn = document.getElementById("calNavPrev");
+        const nextBtn = document.getElementById("calNavNext");
+        const clearBtn = document.getElementById("dateRangeClearBtn");
+        const cancelBtn = document.getElementById("dateRangeCancelBtn");
+        const applyBtn = document.getElementById("dateRangeApplyBtn");
+        const inputStart = document.getElementById("dateRangeInputStart");
+        const inputEnd = document.getElementById("dateRangeInputEnd");
+
+        if (!btn || !panel) return;
+
+        // Set initial view month based on today or existing filter
+        const now = new Date(getNow());
+        datePickerState.viewYear = now.getFullYear();
+        datePickerState.viewMonth = now.getMonth();
+
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          const isOpen = !panel.hidden;
+          if (isOpen) {
+            closeDateRangePanel();
+          } else {
+            openDateRangePanel();
+          }
+        });
+
+        // Close on escape
+        document.addEventListener("keydown", (e) => {
+          if (e.key === "Escape" && !panel.hidden) {
+            closeDateRangePanel();
+            btn.focus();
+          }
+        });
+
+        // Close on click outside
+        document.addEventListener("click", (e) => {
+          if (!panel.hidden && !panel.contains(e.target) && !btn.contains(e.target)) {
+            closeDateRangePanel();
+          }
+        });
+
+        if (prevBtn) {
+          prevBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            datePickerState.viewMonth--;
+            if (datePickerState.viewMonth < 0) {
+              datePickerState.viewMonth = 11;
+              datePickerState.viewYear--;
+            }
+            renderDatePickerCalendars();
+          });
+        }
+
+        if (nextBtn) {
+          nextBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            datePickerState.viewMonth++;
+            if (datePickerState.viewMonth > 11) {
+              datePickerState.viewMonth = 0;
+              datePickerState.viewYear++;
+            }
+            renderDatePickerCalendars();
+          });
+        }
+
+        // Quick ranges
+        document.querySelectorAll(".date-range-quick-btn").forEach((qBtn) => {
+          qBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            applyQuickRange(qBtn.dataset.preset);
+          });
+        });
+
+        // Inputs input & change
+        if (inputStart) {
+          inputStart.addEventListener("input", () => {
+            const val = inputStart.value.trim();
+            datePickerState.pendingStart = val;
+            filterState.quickPreset = "";
+            if (/^\d{4}-\d{2}-\d{2}$/.test(val)) {
+              const [y, m] = val.split("-").map(Number);
+              datePickerState.viewYear = y;
+              datePickerState.viewMonth = m - 1;
+              renderDatePickerCalendars();
+            }
+            validateAndSyncDatePickerInputs();
+          });
+        }
+        if (inputEnd) {
+          inputEnd.addEventListener("input", () => {
+            const val = inputEnd.value.trim();
+            datePickerState.pendingEnd = val;
+            filterState.quickPreset = "";
+            if (/^\d{4}-\d{2}-\d{2}$/.test(val)) {
+              renderDatePickerCalendars();
+            }
+            validateAndSyncDatePickerInputs();
+          });
+        }
+
+        if (clearBtn) {
+          clearBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            datePickerState.pendingStart = "";
+            datePickerState.pendingEnd = "";
+            filterState.from = "";
+            filterState.to = "";
+            filterState.quickPreset = "all";
+            updateDropdownButtons();
+            writeUrlParams();
+            renderActiveChips();
+            closeDateRangePanel();
+            announce("Date filter removed.");
+            loadEvents();
+          });
+        }
+
+        if (cancelBtn) {
+          cancelBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            closeDateRangePanel();
+          });
+        }
+
+        if (applyBtn) {
+          applyBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            let s = datePickerState.pendingStart;
+            let en = datePickerState.pendingEnd;
+
+            if (s && en) {
+              if (s > en) {
+                const tmp = s;
+                s = en;
+                en = tmp;
+              }
+              filterState.from = s;
+              filterState.to = en;
+              filterState.quickPreset = "";
+              updateDropdownButtons();
+              writeUrlParams();
+              renderActiveChips();
+              closeDateRangePanel();
+              announce(`Date range applied from ${formatPhDateDisplay(filterState.from)} to ${formatPhDateDisplay(filterState.to)}.`);
+              loadEvents();
+            } else if (!s && !en) {
+              filterState.from = "";
+              filterState.to = "";
+              filterState.quickPreset = "all";
+              updateDropdownButtons();
+              writeUrlParams();
+              renderActiveChips();
+              closeDateRangePanel();
+              announce("Date filter removed.");
+              loadEvents();
+            }
+          });
+        }
+
+        window.addEventListener("resize", () => {
+          if (!panel.hidden) positionDateRangePanel();
+        });
+      }
+
+      function positionDateRangePanel() {
+        const btn = document.getElementById("dateRangeBtn");
+        const panel = document.getElementById("dateRangePanel");
+        if (!panel || !btn || panel.hidden) return;
+
+        // On mobile modal (< 740px), CSS handles fixed centered modal
+        if (window.innerWidth <= 740) {
+          panel.style.left = "";
+          panel.style.right = "";
+          return;
+        }
+
+        // Reset to default right-aligned state
+        panel.style.left = "auto";
+        panel.style.right = "0";
+
+        const panelRect = panel.getBoundingClientRect();
+        const viewportWidth = window.innerWidth;
+        const margin = 16;
+
+        // If the right edge of the panel overflows the viewport
+        if (panelRect.right > viewportWidth - margin) {
+          const overflowRight = panelRect.right - (viewportWidth - margin);
+          panel.style.right = `${overflowRight}px`;
+        }
+
+        // If the left edge of the panel overflows the viewport
+        const updatedRect = panel.getBoundingClientRect();
+        if (updatedRect.left < margin) {
+          const underflowLeft = margin - updatedRect.left;
+          const currentRight = parseFloat(panel.style.right) || 0;
+          panel.style.right = `${currentRight - underflowLeft}px`;
+        }
+      }
+
+      function openDateRangePanel() {
+        const btn = document.getElementById("dateRangeBtn");
+        const panel = document.getElementById("dateRangePanel");
+        if (!panel || !btn) return;
+
+        datePickerState.pendingStart = filterState.from;
+        datePickerState.pendingEnd = filterState.to;
+
+        if (filterState.from) {
+          const parts = filterState.from.split("-").map(Number);
+          datePickerState.viewYear = parts[0];
+          datePickerState.viewMonth = parts[1] - 1;
+        } else {
+          const now = new Date(getNow());
+          datePickerState.viewYear = now.getFullYear();
+          datePickerState.viewMonth = now.getMonth();
+        }
+
+        panel.hidden = false;
+        btn.setAttribute("aria-expanded", "true");
+        validateAndSyncDatePickerInputs();
+        renderDatePickerCalendars();
+        positionDateRangePanel();
+      }
+
+      function closeDateRangePanel() {
+        const btn = document.getElementById("dateRangeBtn");
+        const panel = document.getElementById("dateRangePanel");
+        if (!panel || !btn) return;
+        panel.hidden = true;
+        btn.setAttribute("aria-expanded", "false");
+        panel.style.left = "";
+        panel.style.right = "";
+      }
+
+      function applyQuickRange(preset) {
+        const now = new Date(getNow());
+        const todayStr = toPhDateStr(now);
+        const [ty, tm, td] = todayStr.split("-").map(Number);
+        const curDate = new Date(ty, tm - 1, td);
+
+        let startStr = "";
+        let endStr = "";
+
+        if (preset === "all") {
+          datePickerState.pendingStart = "";
+          datePickerState.pendingEnd = "";
+          filterState.from = "";
+          filterState.to = "";
+          filterState.quickPreset = "all";
+          updateDropdownButtons();
+          writeUrlParams();
+          renderActiveChips();
+          closeDateRangePanel();
+          announce("Date range cleared.");
+          loadEvents();
+          return;
+        }
+
+        if (preset === "today") {
+          startStr = todayStr;
+          endStr = todayStr;
+        } else if (preset === "tomorrow") {
+          const tom = new Date(curDate);
+          tom.setDate(tom.getDate() + 1);
+          startStr = toPhDateStr(tom.getTime());
+          endStr = startStr;
+        } else if (preset === "this_week") {
+          const day = curDate.getDay(); // 0 is Sunday
+          const sunday = new Date(curDate);
+          sunday.setDate(sunday.getDate() - day);
+          const saturday = new Date(sunday);
+          saturday.setDate(saturday.getDate() + 6);
+          startStr = toPhDateStr(sunday.getTime());
+          endStr = toPhDateStr(saturday.getTime());
+        } else if (preset === "this_weekend") {
+          const day = curDate.getDay();
+          const sat = new Date(curDate);
+          sat.setDate(sat.getDate() + (6 - day));
+          const sun = new Date(sat);
+          sun.setDate(sun.getDate() + 1);
+          startStr = toPhDateStr(sat.getTime());
+          endStr = toPhDateStr(sun.getTime());
+        } else if (preset === "next_week") {
+          const day = curDate.getDay();
+          const nextSun = new Date(curDate);
+          nextSun.setDate(nextSun.getDate() + (7 - day));
+          const nextSat = new Date(nextSun);
+          nextSat.setDate(nextSat.getDate() + 6);
+          startStr = toPhDateStr(nextSun.getTime());
+          endStr = toPhDateStr(nextSat.getTime());
+        } else if (preset === "this_month") {
+          startStr = `${ty}-${String(tm).padStart(2, "0")}-01`;
+          const lastDay = new Date(ty, tm, 0).getDate();
+          endStr = `${ty}-${String(tm).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+        } else if (preset === "next_month") {
+          let nextY = ty;
+          let nextM = tm + 1;
+          if (nextM > 12) {
+            nextM = 1;
+            nextY++;
+          }
+          startStr = `${nextY}-${String(nextM).padStart(2, "0")}-01`;
+          const lastDay = new Date(nextY, nextM, 0).getDate();
+          endStr = `${nextY}-${String(nextM).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+        }
+
+        datePickerState.pendingStart = startStr;
+        datePickerState.pendingEnd = endStr;
+        filterState.from = startStr;
+        filterState.to = endStr;
+        filterState.quickPreset = preset;
+
+        updateDropdownButtons();
+        writeUrlParams();
+        renderActiveChips();
+        closeDateRangePanel();
+        announce(`Applied quick range: ${preset}.`);
+        loadEvents();
+      }
+
+      function renderDatePickerCalendars() {
+        const y1 = datePickerState.viewYear;
+        const m1 = datePickerState.viewMonth;
+
+        let y2 = y1;
+        let m2 = m1 + 1;
+        if (m2 > 11) {
+          m2 = 0;
+          y2++;
+        }
+
+        renderSingleMonthCalendar("calTitle1", "calGrid1", y1, m1);
+        renderSingleMonthCalendar("calTitle2", "calGrid2", y2, m2);
+
+        // Highlight active quick range preset
+        const start = datePickerState.pendingStart || filterState.from;
+        const end = datePickerState.pendingEnd || filterState.to;
+        const todayStr = toPhDateStr(getNow());
+        const [ty, tm, td] = todayStr.split("-").map(Number);
+        const curDate = new Date(ty, tm - 1, td);
+
+        document.querySelectorAll(".date-range-quick-btn").forEach((btn) => {
+          const preset = btn.dataset.preset;
+          let isMatch = false;
+
+          if (filterState.quickPreset && filterState.quickPreset === preset && start === filterState.from && end === filterState.to) {
+            isMatch = true;
+          } else {
+            if (preset === "all" && !start && !end) isMatch = true;
+            if (preset === "today" && start === todayStr && end === todayStr) isMatch = true;
+            if (preset === "this_month" && start && end) {
+              const firstDay = `${ty}-${String(tm).padStart(2, "0")}-01`;
+              const lastDay = `${ty}-${String(tm).padStart(2, "0")}-${String(new Date(ty, tm, 0).getDate()).padStart(2, "0")}`;
+              if (start === firstDay && end === lastDay) isMatch = true;
+            }
+          }
+          btn.classList.toggle("active", isMatch);
+        });
+      }
+
+      function renderSingleMonthCalendar(titleId, gridId, year, month) {
+        const titleEl = document.getElementById(titleId);
+        const gridEl = document.getElementById(gridId);
+        if (!titleEl || !gridEl) return;
+
+        const dateObj = new Date(year, month, 1);
+        titleEl.textContent = dateObj.toLocaleDateString("en-US", {
+          month: "long",
+          year: "numeric",
+        });
+
+        const firstDayOfWeek = dateObj.getDay(); // 0 is Sunday
+        const totalDays = new Date(year, month + 1, 0).getDate();
+        const todayStr = toPhDateStr(getNow());
+
+        let start = datePickerState.pendingStart;
+        let end = datePickerState.pendingEnd;
+        if (start && end && start > end) {
+          const temp = start;
+          start = end;
+          end = temp;
+        }
+
+        let html = "";
+        for (let i = 0; i < firstDayOfWeek; i++) {
+          html += '<button type="button" class="date-cal-day empty" tabindex="-1" disabled></button>';
+        }
+
+        for (let day = 1; day <= totalDays; day++) {
+          const isoStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+          const isToday = isoStr === todayStr;
+          const isStart = Boolean(start && isoStr === start);
+          const isEnd = Boolean(end && isoStr === end);
+          const isBetween = Boolean(start && end && isoStr > start && isoStr < end);
+
+          // Check if any loaded events occur on this day
+          let hasEvent = false;
+          for (const ev of rawEventsMap.values()) {
+            const evStart = toPhDateStr(ev.startAt);
+            const evEnd = toPhDateStr(ev.endAt || ev.startAt);
+            if (isoStr >= evStart && isoStr <= evEnd) {
+              hasEvent = true;
+              break;
+            }
+          }
+
+          const classes = [
+            "date-cal-day",
+            isToday ? "today" : "",
+            isStart ? "range-start" : "",
+            isEnd ? "range-end" : "",
+            isBetween ? "range-between" : "",
+            hasEvent ? "has-event" : "",
+          ].filter(Boolean).join(" ");
+
+          const dateLabel = formatPhDateDisplay(isoStr);
+          const pressed = isStart || isEnd ? 'aria-pressed="true"' : 'aria-pressed="false"';
+
+          html += `
+            <button
+              type="button"
+              class="${classes}"
+              data-iso="${isoStr}"
+              aria-label="${dateLabel}"
+              ${pressed}
+            >${day}</button>
+          `;
+        }
+
+        gridEl.innerHTML = html;
+
+        gridEl.querySelectorAll(".date-cal-day:not(.empty)").forEach((dayBtn) => {
+          dayBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            handleDateDayClick(dayBtn.dataset.iso);
+          });
+        });
+      }
+
+      function handleDateDayClick(iso) {
+        filterState.quickPreset = "";
+        if (!datePickerState.pendingStart || (datePickerState.pendingStart && datePickerState.pendingEnd)) {
+          // First click
+          datePickerState.pendingStart = iso;
+          datePickerState.pendingEnd = "";
+        } else {
+          // Second click
+          if (iso < datePickerState.pendingStart) {
+            datePickerState.pendingEnd = datePickerState.pendingStart;
+            datePickerState.pendingStart = iso;
+          } else {
+            datePickerState.pendingEnd = iso;
+          }
+        }
+
+        validateAndSyncDatePickerInputs();
+        renderDatePickerCalendars();
+      }
+
+      function validateAndSyncDatePickerInputs() {
+        const inputStart = document.getElementById("dateRangeInputStart");
+        const inputEnd = document.getElementById("dateRangeInputEnd");
+        const valMsg = document.getElementById("dateRangeValidationMsg");
+        const applyBtn = document.getElementById("dateRangeApplyBtn");
+
+        const start = datePickerState.pendingStart;
+        const end = datePickerState.pendingEnd;
+
+        if (inputStart && document.activeElement !== inputStart) inputStart.value = start || "";
+        if (inputEnd && document.activeElement !== inputEnd) inputEnd.value = end || "";
+
+        if (start && !end) {
+          if (valMsg) valMsg.textContent = "Pick an end date to finish the range.";
+          if (applyBtn) applyBtn.disabled = true;
+        } else if (start && end && end < start) {
+          if (valMsg) valMsg.textContent = "End date must be on or after the start date.";
+          if (applyBtn) applyBtn.disabled = true;
+        } else if (start && end) {
+          if (valMsg) valMsg.textContent = "";
+          if (applyBtn) applyBtn.disabled = false;
+        } else {
+          if (valMsg) valMsg.textContent = "";
+          if (applyBtn) applyBtn.disabled = false;
+        }
+      }
+
+      /* ---------------------------------------------------------
+         FIREBASE DATA LOADING
+      --------------------------------------------------------- */
+      function loadEvents() {
+        const happeningNowList = document.getElementById("happeningNowList");
+        const upcomingEventsList = document.getElementById("upcomingEventsList");
+
+        if (happeningNowList && rawEventsMap.size === 0) {
+          happeningNowList.innerHTML = '<div style="padding:16px; color:var(--ink-500);">Loading live events...</div>';
+        }
+        if (upcomingEventsList && rawEventsMap.size === 0) {
+          upcomingEventsList.innerHTML = '<div style="padding:16px; color:var(--ink-500);">Loading events...</div>';
+        }
+
+        if (!isRtdbConfigured) {
+          useFallbackEvents();
+          return;
+        }
+
+        // Clean up previous query listener if any
+        if (activePublicEventsRef && activePublicEventsListener) {
+          off(activePublicEventsRef, "value", activePublicEventsListener);
+        }
+
+        const now = getNow();
+        const hasRange = Boolean(filterState.from && filterState.to);
+
+        if (!hasRange) {
+          // Without date range: load from three days ago onward
+          const threeDaysAgo = now - 3 * 24 * 3600 * 1000;
+          activePublicEventsRef = query(ref(rtdb, "publicEvents"), orderByChild("startAt"), startAt(threeDaysAgo));
+        } else {
+          // With date range: load from three days before range start to end of range end day
+          const rangeStartMs = new Date(`${filterState.from}T00:00:00+08:00`).getTime();
+          const rangeEndMs = new Date(`${filterState.to}T23:59:59.999+08:00`).getTime();
+          const queryStartMs = rangeStartMs - 3 * 24 * 3600 * 1000;
+          activePublicEventsRef = query(
+            ref(rtdb, "publicEvents"),
+            orderByChild("startAt"),
+            startAt(queryStartMs),
+            endAt(rangeEndMs),
           );
         }
+
+        activePublicEventsListener = (snap) => {
+          rawEventsMap.clear();
+          const data = snap.val() || {};
+          Object.entries(data).forEach(([id, evData]) => {
+            if (evData && (evData.status === "published" || evData.status === "completed")) {
+              const ev = normalizeEvent(id, evData);
+              rawEventsMap.set(ev.id, ev);
+            }
+          });
+
+          if (rawEventsMap.size === 0 && Array.isArray(window.RECOVIBE_EVENTS) && window.RECOVIBE_EVENTS.length > 0) {
+            window.RECOVIBE_EVENTS.forEach((item) => {
+              const ev = normalizeEvent(item.id || item.eventId, item);
+              rawEventsMap.set(ev.id, ev);
+            });
+          }
+
+          syncAttendanceListeners();
+          renderAll();
+        };
+
+        onValue(activePublicEventsRef, activePublicEventsListener, (err) => {
+          console.warn("RTDB publicEvents error:", err);
+          useFallbackEvents();
+        });
+      }
+
+      function useFallbackEvents() {
+        rawEventsMap.clear();
+        if (Array.isArray(window.RECOVIBE_EVENTS)) {
+          window.RECOVIBE_EVENTS.forEach((item) => {
+            const ev = normalizeEvent(item.id || item.eventId, item);
+            rawEventsMap.set(ev.id, ev);
+          });
+        }
+        renderAll();
+      }
+
+      /* ---------------------------------------------------------
+         ATTENDANCE LISTENERS
+      --------------------------------------------------------- */
+      function syncAttendanceListeners() {
+        if (!currentUid || !isRtdbConfigured) return;
+        const now = getNow();
+
+        // Find all live events the student registered for
+        const liveRegisteredIds = new Set();
+        rawEventsMap.forEach((ev) => {
+          if (registeredEventIds.has(ev.id) && getEventClassification(ev, now) === "live") {
+            liveRegisteredIds.add(ev.id);
+          }
+        });
+
+        // Detach listeners for events no longer live or registered
+        for (const [evId, unsub] of attendanceListeners.entries()) {
+          if (!liveRegisteredIds.has(evId)) {
+            unsub();
+            attendanceListeners.delete(evId);
+            attendanceMap.delete(evId);
+          }
+        }
+
+        // Attach listeners for newly live registered events
+        liveRegisteredIds.forEach((evId) => {
+          if (!attendanceListeners.has(evId)) {
+            const attRef = ref(rtdb, `attendance/${evId}/${currentUid}`);
+            const listener = (snap) => {
+              if (snap.exists()) {
+                attendanceMap.set(evId, snap.val());
+                // Close QR code if open when checked in
+                if (openQrEventId === evId) {
+                  openQrEventId = null;
+                }
+                renderHappeningNow();
+              } else {
+                attendanceMap.delete(evId);
+              }
+            };
+            onValue(attRef, listener);
+            attendanceListeners.set(evId, () => off(attRef, "value", listener));
+          }
+        });
+      }
+
+      /* ---------------------------------------------------------
+         RENDERING: HAPPENING NOW
+      --------------------------------------------------------- */
+      function renderHappeningNow() {
+        const panel = document.getElementById("happeningNowPanel");
+        const list = document.getElementById("happeningNowList");
+        const countBadge = document.getElementById("happeningNowCountBadge");
+        if (!panel || !list) return;
+
+        const now = getNow();
+        const liveEvents = [];
+        const upcomingEvents = [];
+
+        rawEventsMap.forEach((ev) => {
+          const classification = getEventClassification(ev, now);
+          if (classification === "live" && matchesFilters(ev, true)) {
+            liveEvents.push(ev);
+          } else if (classification === "upcoming") {
+            upcomingEvents.push(ev);
+          }
+        });
+
+        // Sort live by startAt
+        liveEvents.sort((a, b) => a.startAt - b.startAt);
+        upcomingEvents.sort((a, b) => a.startAt - b.startAt);
+
+        if (liveEvents.length > 0) {
+          countBadge.hidden = false;
+          countBadge.textContent = `${liveEvents.length} live`;
+
+          list.innerHTML = liveEvents
+            .map((ev) => {
+              const isRegistered = registeredEventIds.has(ev.id);
+              const attendance = attendanceMap.get(ev.id);
+              const isCheckedIn = Boolean(attendance);
+              const openSlots = hasOpenSlots(ev);
+
+              const startAt = ev.startAt;
+              const endAt = ev.endAt || (startAt + 3 * 3600 * 1000);
+              const totalDuration = Math.max(1, endAt - startAt);
+              const elapsedMs = Math.max(0, now - startAt);
+              const percent = Math.min(100, Math.max(0, Math.round((elapsedMs / totalDuration) * 100)));
+              const timeLeft = Math.max(0, endAt - now);
+              const timeLeftStr = `Ends in ${formatDuration(timeLeft)}`;
+
+              const checkedInStr = ev.checkedInCount !== undefined ? ` • ${ev.checkedInCount} checked in` : "";
+
+              // Action buttons
+              let actionsHtml = "";
+              if (isCheckedIn) {
+                const scanTime = attendance?.scannedAt ? formatTime(attendance.scannedAt) : formatTime(now);
+                actionsHtml = `
+                  <span class="badge-checked-in">
+                    <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                      <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                    </svg>
+                    Checked in ${scanTime}
+                  </span>
+                `;
+              } else if (isRegistered) {
+                const qrLabel = openQrEventId === ev.id ? "Hide QR" : "Show my QR";
+                actionsHtml = `
+                  <button type="button" class="btn-live-qr" data-action="toggle-qr" data-event-id="${ev.id}">${qrLabel}</button>
+                  <button type="button" class="btn-live-cancel" data-action="cancel" data-event-id="${ev.id}">Cancel registration</button>
+                `;
+              } else {
+                actionsHtml = `
+                  <button type="button" class="btn-live-reg" data-action="register" data-event-id="${ev.id}" ${!openSlots ? "disabled" : ""}>
+                    ${openSlots ? "Register" : "Full"}
+                  </button>
+                `;
+              }
+
+              // Details toggle
+              const isDetailsOpen = openDetailsEventIds.has(ev.id);
+              const detailsLabel = isDetailsOpen ? "Hide details" : "Details";
+
+              let detailsBlock = "";
+              if (isDetailsOpen) {
+                const capText = ev.capacity ? `${ev.registeredCount || 0} / ${ev.capacity}` : "Unlimited";
+                const slotsLeft = ev.capacity ? Math.max(0, ev.capacity - (ev.registeredCount || 0)) : "Open";
+                detailsBlock = `
+                  <div class="live-details-expand">
+                    <p style="margin: 0 0 8px;">${escapeHTML(ev.description || "No description provided.")}</p>
+                    <div style="font-size:12.5px; color:var(--ink-700); display:flex; flex-wrap:wrap; gap:14px;">
+                      <span><strong>Organizer:</strong> ${escapeHTML(ev.organizerName)}</span>
+                      <span><strong>Source:</strong> ${escapeHTML(ev.source)}</span>
+                      <span><strong>Registered:</strong> ${capText}</span>
+                      <span><strong>Slots left:</strong> ${slotsLeft}</span>
+                    </div>
+                  </div>
+                `;
+              }
+
+              // Inline QR Panel
+              let qrBlock = "";
+              if (openQrEventId === ev.id) {
+                qrBlock = `
+                  <div class="inline-qr-panel" id="inlineQrBox_${ev.id}">
+                    <strong class="inline-qr-name">${escapeHTML(studentProfile.fullName)}</strong>
+                    <span class="inline-qr-num">${escapeHTML(studentProfile.studentNo)}</span>
+                    <div class="inline-qr-canvas-box">
+                      <canvas id="inlineQrCanvas_${ev.id}" width="160" height="160" aria-label="Attendance QR Code"></canvas>
+                    </div>
+                    <p class="inline-qr-note">Show this at the entrance.</p>
+                  </div>
+                `;
+              }
+
+              return `
+                <article class="live-card" data-event-id="${ev.id}">
+                  <div class="live-card-top">
+                    <div class="live-card-tags">
+                      <span class="live-pulse-badge">
+                        <span class="live-dot" aria-hidden="true"></span>
+                        Live
+                      </span>
+                      <span class="filter-chip" style="font-size:11.5px; padding:2px 8px;">${escapeHTML(ev.category)}</span>
+                      <span class="filter-chip" style="font-size:11.5px; padding:2px 8px;">${escapeHTML(ev.source)}</span>
+                    </div>
+                    <span class="live-time-left">${timeLeftStr}</span>
+                  </div>
+
+                  <h3 class="live-card-title">${escapeHTML(ev.name)}</h3>
+
+                  <div class="live-card-meta">
+                    <span>
+                      <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" style="vertical-align:-2px; margin-right:4px;">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/>
+                      </svg>
+                      ${formatTime(ev.startAt)} – ${formatTime(endAt)}
+                    </span>
+                    <span>
+                      <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" style="vertical-align:-2px; margin-right:4px;">
+                        <path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd"/>
+                      </svg>
+                      ${escapeHTML(ev.venue)}
+                    </span>
+                  </div>
+
+                  <div class="live-progress-container">
+                    <div class="live-progress-bar" role="progressbar" aria-valuenow="${percent}" aria-valuemin="0" aria-valuemax="100">
+                      <div class="live-progress-fill" style="width: ${percent}%;"></div>
+                    </div>
+                    <div class="live-progress-label">
+                      <span>${percent}% done${checkedInStr}</span>
+                    </div>
+                  </div>
+
+                  ${detailsBlock}
+                  ${qrBlock}
+
+                  <div class="live-card-actions">
+                    <div class="live-card-buttons">
+                      ${actionsHtml}
+                    </div>
+                    <button type="button" class="btn-live-details" data-action="toggle-details" data-event-id="${ev.id}">
+                      ${detailsLabel}
+                    </button>
+                  </div>
+                </article>
+              `;
+            })
+            .join("");
+
+          // Render canvas if QR is open
+          if (openQrEventId) {
+            const canvas = document.getElementById(`inlineQrCanvas_${openQrEventId}`);
+            if (canvas) {
+              getStudentQrToken().then((token) => renderQrToCanvas(canvas, token));
+            }
+          }
+        } else {
+          countBadge.hidden = true;
+          let nextUpHint = "";
+          if (upcomingEvents.length > 0) {
+            const nextEv = upcomingEvents[0];
+            const msUntil = nextEv.startAt - now;
+            if (msUntil < 24 * 3600 * 1000) {
+              nextUpHint = `Next up: ${escapeHTML(nextEv.name)} starts in ${formatDuration(msUntil)}.`;
+            } else {
+              nextUpHint = `Next up: ${escapeHTML(nextEv.name)} on ${formatPhDateDisplay(toPhDateStr(nextEv.startAt))}.`;
+            }
+          }
+
+          list.innerHTML = `
+            <div class="empty-state-card">
+              <p>No events happening now.</p>
+              ${nextUpHint ? `<p class="empty-next-up">${nextUpHint}</p>` : ""}
+            </div>
+          `;
+        }
+      }
+
+      /* ---------------------------------------------------------
+         RENDERING: ALL EVENTS
+      --------------------------------------------------------- */
+      function renderAllEvents() {
+        const list = document.getElementById("upcomingEventsList");
+        const countEl = document.getElementById("allEventsShowingCount");
+        const showMoreWrap = document.getElementById("allEventsShowMoreWrap");
+        const showMoreBtn = document.getElementById("allEventsShowMoreBtn");
+        if (!list || !countEl) return;
+
+        const now = getNow();
+        const hasRange = Boolean(filterState.from && filterState.to);
+
+        const matching = [];
+        rawEventsMap.forEach((ev) => {
+          if (matchesFilters(ev, false)) {
+            matching.push(ev);
+          }
+        });
+
+        // Sorted by start time ascending
+        matching.sort((a, b) => a.startAt - b.startAt);
+
+        const visibleCount = Math.min(matching.length, filterState.showCount);
+
+        let countText = `Showing ${visibleCount} event${visibleCount === 1 ? "" : "s"}`;
+        if (hasRange) {
+          countText += ` from ${formatPhDateDisplay(filterState.from)} to ${formatPhDateDisplay(filterState.to)}`;
+        }
+        countEl.textContent = matching.length ? countText : "";
+
+        if (showMoreWrap && showMoreBtn) {
+          if (matching.length > filterState.showCount) {
+            showMoreWrap.hidden = false;
+            showMoreBtn.onclick = () => {
+              filterState.showCount += 20;
+              renderAllEvents();
+            };
+          } else {
+            showMoreWrap.hidden = true;
+          }
+        }
+
+        if (matching.length === 0) {
+          list.innerHTML = `
+            <div class="empty-state-card">
+              <p>No events match your filters.</p>
+              <button type="button" class="empty-state-btn" id="emptyClearAllFiltersBtn">Clear all filters</button>
+            </div>
+          `;
+          const emptyBtn = document.getElementById("emptyClearAllFiltersBtn");
+          if (emptyBtn) emptyBtn.addEventListener("click", clearAllFilters);
+          return;
+        }
+
+        const eventsToDisplay = matching.slice(0, filterState.showCount);
+
+        list.innerHTML = eventsToDisplay
+          .map((ev) => {
+            const classification = getEventClassification(ev, now);
+            const isRegistered = registeredEventIds.has(ev.id);
+            const isEnded = classification === "ended";
+            const isLive = classification === "live";
+            const openSlots = hasOpenSlots(ev);
+
+            // Date block parts
+            const phDateStr = toPhDateStr(ev.startAt);
+            const [y, m, d] = phDateStr ? phDateStr.split("-").map(Number) : [2026, 10, 1];
+            const dObj = new Date(y, m - 1, d);
+            const monShort = dObj.toLocaleDateString("en-US", { month: "short" }).toUpperCase();
+
+            const evStatus = String(ev.status || "").toLowerCase();
+            const isCancelled = evStatus === "cancelled" || evStatus === "canceled";
+            const isRescheduled = evStatus === "rescheduled" || Boolean(ev.rescheduledFrom || ev.rescheduledDate);
+
+            // Status badges
+            let statusBadges = "";
+            if (isCancelled) {
+              statusBadges += '<span class="badge-cancelled">Cancelled</span>';
+            } else if (isRescheduled) {
+              statusBadges += '<span class="badge-rescheduled">Rescheduled</span>';
+            }
+            if (isLive) {
+              statusBadges += `
+                <span class="live-pulse-badge" style="font-size:11px; padding:2px 7px;">
+                  <span class="live-dot" style="width:6px; height:6px;"></span>
+                  Live
+                </span>
+              `;
+            }
+            if (isEnded && !isCancelled) {
+              statusBadges += '<span class="badge-ended">Ended</span>';
+            }
+            if (isRegistered) {
+              statusBadges += '<span class="badge-registered">Registered</span>';
+            }
+
+            // Slots progress bar
+            let slotsHtml = "";
+            if (ev.capacity !== null && ev.capacity !== undefined) {
+              const regCount = ev.registeredCount || 0;
+              const cap = ev.capacity;
+              const slotsLeft = Math.max(0, cap - regCount);
+              const pct = Math.min(100, Math.round((regCount / cap) * 100));
+              const label = `${regCount} of ${cap} registered – ${slotsLeft} left`;
+              slotsHtml = `
+                <div class="slots-progress-wrap" role="img" aria-label="${label}">
+                  <div class="slots-progress-track">
+                    <div class="slots-progress-fill" style="width: ${pct}%;"></div>
+                  </div>
+                  <span class="slots-progress-text">${label}</span>
+                </div>
+              `;
+            }
+
+            // Action buttons
+            let actionBtn = "";
+            if (isCancelled) {
+              actionBtn = '<span class="badge-cancelled" style="padding:6px 12px; font-size:12px;">Cancelled</span>';
+            } else if (isEnded) {
+              actionBtn = "";
+            } else if (isRegistered) {
+              actionBtn = `<button type="button" class="btn-live-cancel" data-action="cancel" data-event-id="${ev.id}">Cancel registration</button>`;
+            } else {
+              actionBtn = `
+                <button type="button" class="btn-live-reg" data-action="register" data-event-id="${ev.id}" ${!openSlots ? "disabled" : ""}>
+                  ${openSlots ? "Register" : "Full"}
+                </button>
+              `;
+            }
+
+            const weekday = formatWeekday(ev.startAt);
+            const timeRange = `${formatTime(ev.startAt)} – ${formatTime(ev.endAt)}`;
+
+            return `
+              <article class="event-card" data-event-id="${ev.id}">
+                <div class="event-date">
+                  <span class="mon">${monShort}</span>
+                  <span class="day">${d}</span>
+                  <span class="year">${y}</span>
+                </div>
+                <div class="event-body">
+                  <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:4px;">
+                    <span class="filter-chip" style="font-size:11px; padding:2px 7px;">${escapeHTML(ev.category)}</span>
+                    <span class="filter-chip" style="font-size:11px; padding:2px 7px;">${escapeHTML(ev.source)}</span>
+                    ${statusBadges}
+                  </div>
+                  <h3 class="event-title">${escapeHTML(ev.name)}</h3>
+                  <div class="event-meta">
+                    <span>
+                      <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" style="vertical-align:-2px; margin-right:4px;">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/>
+                      </svg>
+                      ${weekday}, ${timeRange}
+                    </span>
+                    <span>
+                      <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" style="vertical-align:-2px; margin-right:4px;">
+                        <path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd"/>
+                      </svg>
+                      ${escapeHTML(ev.venue)}
+                    </span>
+                  </div>
+                  ${slotsHtml}
+                </div>
+                <div style="display:flex; flex-direction:column; align-items:flex-end; justify-content:center; gap:8px; flex-shrink:0;">
+                  ${actionBtn}
+                  <button type="button" class="btn-live-details" data-action="open-modal" data-event-id="${ev.id}">Details</button>
+                </div>
+              </article>
+            `;
+          })
+          .join("");
+      }
+
+      function renderAll() {
+        renderHappeningNow();
+        renderAllEvents();
+        renderActiveChips();
+      }
+
+      /* ---------------------------------------------------------
+         USER ACTIONS: REGISTER & CANCEL
+      --------------------------------------------------------- */
+      async function handleRegister(eventId) {
+        const ev = rawEventsMap.get(eventId);
+        const evName = ev ? ev.name : "event";
+
+        // Optimistic update
+        registeredEventIds.add(eventId);
+        syncAttendanceListeners();
+        renderAll();
+
+        announce(`Registered for ${evName}.`);
+        showToast(`Registered for ${evName}`);
+
+        if (functions && isFirebaseConfigured) {
+          try {
+            const callable = httpsCallable(functions, "registerForEvent");
+            await callable({ eventId });
+          } catch (err) {
+            console.warn("registerForEvent notice:", err);
+            // Revert optimistic update
+            registeredEventIds.delete(eventId);
+            syncAttendanceListeners();
+            renderAll();
+            const msg = err.message || "This event is full.";
+            showToast(msg);
+            announce(msg);
+          }
+        }
+      }
+
+      async function handleCancelRegistration(eventId) {
+        const ev = rawEventsMap.get(eventId);
+        const evName = ev ? ev.name : "event";
+
+        // Optimistic update
+        registeredEventIds.delete(eventId);
+        if (openQrEventId === eventId) openQrEventId = null;
+        syncAttendanceListeners();
+        renderAll();
+
+        announce(`Cancelled registration for ${evName}.`);
+        showToast(`Cancelled registration for ${evName}`);
+
+        if (functions && isFirebaseConfigured) {
+          try {
+            const callable = httpsCallable(functions, "cancelRegistration");
+            await callable({ eventId });
+          } catch (err) {
+            console.warn("cancelRegistration notice:", err);
+            // Revert optimistic update
+            registeredEventIds.add(eventId);
+            syncAttendanceListeners();
+            renderAll();
+            const msg = err.message || "Could not cancel registration.";
+            showToast(msg);
+            announce(msg);
+          }
+        }
+      }
+
+      window.recovibeRegisterForEvent = handleRegister;
+      window.recovibeCancelRegistration = handleCancelRegistration;
+
+      /* ---------------------------------------------------------
+         EVENT LISTENERS & BINDINGS
+      --------------------------------------------------------- */
+      function bindInteractions() {
+        // Search input
+        const searchInput = document.getElementById("searchInput");
+        if (searchInput) {
+          searchInput.addEventListener("input", () => {
+            filterState.q = searchInput.value.trim();
+            filterState.showCount = 20;
+            writeUrlParams();
+            renderActiveChips();
+            renderAll();
+          });
+        }
+
+        // Dropdowns (Source, Category, Registration, Availability)
+        document.querySelectorAll(".filter-dropdown").forEach((dropdown) => {
+          const btn = dropdown.querySelector(".filter-button");
+          const menu = dropdown.querySelector(".filter-menu");
+          if (!btn || !menu) return;
+
+          btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const isOpen = menu.classList.contains("show");
+            document.querySelectorAll(".filter-menu.show").forEach((m) => m.classList.remove("show"));
+            document.querySelectorAll(".filter-button[aria-expanded='true']").forEach((b) => b.setAttribute("aria-expanded", "false"));
+
+            if (!isOpen) {
+              menu.classList.add("show");
+              btn.setAttribute("aria-expanded", "true");
+            }
+          });
+
+          menu.querySelectorAll(".filter-option").forEach((opt) => {
+            opt.addEventListener("click", (e) => {
+              e.stopPropagation();
+              const val = opt.dataset.value;
+              const type = menu.dataset.menu;
+
+              if (type === "source") {
+                filterState.source = val;
+              } else if (type === "category") {
+                filterState.category = val;
+              } else if (type === "status" || type === "registration") {
+                filterState.status = val;
+                filterState.reg = val;
+              } else if (type === "availability") {
+                filterState.avail = val;
+              }
+
+              menu.classList.remove("show");
+              btn.setAttribute("aria-expanded", "false");
+              updateDropdownButtons();
+              writeUrlParams();
+              renderActiveChips();
+              renderAll();
+              announce(`Filter applied: ${val}.`);
+            });
+          });
+        });
+
+        // Close dropdowns on click outside
+        document.addEventListener("click", () => {
+          document.querySelectorAll(".filter-menu.show").forEach((m) => m.classList.remove("show"));
+          document.querySelectorAll(".filter-button[aria-expanded='true']").forEach((b) => {
+            if (b.id !== "dateRangeBtn") b.setAttribute("aria-expanded", "false");
+          });
+        });
+
+        // Active chips click delegation
+        const chipsList = document.getElementById("activeChipsList");
+        if (chipsList) {
+          chipsList.addEventListener("click", (e) => {
+            const btn = e.target.closest("button[data-chip-key]");
+            if (!btn) return;
+            const key = btn.dataset.chipKey;
+            if (key === "q") {
+              filterState.q = "";
+              const searchInput = document.getElementById("searchInput");
+              if (searchInput) searchInput.value = "";
+            } else if (key === "source") {
+              filterState.source = "All Sources";
+            } else if (key === "category") {
+              filterState.category = "All Categories";
+            } else if (key === "date") {
+              filterState.from = "";
+              filterState.to = "";
+              filterState.quickPreset = "all";
+              loadEvents();
+            } else if (key === "status" || key === "reg") {
+              filterState.status = "all";
+              filterState.reg = "all";
+            } else if (key === "avail") {
+              filterState.avail = "all";
+            }
+            updateDropdownButtons();
+            writeUrlParams();
+            renderActiveChips();
+            renderAll();
+          });
+        }
+
+        const clearChipsBtn = document.getElementById("clearAllChipsBtn");
+        if (clearChipsBtn) {
+          clearChipsBtn.addEventListener("click", clearAllFilters);
+        }
+
+        // Event actions delegation
+        document.addEventListener("click", (e) => {
+          const target = e.target;
+
+          // Register button
+          const regBtn = target.closest("button[data-action='register']");
+          if (regBtn) {
+            e.preventDefault();
+            const id = regBtn.dataset.eventId;
+            if (id) handleRegister(id);
+            return;
+          }
+
+          // Cancel button
+          const cancelBtn = target.closest("button[data-action='cancel']");
+          if (cancelBtn) {
+            e.preventDefault();
+            const id = cancelBtn.dataset.eventId;
+            if (id) handleCancelRegistration(id);
+            return;
+          }
+
+          // Toggle QR
+          const qrBtn = target.closest("button[data-action='toggle-qr']");
+          if (qrBtn) {
+            e.preventDefault();
+            const id = qrBtn.dataset.eventId;
+            openQrEventId = openQrEventId === id ? null : id;
+            renderHappeningNow();
+            return;
+          }
+
+          // Toggle Details inline
+          const detailsBtn = target.closest("button[data-action='toggle-details']");
+          if (detailsBtn) {
+            e.preventDefault();
+            const id = detailsBtn.dataset.eventId;
+            if (openDetailsEventIds.has(id)) {
+              openDetailsEventIds.delete(id);
+            } else {
+              openDetailsEventIds.add(id);
+            }
+            renderHappeningNow();
+            return;
+          }
+
+          // Open Details modal
+          const modalBtn = target.closest("button[data-action='open-modal']");
+          if (modalBtn) {
+            e.preventDefault();
+            const id = modalBtn.dataset.eventId;
+            const ev = rawEventsMap.get(id);
+            if (ev && window.RecovibeEventDetails) {
+              window.RecovibeEventDetails.open(ev.raw || ev);
+            }
+            return;
+          }
+        });
+      }
+
+      /* ---------------------------------------------------------
+         CLEANUP ON UNLOAD
+      --------------------------------------------------------- */
+      function cleanup() {
+        if (tickInterval) clearInterval(tickInterval);
+        if (activePublicEventsRef && activePublicEventsListener) {
+          off(activePublicEventsRef, "value", activePublicEventsListener);
+        }
+        for (const unsub of attendanceListeners.values()) {
+          unsub();
+        }
+        attendanceListeners.clear();
+      }
+      window.addEventListener("beforeunload", cleanup);
+
+      /* ---------------------------------------------------------
+         INITIALIZATION
+      --------------------------------------------------------- */
+      (function init() {
+        hydrateUserProfile();
+        initSidebarToggle();
+        readUrlParams();
+        initDateRangePicker();
+        bindInteractions();
+
+        // Server time offset
+        if (isRtdbConfigured) {
+          onValue(ref(rtdb, ".info/serverTimeOffset"), (snap) => {
+            serverTimeOffset = snap.val() || 0;
+            renderAll();
+          });
+        }
+
+        // Auth state listener
+        if (auth) {
+          onAuthStateChanged(auth, (user) => {
+            if (user) {
+              currentUid = user.uid;
+              getStudentQrToken();
+
+              // Listen to userRegistrations
+              if (isRtdbConfigured) {
+                const regRef = ref(rtdb, `userRegistrations/${currentUid}`);
+                onValue(regRef, (snap) => {
+                  registeredEventIds.clear();
+                  const data = snap.val() || {};
+                  Object.entries(data).forEach(([evId, reg]) => {
+                    if (reg && reg.status === "registered") {
+                      registeredEventIds.add(evId);
+                    }
+                  });
+                  syncAttendanceListeners();
+                  renderAll();
+                });
+              }
+            } else {
+              currentUid = null;
+              registeredEventIds.clear();
+              renderAll();
+            }
+          });
+        }
+
+        // Load initial events from RTDB
+        loadEvents();
+
+        // 30-second interval automatic state transition
+        tickInterval = setInterval(() => {
+          syncAttendanceListeners();
+          renderAll();
+        }, 30000);
       })();
     </script>
   </body>
