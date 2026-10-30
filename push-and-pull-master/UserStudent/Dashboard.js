@@ -1107,6 +1107,15 @@ function renderCalendarDayEvents() {
    USER ACTIONS: Register & Cancel Registration
 --------------------------------------------------------- */
 async function handleRegister(eventId) {
+  try {
+    const sys = JSON.parse(localStorage.getItem("recovibeSystemSettings") || "{}");
+    if (sys && sys.registrationEnabled === false) {
+      showToast("Event registration is temporarily disabled by system administration.");
+      announce("Event registration is disabled.");
+      return;
+    }
+  } catch (_) {}
+
   const ev = rawEventsMap.get(eventId);
   const evName = ev ? ev.name : "event";
 
@@ -1426,21 +1435,10 @@ function initSidebar() {
   const sidebar = document.getElementById("sidebar");
   if (!sidebar) return;
 
-  const isCollapsed = localStorage.getItem("sidebarCollapsed") === "true";
-  if (isCollapsed && !window.matchMedia("(max-width: 860px)").matches) {
-    sidebar.classList.add("is-collapsed");
-  }
-
-  const collapseBtn = document.getElementById("sidebarCollapseBtn");
-  if (collapseBtn) {
-    collapseBtn.addEventListener("click", () => {
-      sidebar.classList.toggle("is-collapsed");
-      localStorage.setItem(
-        "sidebarCollapsed",
-        String(sidebar.classList.contains("is-collapsed"))
-      );
-    });
-  }
+  try {
+    localStorage.removeItem("sidebarCollapsed");
+    sidebar.classList.remove("is-collapsed");
+  } catch {}
 
   const userAvatar = document.getElementById("userAvatar");
   const userName = document.getElementById("userName");

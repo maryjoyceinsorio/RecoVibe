@@ -11,6 +11,7 @@ const loginPath = "EventOrganizerLogin.html";
 const actionRows = document.getElementById("organizerActionRows");
 const actionTable = document.getElementById("actionRequiredTable");
 const upcomingEventsList = document.getElementById("upcomingEventsList");
+const happeningNowList = document.getElementById("happeningNowList");
 const logoutButton = document.getElementById("organizerLogout");
 let unsubscribeEvents = [];
 let organizerEvents = [];
@@ -125,32 +126,73 @@ function renderStatistics() {
 function renderActionRows() {
   if (!actionRows) return;
   if (!organizerEvents.length) {
-    actionRows.innerHTML = `<tr><td colspan="5"><div class="dashboard-empty-state"><strong>No events created yet.</strong><span>Click “Create Event” to start.</span><a class="organizer-button" href="EventOrganizerCreateEvent.html">+ Create Event</a></div></td></tr>`;
+    actionRows.innerHTML = `<tr><td colspan="3"><div class="dashboard-empty-state"><strong>No events created yet.</strong><span>Click “Create Event” to start.</span><a class="organizer-button" href="EventOrganizerCreateEvent.html">+ Create Event</a></div></td></tr>`;
     return;
   }
 
   actionRows.innerHTML = organizerEvents
     .map(
-      (event) => `<tr>
+      (event) => `<tr data-firestore-event-id="${escapeHtml(event.eventId)}" style="cursor: pointer;">
         <td><strong>${escapeHtml(event.title)}</strong><small>${escapeHtml(event.category || event.eventType || "General")}</small></td>
-        <td>${escapeHtml(formatDate(event.dateISO))}<small>${escapeHtml(event.time || "Time TBA")}</small></td>
-        <td>${escapeHtml(event.venue || "Location TBA")}</td>
+        <td>${escapeHtml(formatDate(event.createdAt, { year: "numeric", month: "numeric", day: "numeric" }))}</td>
         <td><span class="organizer-status ${statusClass(event.status)}">${escapeHtml(event.status || "Upcoming")}</span></td>
-        <td><button class="event-view-button" type="button" data-firestore-event-id="${escapeHtml(event.eventId)}">View</button></td>
       </tr>`,
     )
     .join("");
 }
 
+function renderHappeningNow() {
+  if (!happeningNowList) return;
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  const todayISO = `${year}-${month}-${day}`;
+
+  const happeningNow = organizerEvents
+    .filter((event) => {
+      if (!event.dateISO) return false;
+      const startISO = String(event.dateISO).slice(0, 10);
+      const endISO = String(event.endDateISO || event.endDate || event.dateEnd || startISO).slice(0, 10);
+      const status = (event.status || "").toLowerCase();
+      if (status.includes("reject") || status.includes("cancel")) return false;
+      return startISO <= todayISO && endISO >= todayISO;
+    })
+    .sort((first, second) => first.dateISO.localeCompare(second.dateISO));
+
+  if (!happeningNow.length) {
+    happeningNowList.innerHTML = `<div class="dashboard-empty-state compact"><strong>No events happening today</strong><span>Events scheduled for today will appear here.</span></div>`;
+    return;
+  }
+
+  happeningNowList.innerHTML = happeningNow
+    .map((event) => {
+      const month = formatDate(event.dateISO, { month: "short" }).toUpperCase();
+      const day = formatDate(event.dateISO, { day: "2-digit" });
+      const year = formatDate(event.dateISO, { year: "numeric" });
+      return `<article class="upcoming-event" data-firestore-event-id="${escapeHtml(event.eventId)}" style="cursor: pointer;">
+        <div class="upcoming-event-date"><span class="upcoming-event-month">${escapeHtml(month)}</span><strong>${escapeHtml(day)}</strong><small>${escapeHtml(year)}</small></div>
+        <div class="upcoming-event-content"><strong>${escapeHtml(event.title)}</strong><span>${escapeHtml(event.time || "Time TBA")}</span><span>${escapeHtml(event.venue || "Location TBA")}</span></div>
+      </article>`;
+    })
+    .join("");
+}
+
 function renderUpcomingEvents() {
   if (!upcomingEventsList) return;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  const todayISO = `${year}-${month}-${day}`;
+
   const upcoming = organizerEvents
     .filter((event) => {
       if (!event.dateISO) return false;
-      const eventDate = new Date(`${event.dateISO}T00:00:00`);
-      return !Number.isNaN(eventDate.getTime()) && eventDate >= today;
+      const startISO = String(event.dateISO).slice(0, 10);
+      const status = (event.status || "").toLowerCase();
+      if (status.includes("reject") || status.includes("cancel")) return false;
+      return startISO > todayISO;
     })
     .sort((first, second) => first.dateISO.localeCompare(second.dateISO))
     .slice(0, 4);
@@ -165,7 +207,7 @@ function renderUpcomingEvents() {
       const month = formatDate(event.dateISO, { month: "short" }).toUpperCase();
       const day = formatDate(event.dateISO, { day: "2-digit" });
       const year = formatDate(event.dateISO, { year: "numeric" });
-      return `<article class="upcoming-event">
+      return `<article class="upcoming-event" data-firestore-event-id="${escapeHtml(event.eventId)}" style="cursor: pointer;">
         <div class="upcoming-event-date"><span class="upcoming-event-month">${escapeHtml(month)}</span><strong>${escapeHtml(day)}</strong><small>${escapeHtml(year)}</small></div>
         <div class="upcoming-event-content"><strong>${escapeHtml(event.title)}</strong><span>${escapeHtml(event.time || "Time TBA")}</span><span>${escapeHtml(event.venue || "Location TBA")}</span></div>
       </article>`;
@@ -181,18 +223,20 @@ function renderEvents() {
   });
   renderStatistics();
   renderActionRows();
+  renderHappeningNow();
   renderUpcomingEvents();
 }
 
 function showLoadError(message) {
-  if (actionRows) actionRows.innerHTML = `<tr><td colspan="5">${escapeHtml(message)}</td></tr>`;
+  if (actionRows) actionRows.innerHTML = `<tr><td colspan="3">${escapeHtml(message)}</td></tr>`;
   if (upcomingEventsList) upcomingEventsList.textContent = message;
+  if (happeningNowList) happeningNowList.textContent = message;
 }
 
 const actionHead = actionTable?.querySelector("thead");
 if (actionHead) {
   const headerRow = document.createElement("tr");
-  ["Event", "Date & Time", "Venue", "Status", "Action"].forEach((label) => {
+  ["EVENT NAME", "DATE CREATED", "STATUS"].forEach((label) => {
     const heading = document.createElement("th");
     heading.textContent = label;
     headerRow.append(heading);
@@ -202,16 +246,31 @@ if (actionHead) {
 renderEvents();
 
 actionRows?.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-firestore-event-id]");
-  if (!button) return;
+  const item = event.target.closest("[data-firestore-event-id]");
+  if (!item) return;
   const selectedEvent = organizerEvents.find(
-    (item) => item.eventId === button.dataset.firestoreEventId,
+    (eventItem) => eventItem.eventId === item.dataset.firestoreEventId,
   );
   if (selectedEvent) {
     window.RecovibeEventDetails?.open(selectedEvent, {
       showApprovalDocuments: true,
     });
   }
+});
+
+[happeningNowList, upcomingEventsList].forEach((container) => {
+  container?.addEventListener("click", (event) => {
+    const item = event.target.closest("[data-firestore-event-id]");
+    if (!item) return;
+    const selectedEvent = organizerEvents.find(
+      (eventItem) => eventItem.eventId === item.dataset.firestoreEventId,
+    );
+    if (selectedEvent) {
+      window.RecovibeEventDetails?.open(selectedEvent, {
+        showApprovalDocuments: true,
+      });
+    }
+  });
 });
 
 if (!isFirebaseConfigured || !auth || !db) {

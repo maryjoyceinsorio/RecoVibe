@@ -16,7 +16,6 @@ import { httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.2/fireba
 --------------------------------------------------------- */
 function initCommon() {
   const sidebar = document.getElementById("sidebar");
-  const collapseBtn = document.getElementById("collapseBtn");
   const todayDate = document.getElementById("todayDate");
 
   if (todayDate) {
@@ -27,32 +26,12 @@ function initCommon() {
     });
   }
 
-  if (sidebar && collapseBtn) {
-    function setCollapsed(collapsed) {
-      sidebar.classList.toggle("is-collapsed", collapsed);
-      collapseBtn.setAttribute("aria-expanded", String(!collapsed));
-      collapseBtn.setAttribute(
-        "aria-label",
-        collapsed ? "Expand sidebar" : "Collapse sidebar",
-      );
-      collapseBtn.setAttribute(
-        "title",
-        collapsed ? "Expand sidebar" : "Collapse sidebar",
-      );
-      localStorage.setItem("sidebarCollapsed", String(collapsed));
-    }
-
-    const mobileSidebar = window.matchMedia("(max-width: 860px)");
-    setCollapsed(
-      mobileSidebar.matches
-        ? false
-        : localStorage.getItem("sidebarCollapsed") === "true",
-    );
+  try {
+    localStorage.removeItem("sidebarCollapsed");
+  } catch {}
+  if (sidebar) {
+    sidebar.classList.remove("is-collapsed");
     requestAnimationFrame(() => sidebar.classList.add("is-ready"));
-    collapseBtn.addEventListener("click", () => {
-      if (!mobileSidebar.matches)
-        setCollapsed(!sidebar.classList.contains("is-collapsed"));
-    });
   }
 }
 
@@ -490,13 +469,11 @@ function render() {
     : (attendedCount > 0 ? "100%" : "0%");
 
   // Update Metrics DOM
-  const totalEl = document.getElementById("metricTotal");
   const attendedEl = document.getElementById("metricAttended") || document.getElementById("metricCompleted");
   const absentEl = document.getElementById("metricAbsent");
   const upcomingEl = document.getElementById("metricUpcoming");
   const rateEl = document.getElementById("metricRate");
 
-  if (totalEl) totalEl.textContent = inRangeCount;
   if (attendedEl) attendedEl.textContent = attendedCount;
   if (absentEl) absentEl.textContent = absentCount;
   if (upcomingEl) upcomingEl.textContent = upcomingCount;

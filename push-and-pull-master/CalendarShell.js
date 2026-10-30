@@ -26,19 +26,19 @@
       ["holiday", "Holiday"],
     ],
     teacher: [
-      ["official", "PUP Official"],
-      ["binan", "PUP Biñan"],
-      ["cite", "PUP CITE"],
-      ["organizer", "Event Organizer"],
-      ["external", "Others/External"],
+      ["pup", "PUP Official"],
+      ["csc", "CSC"],
+      ["faculty", "Teachers/Faculty"],
+      ["org", "Organizational"],
+      ["other", "Others/External"],
       ["holiday", "Holiday"],
     ],
     organizer: [
-      ["official", "PUP Official"],
-      ["binan", "PUP Biñan"],
-      ["cite", "PUP CITE"],
-      ["organizer", "Event Organizer"],
-      ["external", "Others/External"],
+      ["pup", "PUP Official"],
+      ["csc", "CSC"],
+      ["faculty", "Teachers/Faculty"],
+      ["org", "Organizational"],
+      ["other", "Others/External"],
       ["holiday", "Holiday"],
     ],
   };
@@ -73,13 +73,25 @@
 
     const kind = legend.dataset.calendarLegend || "student";
     const entries = legendSets[kind] || legendSets.student;
-    legend.innerHTML = [
-      '<span class="legend-title">Calendar legend</span>',
-      ...entries.map(
-        ([type, label]) =>
-          `<span class="legend-item"><span class="dot dot-${type}" aria-hidden="true"></span>${label}</span>`,
-      ),
-    ].join("");
+    if (kind === "organizer" || kind === "teacher") {
+      legend.innerHTML = [
+        '<h3 class="legend-title">Calendar legend</h3>',
+        '<div class="legend-grid">',
+        ...entries.map(
+          ([type, label]) =>
+            `<span class="legend-item"><span class="legend-swatch swatch-${type}" aria-hidden="true"></span>${label}</span>`,
+        ),
+        '</div>',
+      ].join("");
+    } else {
+      legend.innerHTML = [
+        '<span class="legend-title">Calendar legend</span>',
+        ...entries.map(
+          ([type, label]) =>
+            `<span class="legend-item"><span class="dot dot-${type}" aria-hidden="true"></span>${label}</span>`,
+        ),
+      ].join("");
+    }
   }
 
   function renderGrid() {
@@ -141,7 +153,15 @@
     document.querySelectorAll("#calFullDays [data-date]").forEach((cell) => {
       cellsByDate.set(cell.dataset.date, cell);
       const names = holidaysByDate.get(cell.dataset.date) || [];
-      cell.classList.toggle("is-holiday", names.length > 0);
+      const hasHoliday = names.length > 0;
+      cell.classList.toggle("is-holiday", hasHoliday);
+      cell.classList.toggle("only-holiday", hasHoliday);
+      if (hasHoliday) {
+        cell.setAttribute("tabindex", "-1");
+        cell.setAttribute("role", "gridcell");
+        cell.setAttribute("aria-disabled", "true");
+        cell.classList.remove("is-selected");
+      }
       cell.querySelectorAll(".calendar-badge.badge-holiday").forEach((badge) =>
         badge.remove(),
       );

@@ -182,7 +182,7 @@ a {
 }
 
 /* Toggle button: stays visible in both states, icon flips via JS class */
-.collapse-btn {
+.collapse-btn { display: none !important; 
   width: 28px;
   height: 28px;
   padding: 0;
@@ -1998,7 +1998,7 @@ a {
     flex-direction: row;
   }
 
-  .sidebar .collapse-btn {
+  .sidebar .collapse-btn { display: none !important; 
     display: none;
   }
 

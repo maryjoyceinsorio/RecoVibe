@@ -1325,37 +1325,12 @@ function hydrateUserProfile() {
   hydrateUserProfile();
 
   const sidebar = document.getElementById("sidebar");
-  const collapseButton = document.getElementById("collapseBtn");
-  const setCollapsed = (collapsed) => {
-    if (!sidebar) return;
-    sidebar.classList.toggle("is-collapsed", collapsed);
-    if (collapseButton) {
-      collapseButton.setAttribute("aria-expanded", String(!collapsed));
-      collapseButton.setAttribute(
-        "aria-label",
-        collapsed ? "Expand sidebar" : "Collapse sidebar",
-      );
-      collapseButton.setAttribute(
-        "title",
-        collapsed ? "Expand sidebar" : "Collapse sidebar",
-      );
-    }
-    localStorage.setItem("sidebarCollapsed", String(collapsed));
-  };
-  const mobileSidebar = window.matchMedia("(max-width: 860px)");
-  setCollapsed(
-    mobileSidebar.matches
-      ? false
-      : localStorage.getItem("sidebarCollapsed") === "true",
-  );
-  requestAnimationFrame(() => {
-    if (sidebar) sidebar.classList.add("is-ready");
-  });
-  if (collapseButton) {
-    collapseButton.addEventListener("click", () => {
-      if (!mobileSidebar.matches && sidebar)
-        setCollapsed(!sidebar.classList.contains("is-collapsed"));
-    });
+  try {
+    localStorage.removeItem("sidebarCollapsed");
+  } catch {}
+  if (sidebar) {
+    sidebar.classList.remove("is-collapsed");
+    requestAnimationFrame(() => sidebar.classList.add("is-ready"));
   }
   const logoutBtn = document.querySelector(".logout");
   if (logoutBtn && !logoutBtn.dataset.wired) {

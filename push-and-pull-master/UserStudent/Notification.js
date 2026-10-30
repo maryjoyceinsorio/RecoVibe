@@ -179,22 +179,11 @@ document.addEventListener("DOMContentLoaded", () => {
       day: "numeric",
     });
   }
-  const collapseBtn = document.getElementById("collapseBtn");
-  if (collapseBtn) {
-    collapseBtn.addEventListener("click", () => {
-      if (window.matchMedia("(max-width: 860px)").matches) return;
-      const sidebar = document.getElementById("sidebar");
-      const collapsed = !sidebar.classList.contains("is-collapsed");
-      sidebar.classList.toggle("is-collapsed", collapsed);
-      collapseBtn.setAttribute("aria-expanded", String(!collapsed));
-      localStorage.setItem("sidebarCollapsed", String(collapsed));
-    });
-  }
-  if (
-    localStorage.getItem("sidebarCollapsed") === "true" &&
-    !window.matchMedia("(max-width: 860px)").matches
-  )
-    document.getElementById("sidebar").classList.add("is-collapsed");
+  try {
+    localStorage.removeItem("sidebarCollapsed");
+    const sidebar = document.getElementById("sidebar");
+    if (sidebar) sidebar.classList.remove("is-collapsed");
+  } catch {}
   document
     .querySelector(".nav-item.logout")
     .addEventListener("click", () =>

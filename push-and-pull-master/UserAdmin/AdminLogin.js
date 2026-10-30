@@ -215,6 +215,18 @@ import { auth, db, isFirebaseConfigured } from "../UserStudent/firebaseConfig.js
         email: normalizedEmail,
       };
 
+      if (normalizedRole !== "superadmin") {
+        try {
+          const sys = JSON.parse(localStorage.getItem("recovibeSystemSettings") || "{}");
+          if (sys && sys.loginEnabled === false) {
+            await signOut(auth);
+            clearStoredProfiles();
+            showError("System maintenance is in progress. User login is temporarily disabled. Only super administrators can sign in at this time.");
+            return;
+          }
+        } catch (_) {}
+      }
+
       if (normalizedRole === "superadmin") {
         localStorage.setItem(
           "recovibeAdminProfile",

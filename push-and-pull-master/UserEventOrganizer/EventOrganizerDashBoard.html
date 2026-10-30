@@ -281,13 +281,9 @@
               <table class="organizer-table" id="actionRequiredTable">
                 <thead>
                   <tr>
-                    <th>Event</th>
-                    <th>Date Created</th>
-                    <th>HAP 1</th>
-                    <th>HAP 2</th>
-                    <th>HAP 3</th>
-                    <th>Status</th>
-                    <th class="view-column">VIEW</th>
+                    <th>EVENT NAME</th>
+                    <th>DATE CREATED</th>
+                    <th>STATUS</th>
                   </tr>
                 </thead>
                 <tbody id="organizerActionRows"></tbody>
@@ -295,15 +291,26 @@
             </div>
           </section>
 
-          <section class="organizer-panel" id="upcomingEventsSection">
-            <div class="organizer-results-bar">
-              <div>
-                <h2>Upcoming Events</h2>
+          <div class="dashboard-sidebar-column">
+            <section class="organizer-panel" id="happeningNowSection">
+              <div class="organizer-results-bar">
+                <div>
+                  <h2>Happening Now</h2>
+                </div>
               </div>
-              <a href="EventOrganizerCalendar.html">Calendar</a>
-            </div>
-            <div id="upcomingEventsList" class="upcoming-events-list"></div>
-          </section>
+              <div id="happeningNowList" class="upcoming-events-list"></div>
+            </section>
+
+            <section class="organizer-panel" id="upcomingEventsSection">
+              <div class="organizer-results-bar">
+                <div>
+                  <h2>Upcoming Events</h2>
+                </div>
+                <a href="EventOrganizerCalendar.html">Calendar</a>
+              </div>
+              <div id="upcomingEventsList" class="upcoming-events-list"></div>
+            </section>
+          </div>
         </div>
       </main>
     </div>

@@ -10,7 +10,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,500;8..60,600;8..60,700&family=Inter:wght@400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="TeacherProfile.css" />
@@ -234,7 +234,7 @@
       </symbol>
     </svg>
 
-    <div class="organizer-app" id="eventOrganizerProfilePage">
+    <div class="organizer-app" id="teacherProfilePage">
       <aside
         class="organizer-sidebar"
         id="organizerSidebar"
@@ -316,167 +316,267 @@
         </div>
       </aside>
 
-      <main class="organizer-main">
-        <section
-          class="organizer-panel profile-panel"
-          aria-labelledby="profile-title"
-        >
-          <div class="profile-heading">
-            <div>
-              <h2 id="profile-title">Personal Information</h2>
-              <p>Review your account information.</p>
+      <!-- Main Profile Area -->
+      <main class="organizer-main" id="profileMain">
+        <div class="content-container">
+          <!-- 1. Maroon Hero Banner -->
+          <header class="hero-banner">
+            <div class="hero-left">
+              <div class="hero-avatar" id="heroAvatar" aria-hidden="true">T</div>
+              <div class="hero-info">
+                <h1 class="hero-name" id="heroUserName">Teacher Name</h1>
+                <p class="hero-subtitle">
+                  <span id="heroTeacherId">2024-FAC-0102</span> &bull; <span id="heroDeptName">Department of Computer Studies</span>
+                </p>
+                <div class="hero-badges">
+                  <span class="hero-badge" id="heroDeptBadge">CCIS</span>
+                  <span class="hero-badge" id="heroRoleBadge">Faculty</span>
+                </div>
+              </div>
             </div>
-            <div class="profile-avatar" id="profileAvatar" aria-hidden="true">
-              EO
+            <div class="hero-actions">
+              <button type="button" class="btn-outlined-hero" id="changePassword">
+                Change password
+              </button>
             </div>
+          </header>
+
+          <!-- Feedback Alert Banner above cards -->
+          <div class="profile-feedback-alert" id="profileFeedbackAlert" role="status" aria-live="polite" hidden>
+            <div class="alert-content">
+              <svg class="alert-icon" viewBox="0 0 20 20" fill="currentColor" width="18" height="18" aria-hidden="true">
+                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+              </svg>
+              <span id="profileFeedbackText">Profile updated successfully.</span>
+            </div>
+            <button type="button" class="alert-dismiss-btn" id="btnDismissFeedback" aria-label="Dismiss">&times;</button>
           </div>
-          <div class="profile-summary" id="profileSummary">
-            <div>
-              <strong>Name:</strong><span id="profileSummaryName"></span>
-            </div>
-            <div>
-              <strong>Department:</strong
-              ><span id="profileSummaryOrganization"></span>
-            </div>
-            <div>
-              <strong>Email Address:</strong
-              ><span id="profileSummaryEmail"></span>
-            </div>
-            <div>
-              <strong>Contact Number:</strong
-              ><span id="profileSummaryContact"></span>
-            </div>
-          </div>
-          <div class="profile-page-actions">
-            <button
-              class="organizer-button"
-              id="editProfileButton"
-              type="button"
-            >
-              Edit Profile
-            </button>
-            <a class="organizer-button" href="TeacherForgetPassword.html"
-              >Change Password</a
-            >
-          </div>
-          <form
-            class="organizer-form profile-form"
-            id="organizerProfileForm"
-            novalidate
-            hidden
-          >
-            <div class="profile-form-heading">
-              <a class="profile-back-link" id="cancelProfileEdit" href="#"
-                >&lsaquo; Back To Profile</a
-              >
-              <h3>Update Your Profile</h3>
-            </div>
-            <div class="profile-field">
-              <label for="profileLastName">Last Name</label>
-              <input
-                id="profileLastName"
-                name="lastName"
-                type="text"
-                autocomplete="family-name"
-                required
-              />
-            </div>
-            <div class="profile-field">
-              <label for="profileFirstName">First Name</label>
-              <input
-                id="profileFirstName"
-                name="firstName"
-                type="text"
-                autocomplete="given-name"
-                required
-              />
-            </div>
-            <div class="profile-field">
-              <label for="profileMiddleName">Middle Name</label>
-              <input
-                id="profileMiddleName"
-                name="middleName"
-                type="text"
-                autocomplete="additional-name"
-                placeholder="--"
-              />
-            </div>
-            <div class="profile-field">
-              <label for="profileEmail">Email</label>
-              <input
-                id="profileEmail"
-                name="email"
-                type="email"
-                autocomplete="email"
-                required
-              />
-            </div>
-            <div class="profile-field">
-              <label for="profileContact">Contact Number</label>
-              <input
-                id="profileContact"
-                name="contactNumber"
-                type="tel"
-                value="09"
-                maxlength="11"
-                autocomplete="tel"
-                placeholder="09XX XXX XXXX"
-              />
-            </div>
-            <div class="profile-field">
-              <label for="profileOrganization">Department</label>
-              <input
-                id="profileOrganization"
-                name="organization"
-                type="text"
-                autocomplete="organization"
-                readonly
-              />
-            </div>
-            <div class="profile-actions">
-              <button class="organizer-button" type="submit">Save</button>
-              <p
-                class="profile-status"
-                id="profileStatus"
-                role="status"
-                aria-live="polite"
-              ></p>
-            </div>
-          </form>
-        </section>
+
+          <!-- 2. Profile Cards Grid -->
+          <section class="profile-cards-grid" id="profileContent" aria-label="Profile information">
+            <!-- Name Card (Editable) -->
+            <article class="profile-card" id="nameCard">
+              <div class="card-header-flex">
+                <h2 class="card-title">Name</h2>
+                <button type="button" class="btn-outlined-card" id="btnEditName">Edit</button>
+              </div>
+
+              <!-- View Mode -->
+              <div class="card-view-mode" id="nameCardView">
+                <div class="fields-grid cols-3">
+                  <div class="field-item">
+                    <span class="field-label">First name</span>
+                    <span class="field-value" id="viewFirstName">Teacher</span>
+                  </div>
+                  <div class="field-item">
+                    <span class="field-label">Middle name</span>
+                    <span class="field-value" id="viewMiddleName"><span class="empty-muted">Not set</span></span>
+                  </div>
+                  <div class="field-item">
+                    <span class="field-label">Last name</span>
+                    <span class="field-value" id="viewLastName">Account</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Edit Mode -->
+              <form class="card-edit-mode" id="nameCardEdit" novalidate hidden>
+                <div class="fields-grid cols-3">
+                  <div class="field-item" id="field-name-first">
+                    <label class="field-label" for="inputFirstName">First name</label>
+                    <input type="text" id="inputFirstName" required autocomplete="given-name" class="card-input" />
+                    <div class="field-error" id="errFirstName" role="alert">First name is required.</div>
+                  </div>
+                  <div class="field-item" id="field-name-middle">
+                    <label class="field-label" for="inputMiddleName">Middle name</label>
+                    <input type="text" id="inputMiddleName" autocomplete="additional-name" placeholder="Optional" class="card-input" />
+                    <div class="field-error" id="errMiddleName" role="alert"></div>
+                  </div>
+                  <div class="field-item" id="field-name-last">
+                    <label class="field-label" for="inputLastName">Last name</label>
+                    <input type="text" id="inputLastName" required autocomplete="family-name" class="card-input" />
+                    <div class="field-error" id="errLastName" role="alert">Last name is required.</div>
+                  </div>
+                </div>
+                <div class="card-edit-footer">
+                  <span class="unsaved-count-text" id="nameUnsavedCount">No changes yet</span>
+                  <div class="footer-actions">
+                    <button type="button" class="btn-secondary" id="nameCancelBtn">Cancel</button>
+                    <button type="submit" class="btn-primary" id="nameSaveBtn" disabled>Save</button>
+                  </div>
+                </div>
+              </form>
+            </article>
+
+            <!-- Contact Card (Editable) -->
+            <article class="profile-card" id="contactCard">
+              <div class="card-header-flex">
+                <h2 class="card-title">Contact</h2>
+                <button type="button" class="btn-outlined-card" id="btnEditContact">Edit</button>
+              </div>
+
+              <!-- View Mode -->
+              <div class="card-view-mode" id="contactCardView">
+                <div class="fields-grid cols-2">
+                  <div class="field-item">
+                    <span class="field-label">Email address</span>
+                    <span class="field-value" id="viewEmail">teacher@pup.edu.ph</span>
+                  </div>
+                  <div class="field-item">
+                    <span class="field-label">Contact number</span>
+                    <span class="field-value" id="viewContact">0912 345 6789</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Edit Mode -->
+              <form class="card-edit-mode" id="contactCardEdit" novalidate hidden>
+                <div class="fields-grid cols-2">
+                  <div class="field-item" id="field-contact-email">
+                    <label class="field-label" for="inputContactEmail">Email address</label>
+                    <input type="email" id="inputContactEmail" required autocomplete="email" class="card-input" />
+                    <div class="field-error" id="errContactEmail" role="alert">Enter a valid email address.</div>
+                  </div>
+                  <div class="field-item" id="field-contact-phone">
+                    <label class="field-label" for="inputContactPhone">Contact number</label>
+                    <input type="tel" id="inputContactPhone" required autocomplete="tel" placeholder="0912 345 6789" maxlength="13" class="card-input" />
+                    <div class="field-error" id="errContactPhone" role="alert">Enter a valid 11-digit phone number.</div>
+                  </div>
+                </div>
+                <div class="card-edit-footer">
+                  <span class="unsaved-count-text" id="contactUnsavedCount">No changes yet</span>
+                  <div class="footer-actions">
+                    <button type="button" class="btn-secondary" id="contactCancelBtn">Cancel</button>
+                    <button type="submit" class="btn-primary" id="contactSaveBtn" disabled>Save</button>
+                  </div>
+                </div>
+              </form>
+            </article>
+
+            <!-- 3. Teacher Details Card (Locked, full-width) -->
+            <article class="profile-card full-width-card" id="teacherDetailsCard">
+              <div class="card-header-flex">
+                <div class="card-title-locked-row">
+                  <h2 class="card-title">Teacher details</h2>
+                  <span class="badge-locked" title="These details come from school records and cannot be edited directly">
+                    <svg class="label-lock" viewBox="0 0 20 20" fill="currentColor" width="12" height="12" aria-hidden="true">
+                      <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd" />
+                    </svg>
+                    Locked
+                  </span>
+                </div>
+              </div>
+
+              <div class="fields-grid cols-4-responsive">
+                <div class="field-item">
+                  <span class="field-label">
+                    <svg class="label-lock" viewBox="0 0 20 20" fill="currentColor" width="11" height="11" aria-hidden="true"><path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"/></svg>
+                    Teacher ID
+                  </span>
+                  <span class="field-value" id="viewTeacherId">2024-FAC-0102</span>
+                </div>
+                <div class="field-item">
+                  <span class="field-label">
+                    <svg class="label-lock" viewBox="0 0 20 20" fill="currentColor" width="11" height="11" aria-hidden="true"><path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"/></svg>
+                    Department
+                  </span>
+                  <span class="field-value" id="viewDepartment">Department of Computer Studies</span>
+                </div>
+                <div class="field-item">
+                  <span class="field-label">
+                    <svg class="label-lock" viewBox="0 0 20 20" fill="currentColor" width="11" height="11" aria-hidden="true"><path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"/></svg>
+                    Designation
+                  </span>
+                  <span class="field-value" id="viewRole">Faculty Member</span>
+                </div>
+                <div class="field-item">
+                  <span class="field-label">
+                    <svg class="label-lock" viewBox="0 0 20 20" fill="currentColor" width="11" height="11" aria-hidden="true"><path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"/></svg>
+                    Campus
+                  </span>
+                  <span class="field-value" id="viewCampus">PUP Biñan Campus</span>
+                </div>
+              </div>
+
+              <!-- Locked Note Box -->
+              <div class="locked-note-box">
+                <p class="locked-note-text">
+                  These details come from school records, so you cannot change them here. If something is wrong, ask OSAS or HR to correct it.
+                </p>
+                <button type="button" class="btn-outlined-card" id="btnRequestCorrection">
+                  Request a correction
+                </button>
+              </div>
+            </article>
+          </section>
+        </div>
       </main>
     </div>
 
-    <div class="profile-confirm-overlay" id="profileConfirmOverlay" hidden>
-      <section
-        class="profile-confirm-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="profileConfirmTitle"
-      >
-        <h2 id="profileConfirmTitle">Confirm Changes?</h2>
-        <p>
-          Are you sure you want to save these changes to your profile? Please
-          review your updated information before continuing.
-        </p>
-        <div class="profile-confirm-actions">
-          <button
-            class="profile-confirm-save"
-            id="confirmProfileSave"
-            type="button"
-          >
-            Save Changes
-          </button>
-          <button
-            class="profile-confirm-cancel"
-            id="cancelProfileSave"
-            type="button"
-          >
-            Cancel
-          </button>
-        </div>
-      </section>
+    <!-- Request a Correction Modal Dialog -->
+    <div class="correction-modal-overlay" id="correctionModalOverlay" role="dialog" aria-modal="true" aria-labelledby="correctionModalTitle" hidden>
+      <div class="correction-modal-backdrop" id="correctionModalBackdrop"></div>
+      <div class="correction-modal-dialog">
+        <button type="button" class="modal-close-btn" id="closeCorrectionModal" aria-label="Close dialog">&times;</button>
+        <h2 class="modal-title" id="correctionModalTitle">Request a correction</h2>
+        <p class="correction-modal-desc">Tell the administration which faculty record needs to be updated and what it should say.</p>
+        
+        <form id="correctionForm" novalidate>
+          <div class="form-field" id="field-correction-detail">
+            <label for="correctionFieldSelect">Which detail is wrong?</label>
+            <select id="correctionFieldSelect" required class="card-input">
+              <option value="">Select a detail</option>
+              <option value="Teacher ID">Teacher ID / Employee Number</option>
+              <option value="Department">Department</option>
+              <option value="Designation">Designation / Role</option>
+              <option value="Campus">Campus</option>
+            </select>
+            <div class="field-error" id="errCorrectionField" role="alert">Please select which detail is wrong.</div>
+          </div>
+
+          <div class="form-field" id="field-correction-message">
+            <label for="correctionMessageInput">Tell administration what it should say</label>
+            <textarea id="correctionMessageInput" required minlength="10" rows="4" placeholder="Explain the correct details (at least 10 characters)..." class="card-input"></textarea>
+            <div class="field-helper">Minimum 10 characters.</div>
+            <div class="field-error" id="errCorrectionMessage" role="alert">Please provide at least 10 characters explaining the correction.</div>
+          </div>
+
+          <div class="modal-footer">
+            <button type="button" class="btn-secondary" id="btnCancelCorrection">Cancel</button>
+            <button type="submit" class="btn-primary" id="btnSendCorrection">Send request</button>
+          </div>
+        </form>
+      </div>
     </div>
+
+    <!-- Change Password Modal Dialog -->
+    <div class="account-form-modal" id="passwordFormModal" hidden>
+      <div class="modal-backdrop" id="passwordModalBackdrop"></div>
+      <form class="modal-dialog" id="passwordForm">
+        <button type="button" class="modal-close-btn" id="closePasswordModal" aria-label="Close change password">&times;</button>
+        <h2 class="modal-title">Change Password</h2>
+        <div class="form-field">
+          <label for="currentPassword">Current Password</label>
+          <input id="currentPassword" type="password" required autocomplete="current-password" class="card-input" />
+        </div>
+        <div class="form-field">
+          <label for="newPassword">New Password</label>
+          <input id="newPassword" type="password" required minlength="6" autocomplete="new-password" class="card-input" />
+          <div class="field-helper">Minimum 6 characters.</div>
+        </div>
+        <div class="form-field">
+          <label for="confirmPassword">Confirm New Password</label>
+          <input id="confirmPassword" type="password" required minlength="6" autocomplete="new-password" class="card-input" />
+        </div>
+        <p class="account-form-status" id="passwordFormStatus" role="alert" aria-live="polite"></p>
+        <div class="modal-footer">
+          <button class="btn-secondary" id="cancelPasswordChange" type="button">Cancel</button>
+          <button class="btn-primary" type="submit">Update Password</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
     <script src="TeacherProfile.js"></script>
     <script src="TeacherNotification.js"></script>

@@ -1,4 +1,11 @@
 (() => {
+  try {
+    localStorage.removeItem("sidebarCollapsed");
+    document.querySelectorAll(".sidebar.is-collapsed").forEach((el) => {
+      el.classList.remove("is-collapsed");
+    });
+  } catch {}
+
   let user = {};
 
   try {

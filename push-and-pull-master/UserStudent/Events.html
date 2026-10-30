@@ -162,7 +162,7 @@
         gap: 14px;
       }
 
-      .collapse-btn {
+      .collapse-btn { display: none !important; 
         width: 28px;
         height: 28px;
         padding: 0;
@@ -1321,7 +1321,7 @@
           min-width: 0;
           margin-bottom: 0;
         }
-        .sidebar .collapse-btn {
+        .sidebar .collapse-btn { display: none !important; 
           display: none;
         }
         .brand-text {
@@ -3001,35 +3001,13 @@
 
       function initSidebarToggle() {
         const sidebar = document.getElementById("sidebar");
-        const collapseBtn = document.getElementById("collapseBtn");
-        if (!sidebar || !collapseBtn) return;
-
-        function setCollapsed(collapsed) {
-          sidebar.classList.toggle("is-collapsed", collapsed);
-          collapseBtn.setAttribute("aria-expanded", String(!collapsed));
-          collapseBtn.setAttribute(
-            "aria-label",
-            collapsed ? "Expand sidebar" : "Collapse sidebar",
-          );
-          collapseBtn.setAttribute(
-            "title",
-            collapsed ? "Expand sidebar" : "Collapse sidebar",
-          );
-          localStorage.setItem("sidebarCollapsed", String(collapsed));
+        try {
+          localStorage.removeItem("sidebarCollapsed");
+          if (sidebar) sidebar.classList.remove("is-collapsed");
+        } catch {}
+        if (sidebar) {
+          requestAnimationFrame(() => sidebar.classList.add("is-ready"));
         }
-
-        const isMobile = window.matchMedia("(max-width: 860px)").matches;
-        setCollapsed(
-          isMobile
-            ? false
-            : localStorage.getItem("sidebarCollapsed") === "true",
-        );
-        requestAnimationFrame(() => sidebar.classList.add("is-ready"));
-        collapseBtn.addEventListener("click", () => {
-          if (!window.matchMedia("(max-width: 860px)").matches) {
-            setCollapsed(!sidebar.classList.contains("is-collapsed"));
-          }
-        });
       }
 
       /* ---------------------------------------------------------
@@ -4478,6 +4456,15 @@
          USER ACTIONS: REGISTER & CANCEL
       --------------------------------------------------------- */
       async function handleRegister(eventId) {
+        try {
+          const sys = JSON.parse(localStorage.getItem("recovibeSystemSettings") || "{}");
+          if (sys && sys.registrationEnabled === false) {
+            showToast("Event registration is temporarily disabled by system administration.");
+            announce("Event registration is disabled.");
+            return;
+          }
+        } catch (_) {}
+
         const ev = rawEventsMap.get(eventId);
         const evName = ev ? ev.name : "event";
 

@@ -12,7 +12,6 @@ const organizerRole = document.getElementById("organizerRole");
 const organizerLogout = document.getElementById("organizerLogout");
 
 const eventSelect = document.getElementById("eventSelect");
-const eventStatusBadge = document.getElementById("eventStatusBadge");
 const metaDateTime = document.getElementById("metaDateTime");
 const metaVenue = document.getElementById("metaVenue");
 const metaCount = document.getElementById("metaCount");
@@ -32,6 +31,8 @@ const scannerLiveDot = document.getElementById("scannerLiveDot");
 const btnToggleCamera = document.getElementById("btnToggleCamera");
 const btnToggleCameraLabel = document.getElementById("btnToggleCameraLabel");
 const btnSwitchCamera = document.getElementById("btnSwitchCamera");
+const cameraPausedBox = document.getElementById("cameraPausedBox");
+const btnResumePausedCamera = document.getElementById("btnResumePausedCamera");
 const cameraErrorBox = document.getElementById("cameraErrorBox");
 const cameraErrorTitle = document.getElementById("cameraErrorTitle");
 const cameraErrorMessage = document.getElementById("cameraErrorMessage");
@@ -40,9 +41,9 @@ const btnRetryCamera = document.getElementById("btnRetryCamera");
 const manualCheckInForm = document.getElementById("manualCheckInForm");
 const manualStudentNo = document.getElementById("manualStudentNo");
 const btnManualSubmit = document.getElementById("btnManualSubmit");
+const manualValidationError = document.getElementById("manualValidationError");
 
 const btnCompleteEvent = document.getElementById("btnCompleteEvent");
-const btnReopenEvent = document.getElementById("btnReopenEvent");
 const scanEmptyEventsBox = document.getElementById("scanEmptyEventsBox");
 const scanCompletedBanner = document.getElementById("scanCompletedBanner");
 const completedBannerSummary = document.getElementById("completedBannerSummary");
@@ -50,9 +51,23 @@ const completedBannerSummary = document.getElementById("completedBannerSummary")
 const completeConfirmModalOverlay = document.getElementById("completeConfirmModalOverlay");
 const btnCancelCompleteModal = document.getElementById("btnCancelCompleteModal");
 const btnConfirmCompleteModal = document.getElementById("btnConfirmCompleteModal");
+const confirmModalEventName = document.getElementById("confirmModalEventName");
+const confirmModalWarning = document.getElementById("confirmModalWarning");
 const confirmModalCheckedIn = document.getElementById("confirmModalCheckedIn");
 const confirmModalWalkIns = document.getElementById("confirmModalWalkIns");
 const confirmModalAbsent = document.getElementById("confirmModalAbsent");
+
+const walkInConfirmModalOverlay = document.getElementById("walkInConfirmModalOverlay");
+const walkInModalHeading = document.getElementById("walkInModalHeading");
+const walkInModalDescription = document.getElementById("walkInModalDescription");
+const btnCancelWalkInModal = document.getElementById("btnCancelWalkInModal");
+const btnConfirmWalkInModal = document.getElementById("btnConfirmWalkInModal");
+
+const manualConfirmModalOverlay = document.getElementById("manualConfirmModalOverlay");
+const manualConfirmStudentNo = document.getElementById("manualConfirmStudentNo");
+const manualConfirmWalkInNotice = document.getElementById("manualConfirmWalkInNotice");
+const btnCancelManualConfirm = document.getElementById("btnCancelManualConfirm");
+const btnAcceptManualConfirm = document.getElementById("btnAcceptManualConfirm");
 
 const rosterTabsRow = document.getElementById("rosterTabsRow");
 const tabCheckedIn = document.getElementById("tabCheckedIn");
@@ -78,7 +93,11 @@ let currentFacingMode = "environment"; // 'environment' | 'user'
 let lastScannedText = "";
 let lastScannedTime = 0;
 let isScanThrottled = false;
+let isWalkInAllowed = false;
 let pendingWalkInToken = null;
+let pendingWalkInState = null;
+let pendingManualStudentNo = null;
+let isTeacherSession = false;
 
 // Initialize Date & Profile
 (() => {
@@ -91,34 +110,66 @@ let pendingWalkInToken = null;
   }
 
   try {
-    const profile = JSON.parse(localStorage.getItem("recovibeOrganizerProfile") || "{}");
-    const name = profile.name || "Event Organizer";
-    const org = profile.organization || "PUP Biñan";
+    const orgProfile = JSON.parse(localStorage.getItem("recovibeOrganizerProfile") || "{}");
+    const teacherProfile = JSON.parse(localStorage.getItem("recovibeCurrentTeacher") || "{}");
+    const isTeacher = Boolean(teacherProfile.name || teacherProfile.fullName || localStorage.getItem("recovibeTeacherId"));
+    isTeacherSession = isTeacher;
+    const name = isTeacher
+      ? (teacherProfile.name || teacherProfile.fullName || "Teacher")
+      : (orgProfile.name || "Event Organizer");
+    const orgName = isTeacher
+      ? (teacherProfile.department || teacherProfile.role || "Faculty")
+      : `${orgProfile.organization || "PUP Biñan"} organizer`;
     if (organizerName) organizerName.textContent = name;
-    if (organizerRole) organizerRole.textContent = `${org} organizer`;
+    if (organizerRole) organizerRole.textContent = orgName;
     if (organizerAvatar) {
-      const initials = name.split(/\s+/).filter(Boolean).map(p => p[0]).slice(0, 2).join("").toUpperCase() || "EO";
+      const initials = name.split(/\s+/).filter(Boolean).map(p => p[0]).slice(0, 2).join("").toUpperCase() || (isTeacher ? "TC" : "EO");
       organizerAvatar.textContent = initials;
     }
+
+    // Adapt sidebar links for Teacher session
+    if (isTeacher) {
+      const navLinks = document.querySelectorAll(".organizer-sidebar .nav-item");
+      navLinks.forEach((link) => {
+        const text = link.querySelector(".nav-label")?.textContent?.trim();
+        if (text === "Dashboard") link.href = "../UserTeacher/TeacherDashBoard.html";
+        else if (text === "All Events") link.href = "../UserTeacher/TeacherAllEvent.html";
+        else if (text === "Calendar") link.href = "../UserTeacher/TeacherCalendar.html";
+        else if (text === "Create Event") link.href = "../UserTeacher/TeacherCreate.html";
+        else if (text === "My Events") {
+          link.href = "../UserTeacher/TeacherMyEvent.html";
+          link.classList.add("is-active");
+        }
+        else if (text === "Notifications") link.href = "../UserTeacher/TeacherNotification.html";
+        else if (text === "Profile") link.href = "../UserTeacher/TeacherProfile.html";
+        else if (text === "Scan Attendance" || text === "Activity Summary") {
+          link.style.display = "none";
+        }
+      });
+      if (organizerLogout) organizerLogout.href = "../UserTeacher/TeacherLogin.html";
+      const emptyBtn = scanEmptyEventsBox?.querySelector("a");
+      if (emptyBtn) emptyBtn.href = "../UserTeacher/TeacherMyEvent.html";
+    }
   } catch (err) {
-    console.warn("Could not read organizer profile:", err);
+    console.warn("Could not read profile:", err);
   }
 })();
 
-// Task 1: Auth & Role Guard (Must be event_organizer or admin)
+// Task 1: Auth & Role Guard (Must be event_organizer, teacher, or admin)
 onAuthStateChanged(auth, async (user) => {
   if (!user) {
-    // If running in development / demo mode with localStorage organizer session, allow preview
+    // If running in development / demo mode with localStorage session, allow preview
     const localOrganizer = localStorage.getItem("recovibeOrganizerId");
-    if (!localOrganizer && isFirebaseConfigured) {
-      window.location.replace("EventOrganizerLogin.html");
+    const localTeacher = localStorage.getItem("recovibeTeacherId");
+    if (!localOrganizer && !localTeacher && isFirebaseConfigured) {
+      window.location.replace(isTeacherSession ? "../UserTeacher/TeacherLogin.html" : "EventOrganizerLogin.html");
       return;
     }
   } else if (rtdb) {
     try {
       const roleSnap = await get(ref(rtdb, `roles/${user.uid}`));
       const roleVal = roleSnap.val();
-      const allowedRoles = ["event_organizer", "admin"];
+      const allowedRoles = ["event_organizer", "admin", "teacher"];
       if (roleVal && !allowedRoles.includes(roleVal)) {
         console.warn("Unauthorized role for scan attendance:", roleVal);
         window.location.replace("EventOrganizerLogin.html");
@@ -140,7 +191,8 @@ if (organizerLogout) {
       if (auth) await signOut(auth);
     } catch {}
     localStorage.removeItem("recovibeOrganizerId");
-    window.location.href = "EventOrganizerLogin.html";
+    localStorage.removeItem("recovibeTeacherId");
+    window.location.href = isTeacherSession ? "../UserTeacher/TeacherLogin.html" : "EventOrganizerLogin.html";
   });
 }
 
@@ -319,6 +371,8 @@ if (btnWalkInConfirm) {
   btnWalkInConfirm.addEventListener("click", async () => {
     if (!pendingWalkInToken || !currentEventId) return;
     const tokenToProcess = pendingWalkInToken;
+    const confirmed = window.confirm("Are you sure you want to check in this student as a walk-in attendee?");
+    if (!confirmed) return;
     dismissBanner();
     await processAttendance({
       eventId: currentEventId,
@@ -327,6 +381,7 @@ if (btnWalkInConfirm) {
     });
   });
 }
+
 
 // Task 2: Event Selector & Default to Today / Next Upcoming
 async function loadEventsList() {
@@ -351,6 +406,7 @@ async function loadEventsList() {
                 dateISO: val.dateISO || (val.startAt ? String(val.startAt).slice(0, 10) : ""),
                 status: status,
                 completedAt: val.completedAt || null,
+                allowWalkIn: Boolean(val.allowWalkIn),
               });
             }
           }
@@ -379,6 +435,7 @@ async function loadEventsList() {
             dateISO: data.eventDate || data.dateISO || "",
             status: status,
             completedAt: data.completedAt || null,
+            allowWalkIn: Boolean(data.allowWalkIn),
           });
         }
       });
@@ -387,28 +444,33 @@ async function loadEventsList() {
     }
   }
 
-  // 3. Load from localStorage / RECOVIBE_EVENTS
-  try {
-    const orgEvents = JSON.parse(localStorage.getItem("recovibeOrganizerEvents") || "[]");
-    if (Array.isArray(orgEvents)) {
-      orgEvents.forEach((ev) => {
-        const id = String(ev.id || ev.eventId);
-        const status = ev.status || "published";
-        if (id && !eventsMap.has(id) && (status === "published" || status === "completed")) {
-          eventsMap.set(id, {
-            id,
-            name: ev.title || ev.eventName || `Event #${id}`,
-            startAt: ev.time || ev.startTime || "",
-            endAt: ev.endTime || "",
-            venue: ev.venue || ev.location || "PUP Biñan Campus",
-            dateISO: ev.dateISO || ev.date || "",
-            status: status,
-            completedAt: ev.completedAt || null,
-          });
-        }
-      });
-    }
-  } catch {}
+  // 3. Load from localStorage (Organizer & Teacher events)
+  ["recovibeOrganizerEvents", "recovibeTeacherEvents", "recovibeEvents"].forEach((storageKey) => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(storageKey) || "[]");
+      if (Array.isArray(stored)) {
+        stored.forEach((ev) => {
+          const id = String(ev.id || ev.eventId);
+          const rawStatus = String(ev.status || "published").toLowerCase();
+          const isEligible = ["published", "approved", "completed"].includes(rawStatus);
+          const normStatus = rawStatus === "completed" ? "completed" : "published";
+          if (id && !eventsMap.has(id) && isEligible) {
+            eventsMap.set(id, {
+              id,
+              name: ev.title || ev.eventName || `Event #${id}`,
+              startAt: ev.time || ev.startTime || "",
+              endAt: ev.endTime || "",
+              venue: ev.venue || ev.location || "PUP Biñan Campus",
+              dateISO: ev.dateISO || ev.date || "",
+              status: normStatus,
+              completedAt: ev.completedAt || null,
+              allowWalkIn: Boolean(ev.allowWalkIn),
+            });
+          }
+        });
+      }
+    } catch {}
+  });
 
   currentEvents = Array.from(eventsMap.values());
   populateEventDropdown();
@@ -436,11 +498,20 @@ function populateEventDropdown() {
   if (!eventSelect) return;
   eventSelect.innerHTML = "";
 
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const urlParams = new URLSearchParams(window.location.search);
+  const targetEventId = urlParams.get("eventId");
   let bestMatchEvent = null;
 
+  if (targetEventId) {
+    bestMatchEvent = currentEvents.find((e) => String(e.id) === String(targetEventId));
+  }
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+
   // 1. Look for event happening today
-  bestMatchEvent = currentEvents.find((e) => e.dateISO === todayStr && e.status === "published");
+  if (!bestMatchEvent) {
+    bestMatchEvent = currentEvents.find((e) => e.dateISO === todayStr && e.status === "published");
+  }
 
   // 2. Otherwise find next upcoming published event
   if (!bestMatchEvent) {
@@ -490,16 +561,8 @@ async function selectEvent(eventId) {
   const scanLayoutGrid = document.querySelector(".scan-layout-grid");
 
   if (isCompleted) {
-    if (eventStatusBadge) {
-      eventStatusBadge.className = "scan-status-pill pill-past";
-      eventStatusBadge.textContent = "Completed";
-    }
     if (btnCompleteEvent) btnCompleteEvent.hidden = true;
-
-    // Check 24 hour limit for reopen
-    const completedAt = Number(ev.completedAt || 0);
-    const canReopen = !completedAt || (Date.now() - completedAt <= 24 * 60 * 60 * 1000);
-    if (btnReopenEvent) btnReopenEvent.hidden = !canReopen;
+    if (walkInToggle) walkInToggle.disabled = true;
 
     if (scanLayoutGrid) scanLayoutGrid.style.display = "none";
     if (scanCompletedBanner) scanCompletedBanner.hidden = false;
@@ -507,20 +570,8 @@ async function selectEvent(eventId) {
 
     await stopCameraScanner();
   } else {
-    if (eventStatusBadge) {
-      if (ev.dateISO === todayStr) {
-        eventStatusBadge.className = "scan-status-pill pill-now";
-        eventStatusBadge.textContent = "Happening Today";
-      } else if (ev.dateISO > todayStr) {
-        eventStatusBadge.className = "scan-status-pill pill-upcoming";
-        eventStatusBadge.textContent = "Upcoming";
-      } else {
-        eventStatusBadge.className = "scan-status-pill pill-past";
-        eventStatusBadge.textContent = "Past Event";
-      }
-    }
     if (btnCompleteEvent) btnCompleteEvent.hidden = false;
-    if (btnReopenEvent) btnReopenEvent.hidden = true;
+    if (walkInToggle) walkInToggle.disabled = false;
     if (scanLayoutGrid) scanLayoutGrid.style.display = "";
     if (scanCompletedBanner) scanCompletedBanner.hidden = true;
     if (rosterTabsRow) rosterTabsRow.hidden = true;
@@ -533,6 +584,14 @@ async function selectEvent(eventId) {
     if (cameraStatus !== "running") {
       startCameraScanner();
     }
+  }
+
+  // Restore walk-in policy for selected event
+  const savedWalkIn = localStorage.getItem(`recovibe_walkin_${eventId}`);
+  if (savedWalkIn !== null) {
+    applyWalkInState(savedWalkIn === "true");
+  } else {
+    applyWalkInState(Boolean(ev.allowWalkIn));
   }
 
   // Subscribe to real-time attendance for selected event (Task 7 & 8)
@@ -774,13 +833,30 @@ if (tabAbsent) {
   });
 }
 
-// Complete Event Button & Modal
+// Complete Event Button & Modal Validation
 if (btnCompleteEvent) {
   btnCompleteEvent.addEventListener("click", async () => {
-    if (!currentEventId) return;
+    // 1. Validation: check if an event is selected
+    if (!currentEventId) {
+      alert("Please select an active event first.");
+      return;
+    }
+
+    const ev = currentEvents.find((e) => String(e.id) === String(currentEventId));
+    if (!ev) {
+      alert("Selected event could not be found. Please choose an event from the list.");
+      return;
+    }
+
+    // 2. Validation: check if event is already completed
+    if (ev.status === "completed") {
+      alert(`"${ev.name || "This event"}" has already been marked as completed.`);
+      btnCompleteEvent.hidden = true;
+      return;
+    }
 
     btnCompleteEvent.disabled = true;
-    btnCompleteEvent.textContent = "Calculating...";
+    btnCompleteEvent.textContent = "Validating...";
 
     try {
       let regSnap = null;
@@ -808,17 +884,46 @@ if (btnCompleteEvent) {
         if (!attData[uid]) totalAbsent++;
       });
 
+      // Populate counts in modal
       if (confirmModalCheckedIn) confirmModalCheckedIn.textContent = totalCheckedIn;
       if (confirmModalWalkIns) confirmModalWalkIns.textContent = totalWalkIns;
       if (confirmModalAbsent) confirmModalAbsent.textContent = totalAbsent;
 
+      // Populate event name
+      if (confirmModalEventName) {
+        confirmModalEventName.textContent = ev.name || ev.title || "this event";
+      }
+
+      // Validation warnings: zero attendees or future date
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const isFuture = Boolean(ev.dateISO && ev.dateISO > todayStr);
+      const hasZeroCheckIns = totalCheckedIn === 0;
+
+      if (confirmModalWarning) {
+        if (hasZeroCheckIns && isFuture) {
+          confirmModalWarning.textContent = `Caution: This event is scheduled for a future date (${ev.dateISO}) and has 0 attendees checked in. Completing it will immediately finalize attendance and record all registered attendees as absent.`;
+          confirmModalWarning.hidden = false;
+        } else if (hasZeroCheckIns) {
+          confirmModalWarning.textContent = "Notice: 0 attendees have checked in so far. Completing this event will record all registered students as absent.";
+          confirmModalWarning.hidden = false;
+        } else if (isFuture) {
+          confirmModalWarning.textContent = `Notice: This event is scheduled for a future date (${ev.dateISO}). Completing it will close attendance immediately.`;
+          confirmModalWarning.hidden = false;
+        } else {
+          confirmModalWarning.hidden = true;
+        }
+      }
+
       if (completeConfirmModalOverlay) completeConfirmModalOverlay.hidden = false;
+      btnCancelCompleteModal?.focus();
     } catch (e) {
       console.warn("Complete event precheck notice:", e);
       if (confirmModalCheckedIn) confirmModalCheckedIn.textContent = currentAttendanceRows.length;
       if (confirmModalWalkIns) confirmModalWalkIns.textContent = currentAttendanceRows.filter((r) => r.walkIn).length;
       if (confirmModalAbsent) confirmModalAbsent.textContent = currentAbsentRows.length;
+      if (confirmModalEventName) confirmModalEventName.textContent = ev.name || ev.title || "this event";
       if (completeConfirmModalOverlay) completeConfirmModalOverlay.hidden = false;
+      btnCancelCompleteModal?.focus();
     } finally {
       btnCompleteEvent.disabled = false;
       btnCompleteEvent.textContent = "Complete event";
@@ -826,15 +931,48 @@ if (btnCompleteEvent) {
   });
 }
 
+function closeCompleteModal() {
+  if (completeConfirmModalOverlay) {
+    completeConfirmModalOverlay.hidden = true;
+    btnCompleteEvent?.focus();
+  }
+}
+
 if (btnCancelCompleteModal) {
-  btnCancelCompleteModal.addEventListener("click", () => {
-    if (completeConfirmModalOverlay) completeConfirmModalOverlay.hidden = true;
+  btnCancelCompleteModal.addEventListener("click", closeCompleteModal);
+}
+
+if (completeConfirmModalOverlay) {
+  completeConfirmModalOverlay.addEventListener("click", (e) => {
+    if (e.target === completeConfirmModalOverlay) {
+      closeCompleteModal();
+    }
   });
 }
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    if (completeConfirmModalOverlay && !completeConfirmModalOverlay.hidden) {
+      closeCompleteModal();
+    }
+    if (walkInConfirmModalOverlay && !walkInConfirmModalOverlay.hidden) {
+      if (typeof closeWalkInModal === "function") closeWalkInModal();
+      else walkInConfirmModalOverlay.hidden = true;
+    }
+    if (manualConfirmModalOverlay && !manualConfirmModalOverlay.hidden) {
+      if (typeof closeManualConfirmModal === "function") closeManualConfirmModal();
+      else manualConfirmModalOverlay.hidden = true;
+    }
+  }
+});
 
 if (btnConfirmCompleteModal) {
   btnConfirmCompleteModal.addEventListener("click", async () => {
     if (!currentEventId) return;
+
+    const ev = currentEvents.find((e) => String(e.id) === String(currentEventId));
+    if (!ev) return;
+
     btnConfirmCompleteModal.disabled = true;
     btnConfirmCompleteModal.textContent = "Completing...";
 
@@ -847,11 +985,28 @@ if (btnConfirmCompleteModal) {
         await set(ref(rtdb, `events/${currentEventId}/completedAt`), Date.now());
       }
 
-      const ev = currentEvents.find((e) => String(e.id) === String(currentEventId));
-      if (ev) {
-        ev.status = "completed";
-        ev.completedAt = Date.now();
-      }
+      ev.status = "completed";
+      ev.completedAt = Date.now();
+
+      // Persist to localStorage across all relevant lists
+      ["recovibeOrganizerEvents", "recovibeTeacherEvents", "recovibeEvents"].forEach((key) => {
+        try {
+          const list = JSON.parse(localStorage.getItem(key) || "[]");
+          if (Array.isArray(list)) {
+            let updated = false;
+            list.forEach((item) => {
+              if (String(item.id || item.eventId) === String(currentEventId)) {
+                item.status = "completed";
+                item.completedAt = Date.now();
+                updated = true;
+              }
+            });
+            if (updated) {
+              localStorage.setItem(key, JSON.stringify(list));
+            }
+          }
+        } catch (e) {}
+      });
 
       if (completeConfirmModalOverlay) completeConfirmModalOverlay.hidden = true;
       selectEvent(currentEventId);
@@ -860,41 +1015,6 @@ if (btnConfirmCompleteModal) {
     } finally {
       btnConfirmCompleteModal.disabled = false;
       btnConfirmCompleteModal.textContent = "Confirm & Complete";
-    }
-  });
-}
-
-// Reopen Event Button
-if (btnReopenEvent) {
-  btnReopenEvent.addEventListener("click", async () => {
-    if (!currentEventId) return;
-    const ok = confirm("Are you sure you want to reopen check-in for this event? Students will be able to check in again.");
-    if (!ok) return;
-
-    btnReopenEvent.disabled = true;
-    btnReopenEvent.textContent = "Reopening...";
-
-    try {
-      if (functions && navigator.onLine) {
-        const reopenFn = httpsCallable(functions, "reopenEvent");
-        await reopenFn({ eventId: currentEventId });
-      } else if (rtdb) {
-        await set(ref(rtdb, `events/${currentEventId}/status`), "published");
-        await set(ref(rtdb, `events/${currentEventId}/completedAt`), null);
-      }
-
-      const ev = currentEvents.find((e) => String(e.id) === String(currentEventId));
-      if (ev) {
-        ev.status = "published";
-        ev.completedAt = null;
-      }
-
-      selectEvent(currentEventId);
-    } catch (err) {
-      alert("Could not reopen event: " + (err.message || err));
-    } finally {
-      btnReopenEvent.disabled = false;
-      btnReopenEvent.textContent = "Reopen event";
     }
   });
 }
@@ -975,6 +1095,7 @@ async function startCameraScanner() {
   if (!readerElement) return;
 
   if (cameraErrorBox) cameraErrorBox.hidden = true;
+  if (cameraPausedBox) cameraPausedBox.hidden = true;
 
   try {
     if (!html5QrCodeInstance) {
@@ -999,12 +1120,12 @@ async function startCameraScanner() {
     );
 
     cameraStatus = "running";
-    if (scannerLiveDot) scannerLiveDot.classList.remove("dot-paused");
+    if (scannerLiveDot) scannerLiveDot.classList.remove("dot-paused", "dot-error");
     if (btnToggleCameraLabel) btnToggleCameraLabel.textContent = "Pause camera";
   } catch (err) {
     console.error("Camera start error:", err);
     cameraStatus = "stopped";
-    if (scannerLiveDot) scannerLiveDot.classList.add("dot-paused");
+    if (scannerLiveDot) scannerLiveDot.classList.add("dot-paused", "dot-error");
     if (btnToggleCameraLabel) btnToggleCameraLabel.textContent = "Start camera";
 
     if (cameraErrorBox) {
@@ -1016,14 +1137,50 @@ async function startCameraScanner() {
       if (cameraErrorMessage) {
         cameraErrorMessage.textContent = isDenied
           ? "Please allow camera access in your browser settings to scan attendance QR codes at the door."
-          : "Could not access the rear camera. Please verify device permissions or use manual student number lookup.";
+          : "Could not access the camera. Please check device permissions or use manual student number check-in.";
       }
     }
   }
 }
 
-async function stopCameraScanner() {
+async function pauseCameraScanner() {
   if (html5QrCodeInstance && cameraStatus === "running") {
+    try {
+      if (typeof html5QrCodeInstance.pause === "function") {
+        html5QrCodeInstance.pause(true);
+      } else {
+        await html5QrCodeInstance.stop();
+      }
+    } catch (e) {
+      console.warn("Error pausing camera:", e);
+    }
+  }
+  cameraStatus = "paused";
+  if (scannerLiveDot) scannerLiveDot.classList.add("dot-paused");
+  if (cameraPausedBox) cameraPausedBox.hidden = false;
+  if (btnToggleCameraLabel) btnToggleCameraLabel.textContent = "Resume camera";
+}
+
+async function resumeCameraScanner() {
+  if (cameraPausedBox) cameraPausedBox.hidden = true;
+  if (html5QrCodeInstance && cameraStatus === "paused") {
+    try {
+      if (typeof html5QrCodeInstance.resume === "function") {
+        html5QrCodeInstance.resume();
+        cameraStatus = "running";
+        if (scannerLiveDot) scannerLiveDot.classList.remove("dot-paused", "dot-error");
+        if (btnToggleCameraLabel) btnToggleCameraLabel.textContent = "Pause camera";
+        return;
+      }
+    } catch (e) {
+      console.warn("Resume failed, restarting:", e);
+    }
+  }
+  await startCameraScanner();
+}
+
+async function stopCameraScanner() {
+  if (html5QrCodeInstance && (cameraStatus === "running" || cameraStatus === "paused")) {
     try {
       await html5QrCodeInstance.stop();
     } catch (e) {
@@ -1031,6 +1188,7 @@ async function stopCameraScanner() {
     }
   }
   cameraStatus = "stopped";
+  if (cameraPausedBox) cameraPausedBox.hidden = true;
   if (scannerLiveDot) scannerLiveDot.classList.add("dot-paused");
   if (btnToggleCameraLabel) btnToggleCameraLabel.textContent = "Start camera";
 }
@@ -1046,15 +1204,31 @@ function cleanupCamera() {
 window.addEventListener("beforeunload", cleanupCamera);
 
 if (btnRetryCamera) {
-  btnRetryCamera.addEventListener("click", () => {
-    startCameraScanner();
+  btnRetryCamera.addEventListener("click", async () => {
+    btnRetryCamera.disabled = true;
+    const oldText = btnRetryCamera.textContent;
+    btnRetryCamera.textContent = "Connecting...";
+    try {
+      await startCameraScanner();
+    } finally {
+      btnRetryCamera.disabled = false;
+      btnRetryCamera.textContent = oldText;
+    }
+  });
+}
+
+if (btnResumePausedCamera) {
+  btnResumePausedCamera.addEventListener("click", async () => {
+    await resumeCameraScanner();
   });
 }
 
 if (btnToggleCamera) {
   btnToggleCamera.addEventListener("click", async () => {
     if (cameraStatus === "running") {
-      await stopCameraScanner();
+      await pauseCameraScanner();
+    } else if (cameraStatus === "paused") {
+      await resumeCameraScanner();
     } else {
       await startCameraScanner();
     }
@@ -1063,10 +1237,102 @@ if (btnToggleCamera) {
 
 if (btnSwitchCamera) {
   btnSwitchCamera.addEventListener("click", async () => {
+    if (cameraStatus !== "running" && cameraStatus !== "paused") {
+      alert("Please start the camera before switching camera views.");
+      return;
+    }
     currentFacingMode = currentFacingMode === "environment" ? "user" : "environment";
-    if (cameraStatus === "running") {
-      await stopCameraScanner();
-      await startCameraScanner();
+    await stopCameraScanner();
+    await startCameraScanner();
+  });
+}
+
+// Walk-in Toggle with Confirmation Modal
+function stripStudentNo(val) {
+  return String(val || "").replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+}
+
+function applyWalkInState(newState) {
+  isWalkInAllowed = Boolean(newState);
+  if (walkInToggle) {
+    walkInToggle.checked = isWalkInAllowed;
+    walkInToggle.setAttribute("aria-checked", String(isWalkInAllowed));
+  }
+  if (currentEventId) {
+    try {
+      localStorage.setItem(`recovibe_walkin_${currentEventId}`, isWalkInAllowed ? "true" : "false");
+    } catch {}
+    if (rtdb) {
+      try {
+        set(ref(rtdb, `events/${currentEventId}/allowWalkIn`), isWalkInAllowed);
+      } catch {}
+    }
+  }
+}
+
+function openWalkInModal(targetState) {
+  pendingWalkInState = targetState;
+
+  if (walkInModalHeading) {
+    walkInModalHeading.textContent = targetState
+      ? "Allow Walk-In Attendance?"
+      : "Disable Walk-In Attendance?";
+  }
+  if (walkInModalDescription) {
+    walkInModalDescription.innerHTML = targetState
+      ? "Are you sure you want to <strong>allow walk-ins</strong>? Students who are not registered in advance will be permitted to check in at the entrance."
+      : "Are you sure you want to <strong>disable walk-ins</strong>? Only students who are pre-registered will be permitted to check in.";
+  }
+  if (btnConfirmWalkInModal) {
+    btnConfirmWalkInModal.textContent = targetState
+      ? "Yes, Allow Walk-ins"
+      : "Yes, Restrict Walk-ins";
+  }
+  if (walkInConfirmModalOverlay) {
+    walkInConfirmModalOverlay.hidden = false;
+  }
+  btnConfirmWalkInModal?.focus();
+}
+
+function closeWalkInModal() {
+  if (walkInConfirmModalOverlay) {
+    walkInConfirmModalOverlay.hidden = true;
+  }
+  pendingWalkInState = null;
+  // Always synchronize toggle visual to actual confirmed state
+  if (walkInToggle) {
+    walkInToggle.checked = isWalkInAllowed;
+    walkInToggle.setAttribute("aria-checked", String(isWalkInAllowed));
+  }
+}
+
+if (walkInToggle) {
+  walkInToggle.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (walkInToggle.disabled) return;
+    const targetState = !isWalkInAllowed;
+    openWalkInModal(targetState);
+  });
+}
+
+if (btnCancelWalkInModal) {
+  btnCancelWalkInModal.addEventListener("click", closeWalkInModal);
+}
+
+if (btnConfirmWalkInModal) {
+  btnConfirmWalkInModal.addEventListener("click", () => {
+    if (pendingWalkInState !== null) {
+      applyWalkInState(pendingWalkInState);
+    }
+    closeWalkInModal();
+  });
+}
+
+if (walkInConfirmModalOverlay) {
+  walkInConfirmModalOverlay.addEventListener("click", (e) => {
+    if (e.target === walkInConfirmModalOverlay) {
+      closeWalkInModal();
     }
   });
 }
@@ -1090,7 +1356,7 @@ async function onScanSuccess(decodedText) {
     isScanThrottled = false;
   }, 1500);
 
-  const allowWalkIn = Boolean(walkInToggle?.checked);
+  const allowWalkIn = isWalkInAllowed;
   await processAttendance({
     eventId: currentEventId,
     token: decodedText.trim(),
@@ -1229,16 +1495,53 @@ async function handleLocalAttendanceProcessing(eventId, token, allowWalkIn) {
     } catch {}
   }
 
-  // Check registration: Realtime Database registrations/{eventId}/{uid}
+  // Check registration: Check currentAbsentRows, RTDB, and local storage
+  const cleanUid = stripStudentNo(uid);
+  const cleanStudentNo = stripStudentNo(studentData.studentNo);
+
   let isRegistered = false;
-  if (rtdb) {
+
+  // 1. Check currentAbsentRows (loaded from registrations for this event)
+  if (currentAbsentRows.some((r) => {
+    const s = stripStudentNo(r.studentNo);
+    const u = stripStudentNo(r.uid);
+    return s === cleanStudentNo || s === cleanUid || u === cleanUid;
+  })) {
+    isRegistered = true;
+  }
+
+  // 2. Check RTDB registrations/{eventId}/{uid} or search by studentNo
+  if (!isRegistered && rtdb) {
     try {
       const regSnap = await get(ref(rtdb, `registrations/${eventId}/${uid}`));
-      isRegistered = Boolean(regSnap.val());
+      if (regSnap.exists() && regSnap.val()) {
+        isRegistered = true;
+      } else {
+        const allRegSnap = await get(ref(rtdb, `registrations/${eventId}`));
+        const allReg = allRegSnap.val();
+        if (allReg && typeof allReg === "object") {
+          isRegistered = Object.entries(allReg).some(([rUid, rVal]) => {
+            const s = stripStudentNo(rVal?.studentNo || rVal?.studentNumber);
+            const u = stripStudentNo(rUid);
+            return s === cleanStudentNo || s === cleanUid || u === cleanUid;
+          });
+        }
+      }
     } catch {}
-  } else {
-    // If local demo, check localStorage recovibeParticipations
-    isRegistered = true;
+  }
+
+  // 3. Fallback: check localStorage participations or registered events if any
+  if (!isRegistered) {
+    try {
+      const participations = JSON.parse(localStorage.getItem("recovibeParticipations") || "[]");
+      if (Array.isArray(participations)) {
+        isRegistered = participations.some((p) => {
+          const matchEvent = String(p.eventId || p.id) === String(eventId);
+          const matchStudent = !p.studentNo || stripStudentNo(p.studentNo) === cleanStudentNo;
+          return matchEvent && matchStudent;
+        });
+      }
+    } catch {}
   }
 
   if (!isRegistered && !allowWalkIn) {
@@ -1253,10 +1556,11 @@ async function handleLocalAttendanceProcessing(eventId, token, allowWalkIn) {
   const organizerProfile = JSON.parse(localStorage.getItem("recovibeOrganizerProfile") || "{}");
   const scannedBy = organizerProfile.name || auth?.currentUser?.email || "Event Organizer";
 
+  const isWalkIn = !isRegistered;
   const attendanceRow = {
     scannedAt: now,
     scannedBy,
-    walkIn: !isRegistered || Boolean(allowWalkIn),
+    walkIn: isWalkIn,
     name: studentData.name,
     studentNo: studentData.studentNo,
     organization: studentData.organization,
@@ -1270,16 +1574,25 @@ async function handleLocalAttendanceProcessing(eventId, token, allowWalkIn) {
     }
   }
 
+  // If registered student checked in, remove from absent rows
+  if (!isWalkIn) {
+    currentAbsentRows = currentAbsentRows.filter((r) => {
+      const s = stripStudentNo(r.studentNo);
+      const u = stripStudentNo(r.uid);
+      return s !== cleanStudentNo && s !== cleanUid && u !== cleanUid;
+    });
+  }
+
   // Update local list
   currentAttendanceRows.unshift({ uid, ...attendanceRow });
-  updateRosterTable(currentAttendanceRows);
+  updateRosterDisplay();
   try {
     localStorage.setItem(`recovibe_attendance_${eventId}`, JSON.stringify(currentAttendanceRows));
   } catch {}
 
   return {
     status: "ok",
-    walkIn: attendanceRow.walkIn,
+    walkIn: isWalkIn,
     student: studentData,
   };
 }
@@ -1344,21 +1657,142 @@ function handleAttendanceResult(result, originalToken) {
   }
 }
 
-// Task 6: Manual Lookup Fallback by Student Number
-if (manualCheckInForm) {
-  manualCheckInForm.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const studentNo = (manualStudentNo?.value || "").trim();
-    if (!studentNo) {
-      manualStudentNo?.focus();
-      return;
+// Task 6: Manual Lookup Fallback with Input Validation & Confirmation Modal
+const STUDENT_NO_REGEX = /^(20\d{2})[-\s]?(\d{4,5})[-\s]?([A-Za-z]{2})[-\s]?(\d)$/i;
+
+function formatStudentNo(val) {
+  const clean = String(val || "").trim().toUpperCase();
+  const match = clean.match(/^(20\d{2})[-\s]?(\d{4,5})[-\s]?([A-Za-z]{2})[-\s]?(\d)$/i);
+  if (match) {
+    return `${match[1]}-${match[2]}-${match[3]}-${match[4]}`;
+  }
+  return clean;
+}
+
+if (manualStudentNo) {
+  manualStudentNo.addEventListener("input", () => {
+    if (manualValidationError) {
+      manualValidationError.hidden = true;
+      manualValidationError.textContent = "";
     }
+    manualStudentNo.classList.remove("input-error");
+  });
+}
+
+function closeManualConfirmModal() {
+  if (manualConfirmModalOverlay) manualConfirmModalOverlay.hidden = true;
+  pendingManualStudentNo = null;
+}
+
+if (btnCancelManualConfirm) {
+  btnCancelManualConfirm.addEventListener("click", closeManualConfirmModal);
+}
+
+if (manualConfirmModalOverlay) {
+  manualConfirmModalOverlay.addEventListener("click", (e) => {
+    if (e.target === manualConfirmModalOverlay) {
+      closeManualConfirmModal();
+    }
+  });
+}
+
+if (manualCheckInForm) {
+  manualCheckInForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+
     if (!currentEventId) {
-      alert("Please select an active event first.");
+      if (manualValidationError) {
+        manualValidationError.textContent = "Please select an active event first.";
+        manualValidationError.hidden = false;
+      }
       return;
     }
 
-    const allowWalkIn = Boolean(walkInToggle?.checked);
+    const currentEv = currentEvents.find((ev) => String(ev.id) === String(currentEventId));
+    if (currentEv && currentEv.status === "completed") {
+      if (manualValidationError) {
+        manualValidationError.textContent = "This event is marked as completed. Attendance is closed.";
+        manualValidationError.hidden = false;
+      }
+      return;
+    }
+
+    const rawVal = (manualStudentNo?.value || "").trim();
+    if (!rawVal) {
+      if (manualValidationError) {
+        manualValidationError.textContent = "Please enter a student number.";
+        manualValidationError.hidden = false;
+      }
+      manualStudentNo?.classList.add("input-error");
+      manualStudentNo?.focus();
+      return;
+    }
+
+    const formattedNo = formatStudentNo(rawVal);
+    const isValidFormat = STUDENT_NO_REGEX.test(formattedNo) || /^[0-9A-Z]{2,4}[-\s]?[0-9A-Z]{3,6}[-\s]?[0-9A-Z]{1,4}[-\s]?[0-9A-Z]?$/i.test(formattedNo);
+    if (!isValidFormat && formattedNo.length < 8) {
+      if (manualValidationError) {
+        manualValidationError.textContent = "Please enter a valid student number format (e.g. 2023-00123-BN-0).";
+        manualValidationError.hidden = false;
+      }
+      manualStudentNo?.classList.add("input-error");
+      manualStudentNo?.focus();
+      return;
+    }
+
+    // Check if student is already checked in
+    const cleanFormatted = stripStudentNo(formattedNo);
+    const alreadyChecked = currentAttendanceRows.find((r) => {
+      return stripStudentNo(r.studentNo) === cleanFormatted || stripStudentNo(r.uid) === cleanFormatted;
+    });
+    if (alreadyChecked) {
+      if (manualValidationError) {
+        manualValidationError.textContent = `Student ${formattedNo} is already checked in (${alreadyChecked.name || "Student"}).`;
+        manualValidationError.hidden = false;
+      }
+      manualStudentNo?.classList.add("input-error");
+      return;
+    }
+
+    // Check pre-registration vs walk-in
+    const allowWalkIn = isWalkInAllowed;
+    const isPreRegistered = currentAbsentRows.some((r) => {
+      return stripStudentNo(r.studentNo) === cleanFormatted || stripStudentNo(r.uid) === cleanFormatted;
+    });
+
+    if (!isPreRegistered && !allowWalkIn) {
+      if (manualValidationError) {
+        manualValidationError.textContent = `Student ${formattedNo} is not pre-registered, and walk-ins are disabled. Turn on "Allow walk-ins" to proceed.`;
+        manualValidationError.hidden = false;
+      }
+      manualStudentNo?.classList.add("input-error");
+      return;
+    }
+
+    // Clear validation error and open confirmation modal
+    if (manualValidationError) {
+      manualValidationError.hidden = true;
+      manualValidationError.textContent = "";
+    }
+    manualStudentNo?.classList.remove("input-error");
+
+    pendingManualStudentNo = formattedNo;
+    if (manualConfirmStudentNo) manualConfirmStudentNo.textContent = formattedNo;
+    if (manualConfirmWalkInNotice) {
+      manualConfirmWalkInNotice.hidden = isPreRegistered;
+    }
+    if (manualConfirmModalOverlay) manualConfirmModalOverlay.hidden = false;
+    btnAcceptManualConfirm?.focus();
+  });
+}
+
+if (btnAcceptManualConfirm) {
+  btnAcceptManualConfirm.addEventListener("click", async () => {
+    if (!pendingManualStudentNo || !currentEventId) return;
+    const studentNo = pendingManualStudentNo;
+    closeManualConfirmModal();
+
+    const allowWalkIn = isWalkInAllowed;
     if (btnManualSubmit) {
       btnManualSubmit.disabled = true;
       btnManualSubmit.textContent = "Checking in...";

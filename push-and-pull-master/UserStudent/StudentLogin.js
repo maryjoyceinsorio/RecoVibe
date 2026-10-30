@@ -70,6 +70,29 @@ async function signIn() {
     return;
   }
 
+  try {
+    let loginAllowed = true;
+    const cached = localStorage.getItem("recovibeSystemSettings");
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (parsed && parsed.loginEnabled === false) loginAllowed = false;
+      } catch (_) {}
+    }
+    if (loginAllowed && db) {
+      const snap = await getDoc(doc(db, "systemSettings", "default"));
+      if (snap.exists() && snap.data()?.loginEnabled === false) {
+        loginAllowed = false;
+      }
+    }
+    if (!loginAllowed) {
+      showBanner("System maintenance is in progress. Student sign-in is temporarily disabled. Only super administrators can sign in at this time.");
+      return;
+    }
+  } catch (sysErr) {
+    console.warn("System settings verification notice:", sysErr);
+  }
+
   submitButton.disabled = true;
   submitButton.setAttribute("aria-busy", "true");
 

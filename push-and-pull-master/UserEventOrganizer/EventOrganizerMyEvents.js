@@ -4,6 +4,7 @@ import {
   onValue,
   off,
   get,
+  remove,
   set,
   update,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
@@ -23,6 +24,15 @@ import {
   const todayElement = document.getElementById("organizerToday");
   let organizerId = "";
   let organizerEvents = [];
+  let eventDataById = new Map();
+  let draftsById = new Map();
+  let activeIndexListenerRef = null;
+  let activeDraftsListenerRef = null;
+  let indexLoaded = false;
+  let draftsLoaded = false;
+  let loadErrorOccurred = false;
+  let missingEventTimeout = null;
+  const activeEventListeners = new Map();
   const approvalsMap = new Map();
   const activeApprovalListeners = new Map();
   let activeEventsListenerRef = null;
@@ -147,6 +157,7 @@ import {
   }
 
   function getEffectiveStatus(event) {
+    if (event.status === "draft") return "draft";
     const approval = approvalsMap.get(String(event.eventId || event.id));
     if (approval && approval.status) {
       return approval.status;
@@ -336,10 +347,26 @@ import {
   }
 
   function renderEmptyState() {
+    if (loadErrorOccurred) {
+      if (eventTableBody) {
+        eventTableBody.innerHTML = `
+          <tr>
+            <td colspan="5">
+              <div class="event-table-empty">
+                <strong>Couldn't load your events</strong>
+                <span>There was a problem loading your event submissions.</span>
+                <button type="button" class="organizer-button" id="btnTryAgain">Try again</button>
+              </div>
+            </td>
+          </tr>`;
+      }
+      return;
+    }
+
     const hasEvents = organizerEvents.length > 0;
     const selectedStatus = statusFilter?.value || "all";
     const heading = !hasEvents
-      ? "No events created yet."
+      ? "You haven't created any events yet."
       : selectedStatus !== "all"
         ? `No events found with status: ${statusFilter?.selectedOptions[0]?.textContent.trim() || selectedStatus}`
         : "No events match your filters.";
@@ -389,15 +416,14 @@ import {
             "Time TBA";
           const category = event.category || "Academic & Learning";
 
+          const isDraft = event.status === "draft";
           return `
-            <tr data-event-id="${eventId}">
+            <tr data-event-id="${eventId}"${new URLSearchParams(location.search).get("new") === String(eventId) ? ' class="new-event-highlight"' : ""}>
               <td data-label="Event">
                 <strong>${escapeHtml(event.title || event.name || "Untitled Event")}</strong>
                 <small class="event-category-badge">${escapeHtml(category)}</small>
               </td>
-              <td data-label="Approval">
-                ${buildApprovalColumnMarkup(event)}
-              </td>
+              <td data-label="Approval">${isDraft ? '<span class="event-approval-progress">Not submitted</span>' : buildApprovalColumnMarkup(event)}</td>
               <td data-label="Schedule">
                 ${escapeHtml(formatDate(eventDate))}
                 <small>${escapeHtml(schedule)}</small>
@@ -408,7 +434,9 @@ import {
                 </span>
               </td>
               <td data-label="Actions">
-                ${getActionMarkup(event)}
+                ${isDraft
+                  ? `<div class="event-actions"><a class="event-action" href="EventOrganizerCreateEvent.html?draft=${eventId}">Continue editing</a><button type="button" class="event-action event-action-danger" data-action="delete-draft" data-event-id="${eventId}">Delete</button></div>`
+                  : getActionMarkup(event)}
               </td>
             </tr>`;
         })
@@ -836,13 +864,25 @@ import {
 
     // Table action clicks
     eventTableBody?.addEventListener("click", (e) => {
+      const tryAgainBtn = e.target.closest("#btnTryAgain");
+      if (tryAgainBtn) {
+        listenToMyEvents(organizerId);
+        return;
+      }
+
       const btn = e.target.closest("[data-action]");
       if (!btn) return;
       const action = btn.dataset.action;
       const eventId = btn.dataset.eventId;
       if (!eventId) return;
 
-      if (action === "view") {
+      if (action === "delete-draft") {
+        if (!window.confirm("Delete this draft? This cannot be undone.")) return;
+        remove(ref(rtdb, `drafts/${organizerId}/${eventId}`)).catch((error) => {
+          console.error("Could not delete event draft:", error);
+          showEventNotice("Couldn't delete this draft. Please try again.");
+        });
+      } else if (action === "view") {
         openApprovalTracker(eventId);
       } else if (action === "publish") {
         handlePublishEvent(eventId);
@@ -930,10 +970,13 @@ import {
   }
 
   function cleanupListeners() {
-    if (activeEventsListenerRef && rtdb) {
-      off(activeEventsListenerRef);
-      activeEventsListenerRef = null;
-    }
+    if (missingEventTimeout) clearTimeout(missingEventTimeout);
+    if (activeEventsListenerRef && rtdb) off(activeEventsListenerRef);
+    if (activeDraftsListenerRef && rtdb) off(activeDraftsListenerRef);
+    activeEventsListenerRef = null;
+    activeDraftsListenerRef = null;
+    activeEventListeners.forEach((eventRef) => off(eventRef));
+    activeEventListeners.clear();
     activeApprovalListeners.forEach((approvalRef) => {
       off(approvalRef);
     });
@@ -942,97 +985,185 @@ import {
 
   window.addEventListener("beforeunload", cleanupListeners);
 
+  function listenToMyEvents(uid) {
+    cleanupListeners();
+    loadErrorOccurred = false;
+
+    if (!rtdb) {
+      loadErrorOccurred = true;
+      showEventNotice("Couldn't load your events.");
+      renderEvents();
+      return;
+    }
+
+    activeIndexListenerRef = ref(rtdb, `organizerEvents/${uid}`);
+    activeEventsListenerRef = activeIndexListenerRef;
+    onValue(
+      activeEventsListenerRef,
+      (snapshot) => {
+        indexLoaded = true;
+        const ids = new Set(Object.keys(snapshot.val() || {}));
+        [...activeEventListeners.keys()].forEach((id) => {
+          if (!ids.has(id)) {
+            off(activeEventListeners.get(id));
+            activeEventListeners.delete(id);
+            eventDataById.delete(id);
+            approvalsMap.delete(id);
+          }
+        });
+        ids.forEach((id) => {
+          if (activeEventListeners.has(id)) return;
+          const eventRef = ref(rtdb, `events/${id}`);
+          onValue(
+            eventRef,
+            (eventSnapshot) => {
+              const event = eventSnapshot.val();
+              // Defense in depth: drop if event.organizerUid is not the signed-in uid
+              if (!event || event.organizerUid !== uid) {
+                eventDataById.delete(id);
+                activeEventListeners.delete(id);
+                off(eventRef);
+                renderOwnedEvents();
+                return;
+              }
+              eventDataById.set(id, {
+                ...event,
+                id,
+                eventId: id,
+                title: event.name || event.title || "Untitled Event",
+                dateISO: event.dateISO || event.date || (event.startAt ? String(event.startAt).substring(0, 10) : ""),
+              });
+              subscribeEventApprovals(id);
+              renderOwnedEvents();
+            },
+            (error) => {
+              console.error("Couldn't load an owned event:", error);
+              loadErrorOccurred = true;
+              renderOwnedEvents();
+            },
+          );
+          activeEventListeners.set(id, eventRef);
+        });
+        renderOwnedEvents();
+      },
+      (error) => {
+        console.error("Couldn't load your event index:", error);
+        loadErrorOccurred = true;
+        renderOwnedEvents();
+      },
+    );
+
+    activeDraftsListenerRef = ref(rtdb, `drafts/${uid}`);
+    onValue(
+      activeDraftsListenerRef,
+      (snapshot) => {
+        draftsLoaded = true;
+        draftsById = new Map(
+          Object.entries(snapshot.val() || {})
+            .filter(([, draft]) => {
+              // Defense in depth for drafts
+              if (!draft || draft.status !== "draft" || typeof draft.name !== "string") return false;
+              if (draft.organizerUid && draft.organizerUid !== uid) return false;
+              return true;
+            })
+            .map(([id, draft]) => [
+              id,
+              {
+                ...draft,
+                id,
+                eventId: id,
+                title: draft.eventName || draft.name,
+                status: "draft",
+                dateISO: draft.dateISO || draft.date || (draft.startAt ? String(draft.startAt).substring(0, 10) : ""),
+              },
+            ]),
+        );
+        renderOwnedEvents();
+      },
+      (error) => {
+        console.error("Couldn't load event drafts:", error);
+        loadErrorOccurred = true;
+        renderOwnedEvents();
+      },
+    );
+  }
+
   // Authentication & Realtime Load
   onAuthStateChanged(auth, async (user) => {
     cleanupListeners();
 
     if (!user) {
-      const localOrganizer = localStorage.getItem("recovibeOrganizerId");
-      if (!localOrganizer && isFirebaseConfigured) {
+      window.location.replace("EventOrganizerLogin.html");
+      return;
+    }
+
+    try {
+      const roleSnapshot = await get(ref(rtdb, `roles/${user.uid}`));
+      if (roleSnapshot.val() !== "event_organizer") {
         window.location.replace("EventOrganizerLogin.html");
         return;
       }
-      organizerId = localOrganizer || "demo-organizer";
-    } else {
-      organizerId = user.uid;
+    } catch (error) {
+      console.error("Could not verify organizer role:", error);
+      showEventNotice("Couldn't verify your account. Please sign in again.");
+      return;
     }
 
+    organizerId = user.uid;
     updateOrganizerAccount();
-
-    if (rtdb) {
-      // Listen to organizer's events at events/ ordered by organizerId or organizerEvents/{uid}
-      activeEventsListenerRef = ref(rtdb, `events`);
-      onValue(
-        activeEventsListenerRef,
-        (snapshot) => {
-          const val = snapshot.val() || {};
-          const eventsList = [];
-
-          Object.keys(val).forEach((k) => {
-            const ev = val[k];
-            if (ev && (ev.organizerId === organizerId || !ev.organizerId)) {
-              const id = ev.id || ev.eventId || k;
-              eventsList.push({
-                ...ev,
-                id,
-                eventId: id,
-                title: ev.name || ev.title || "Untitled Event",
-                dateISO: ev.startAt ? String(ev.startAt).substring(0, 10) : "",
-              });
-              subscribeEventApprovals(id);
-            }
-          });
-
-          // Also merge any offline / localStorage events
-          try {
-            const localList = JSON.parse(localStorage.getItem("recovibeOrganizerEvents") || "[]");
-            if (Array.isArray(localList)) {
-              localList.forEach((ev) => {
-                const id = String(ev.id || ev.eventId);
-                if (id && !eventsList.some((e) => String(e.id) === id)) {
-                  eventsList.push(ev);
-                  subscribeEventApprovals(id);
-                }
-              });
-            }
-          } catch {}
-
-          eventsList.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
-          organizerEvents = eventsList;
-          renderEvents();
-
-          // Check if URL has ?openEvent={eventId}
-          const urlParams = new URLSearchParams(window.location.search);
-          const openParam = urlParams.get("openEvent");
-          if (openParam && !activeTrackingEventId) {
-            openApprovalTracker(openParam);
-          }
-        },
-        (error) => {
-          console.warn("Realtime events load notice:", error);
-          // Fallback to local storage
-          loadLocalStorageEvents();
-        },
-      );
-    } else {
-      loadLocalStorageEvents();
-    }
+    listenToMyEvents(organizerId);
   });
 
-  function loadLocalStorageEvents() {
-    try {
-      const localList = JSON.parse(localStorage.getItem("recovibeOrganizerEvents") || "[]");
-      organizerEvents = Array.isArray(localList) ? localList : [];
-      renderEvents();
+  function showEventNotice(message) {
+    let notice = document.getElementById("myEventsNotice");
+    if (!notice) {
+      notice = document.createElement("div");
+      notice.id = "myEventsNotice";
+      notice.setAttribute("role", "status");
+      notice.tabIndex = -1;
+      eventTableBody?.closest("table")?.before(notice);
+    }
+    notice.textContent = message;
+  }
 
-      const urlParams = new URLSearchParams(window.location.search);
-      const openParam = urlParams.get("openEvent");
-      if (openParam && !activeTrackingEventId) {
-        openApprovalTracker(openParam);
+  function renderOwnedEvents() {
+    organizerEvents = [
+      ...draftsById.values(),
+      ...eventDataById.values(),
+    ].sort((a, b) => {
+      if ((a.status === "draft") !== (b.status === "draft")) return a.status === "draft" ? -1 : 1;
+      return new Date(b.createdAt || b.updatedAt || 0).getTime() - new Date(a.createdAt || a.updatedAt || 0).getTime();
+    });
+    renderEvents();
+    const params = new URLSearchParams(location.search);
+    const eventId = params.get("event") || params.get("openEvent");
+    if (eventId && indexLoaded && !activeTrackingEventId) {
+      const event = eventDataById.get(eventId);
+      if (event && event.organizerUid === organizerId) openApprovalTracker(eventId);
+      else if (draftsLoaded && !document.getElementById("myEventMissingNotice")) {
+        const notice = document.createElement("div");
+        notice.id = "myEventMissingNotice";
+        notice.setAttribute("role", "status");
+        notice.textContent = "We couldn't find that event in your list.";
+        eventTableBody?.closest("table")?.before(notice);
       }
-    } catch {
-      organizerEvents = [];
-      renderEvents();
+    }
+    const newId = params.get("new");
+    if (newId && eventDataById.has(newId)) {
+      const notice = document.getElementById("myEventsNotice");
+      if (notice) notice.textContent = sessionStorage.getItem("recovibeEventNotice") || "";
+      if (missingEventTimeout) clearTimeout(missingEventTimeout);
+    } else if (newId && !missingEventTimeout) {
+      missingEventTimeout = setTimeout(() => {
+        if (!eventDataById.has(newId)) {
+          showEventNotice("Your event was submitted but is taking a moment to appear. Refresh to check.");
+          const refresh = document.createElement("button");
+          refresh.type = "button";
+          refresh.textContent = "Refresh";
+          refresh.addEventListener("click", () => location.reload());
+          document.getElementById("myEventsNotice")?.append(" ", refresh);
+        }
+      }, 5000);
     }
   }
 

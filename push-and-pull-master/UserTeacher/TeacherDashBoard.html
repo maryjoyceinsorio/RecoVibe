@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>RecoVibe — PUP Biñan Campus</title>
+    <title>RecoVibe – PUP Biñan Campus</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link
       href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap"
@@ -227,26 +227,30 @@
               <table class="organizer-table" id="actionRequiredTable">
                 <thead>
                   <tr>
-                    <th>Event</th>
-                    <th>Date Created</th>
-                    <th>HAP 1</th>
-                    <th>HAP 2</th>
-                    <th>HAP 3</th>
-                    <th>Status</th>
-                    <th class="view-column">VIEW</th>
+                    <th>EVENT NAME</th>
+                    <th>DATE CREATED</th>
+                    <th>STATUS</th>
                   </tr>
                 </thead>
                 <tbody id="teacherActionRows"></tbody>
               </table>
             </div>
           </section>
-          <section class="organizer-panel" id="upcomingEventsSection">
-            <div class="organizer-results-bar">
-              <h2>Upcoming Events</h2>
-              <a href="TeacherCalendar.html">Calendar</a>
-            </div>
-            <div id="upcomingEventsList" class="upcoming-events-list"></div>
-          </section>
+          <div class="dashboard-sidebar-column">
+            <section class="organizer-panel" id="happeningNowSection">
+              <div class="organizer-results-bar">
+                <h2>Happening Now</h2>
+              </div>
+              <div id="happeningNowList" class="upcoming-events-list"></div>
+            </section>
+            <section class="organizer-panel" id="upcomingEventsSection">
+              <div class="organizer-results-bar">
+                <h2>Upcoming Events</h2>
+                <a href="TeacherCalendar.html">Calendar</a>
+              </div>
+              <div id="upcomingEventsList" class="upcoming-events-list"></div>
+            </section>
+          </div>
         </div>
       </main>
     </div>

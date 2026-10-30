@@ -4,6 +4,7 @@
   const today = new Date();
   const actionRows = document.getElementById("organizerActionRows");
   const upcomingEventsList = document.getElementById("upcomingEventsList");
+  const happeningNowList = document.getElementById("happeningNowList");
   const eventDetailsModal = document.getElementById("eventDetailsModal");
   const eventDetailsTitle = document.getElementById("eventDetailsTitle");
   const eventDetailsHeadingMeta = document.getElementById(
@@ -218,7 +219,7 @@
     if (!organizerEvents.length) {
       actionRows.innerHTML = `
         <tr>
-          <td colspan="7">
+          <td colspan="3">
             <div class="dashboard-empty-state">
               <strong>No events created yet</strong>
               <span>You haven't submitted any events. Create your first event to get started.</span>
@@ -235,42 +236,88 @@
       .map((event) => {
         const status = getStatus(event);
         const statusClass = getStatusClass(status);
-        const hap1Approved = isOrganizerEventHapApproved(event, 1);
-        const hap2Approved = isOrganizerEventHapApproved(event, 2);
-        const hap3Approved = isOrganizerEventHapApproved(event, 3);
 
         return `
-        <tr>
+        <tr data-event-id="${escapeHtml(event.eventId)}" style="cursor: pointer;">
           <td>
             <strong>${escapeHtml(event.title || "Untitled event")}</strong>
             <small>${escapeHtml(event.category || "General")}</small>
           </td>
           <td>${formatDate(event.createdAt, "Today")}</td>
-          <td><input type="checkbox" class="hap-status" aria-label="HAP 1" ${hap1Approved ? "checked" : ""} disabled></td>
-          <td><input type="checkbox" class="hap-status" aria-label="HAP 2" ${hap2Approved ? "checked" : ""} disabled></td>
-          <td><input type="checkbox" class="hap-status" aria-label="HAP 3" ${hap3Approved ? "checked" : ""} disabled></td>
           <td>
             <span class="organizer-status ${statusClass}">
               ${escapeHtml(status)}
             </span>
-          </td>
-          <td>
-            <button class="event-view-button" type="button" data-event-id="${escapeHtml(event.eventId)}">View</button>
           </td>
         </tr>`;
       })
       .join("");
   }
 
+  function renderHappeningNow() {
+    if (!happeningNowList) return;
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    const todayISO = `${year}-${month}-${day}`;
+
+    const happeningEvents = organizerEvents
+      .filter((event) => {
+        if (!event.dateISO) return false;
+        const startISO = String(event.dateISO).slice(0, 10);
+        const endISO = String(event.endDateISO || event.endDate || event.dateEnd || startISO).slice(0, 10);
+        const status = getStatus(event);
+        if (status === "Cancelled" || status === "Rejected") return false;
+        return startISO <= todayISO && endISO >= todayISO;
+      })
+      .sort((first, second) => first.dateISO.localeCompare(second.dateISO));
+
+    if (!happeningEvents.length) {
+      happeningNowList.innerHTML = `
+        <div class="dashboard-empty-state compact">
+          <strong>No events happening today</strong>
+          <span>Events scheduled for today will appear here.</span>
+        </div>`;
+      return;
+    }
+
+    happeningNowList.innerHTML = happeningEvents
+      .map((event) => {
+        const dateParts = getDateParts(event.dateISO);
+
+        return `
+        <article class="upcoming-event" data-event-id="${escapeHtml(event.eventId)}" style="cursor: pointer;">
+          <div class="upcoming-event-date">
+            <span class="upcoming-event-month">${escapeHtml(dateParts.month)}</span>
+            <strong>${escapeHtml(dateParts.day)}</strong>
+            <small>${escapeHtml(dateParts.year)}</small>
+          </div>
+          <div class="upcoming-event-content">
+            <strong>${escapeHtml(event.title || "Untitled event")}</strong>
+            <span>${escapeHtml(event.time || "Time TBA")}</span>
+            <span>${escapeHtml(event.location || event.venue || "Location TBA")}</span>
+          </div>
+        </article>`;
+      })
+      .join("");
+  }
+
   function renderUpcomingEvents() {
+    if (!upcomingEventsList) return;
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    const todayISO = `${year}-${month}-${day}`;
+
     const upcomingEvents = organizerEvents
       .filter((event) => {
-        if (!event.dateISO) {
-          return false;
-        }
-
-        const eventDate = new Date(`${event.dateISO}T00:00:00`);
-        return !Number.isNaN(eventDate.getTime()) && eventDate >= today;
+        if (!event.dateISO) return false;
+        const startISO = String(event.dateISO).slice(0, 10);
+        const status = getStatus(event);
+        if (status === "Cancelled" || status === "Rejected") return false;
+        return startISO > todayISO;
       })
       .sort((first, second) => first.dateISO.localeCompare(second.dateISO))
       .slice(0, 4);
@@ -289,7 +336,7 @@
         const dateParts = getDateParts(event.dateISO);
 
         return `
-        <article class="upcoming-event">
+        <article class="upcoming-event" data-event-id="${escapeHtml(event.eventId)}" style="cursor: pointer;">
           <div class="upcoming-event-date">
             <span class="upcoming-event-month">${escapeHtml(dateParts.month)}</span>
             <strong>${escapeHtml(dateParts.day)}</strong>
@@ -298,7 +345,7 @@
           <div class="upcoming-event-content">
             <strong>${escapeHtml(event.title || "Untitled event")}</strong>
             <span>${escapeHtml(event.time || "Time TBA")}</span>
-            <span>${escapeHtml(event.location || "Location TBA")}</span>
+            <span>${escapeHtml(event.location || event.venue || "Location TBA")}</span>
           </div>
         </article>`;
       })
@@ -317,6 +364,7 @@
   updateOrganizerAccount();
   renderStatistics();
   renderActionRequired();
+  renderHappeningNow();
   renderUpcomingEvents();
 
   window.addEventListener("storage", (event) => {
@@ -324,12 +372,23 @@
   });
 
   actionRows.addEventListener("click", (event) => {
-    const viewButton = event.target.closest("[data-event-id]");
-    if (!viewButton) return;
+    const item = event.target.closest("[data-event-id]");
+    if (!item) return;
     const selectedEvent = organizerEvents.find(
-      (item) => String(item.eventId) === viewButton.dataset.eventId,
+      (entry) => String(entry.eventId) === item.dataset.eventId,
     );
     if (selectedEvent) openEventDetails(selectedEvent);
+  });
+
+  [happeningNowList, upcomingEventsList].forEach((container) => {
+    container?.addEventListener("click", (event) => {
+      const item = event.target.closest("[data-event-id]");
+      if (!item) return;
+      const selectedEvent = organizerEvents.find(
+        (entry) => String(entry.eventId) === item.dataset.eventId,
+      );
+      if (selectedEvent) openEventDetails(selectedEvent);
+    });
   });
 
   if (eventDetailsModal) {

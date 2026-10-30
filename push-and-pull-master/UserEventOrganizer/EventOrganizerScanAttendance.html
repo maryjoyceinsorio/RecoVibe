@@ -137,17 +137,6 @@
       </aside>
 
       <main class="organizer-main">
-        <header class="organizer-dashboard-header">
-          <div>
-            <h1>Scan Attendance</h1>
-            <p class="scan-page-lead">Scan student QR codes or look up student numbers to record attendance in real time.</p>
-          </div>
-          <div class="organizer-dashboard-date">
-            <span>Today</span>
-            <strong id="organizerTodayDate">—</strong>
-          </div>
-        </header>
-
         <!-- Event Selector Card (Task 2) -->
         <section class="scan-event-card" aria-labelledby="eventSelectHeading">
           <div class="scan-card-row">
@@ -160,9 +149,7 @@
               </div>
             </div>
             <div class="scan-event-badge-wrap">
-              <span class="scan-status-pill pill-upcoming" id="eventStatusBadge">Upcoming</span>
               <button type="button" class="btn-complete-event" id="btnCompleteEvent">Complete event</button>
-              <button type="button" class="btn-reopen-event" id="btnReopenEvent" hidden>Reopen event</button>
             </div>
           </div>
 
@@ -228,20 +215,33 @@
             <div class="scanner-card-header">
               <div class="scanner-card-title-wrap">
                 <h2>Camera Scanner</h2>
-                <span class="scanner-live-dot" id="scannerLiveDot"></span>
+                <span class="scanner-live-dot dot-paused" id="scannerLiveDot"></span>
               </div>
 
               <!-- Walk-in Toggle (Task 5) -->
-              <label class="walkin-switch-wrap" for="walkInToggle">
-                <input type="checkbox" id="walkInToggle" class="walkin-checkbox">
+              <label class="walkin-switch-wrap" id="walkInSwitchWrap">
+                <input type="checkbox" id="walkInToggle" class="walkin-checkbox" role="switch" aria-checked="false">
                 <span class="walkin-slider" aria-hidden="true"></span>
                 <span class="walkin-label-text">Allow walk-ins</span>
               </label>
             </div>
 
             <!-- Scanner Viewport -->
-            <div class="scanner-viewport-wrapper">
+            <div class="scanner-viewport-wrapper" id="scannerViewportWrapper">
               <div id="qrReader" class="qr-camera-viewport"></div>
+
+              <!-- Paused State Overlay -->
+              <div id="cameraPausedBox" class="camera-paused-container" hidden>
+                <div class="camera-paused-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="36" height="36">
+                    <rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor"/>
+                    <rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor"/>
+                  </svg>
+                </div>
+                <h3>Camera Paused</h3>
+                <p>Scanner is currently paused. Click resume to continue reading student QR codes.</p>
+                <button type="button" id="btnResumePausedCamera" class="btn-retry-camera">Resume camera</button>
+              </div>
 
               <!-- Camera Error / Permission Fallback -->
               <div id="cameraErrorBox" class="camera-error-container" hidden>
@@ -264,7 +264,7 @@
                   <rect x="2" y="5" width="16" height="11" rx="2"/>
                   <circle cx="10" cy="10.5" r="3"/>
                 </svg>
-                <span id="btnToggleCameraLabel">Pause camera</span>
+                <span id="btnToggleCameraLabel">Start camera</span>
               </button>
               <button type="button" class="btn-camera-ctrl" id="btnSwitchCamera" title="Switch rear / front camera">
                 <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" width="16" height="16">
@@ -296,6 +296,7 @@
                     Check In
                   </button>
                 </div>
+                <div id="manualValidationError" class="manual-validation-error" hidden style="color:#b91c1c; font-size:12.5px; font-weight:600; margin-top:6px;"></div>
                 <p class="manual-hint">Supports full student number format (e.g. 2023-00123-BN-0).</p>
               </form>
             </div>
@@ -371,10 +372,13 @@
     </div>
 
     <!-- Complete Event Confirmation Modal -->
-    <div class="scan-modal-overlay" id="completeConfirmModalOverlay" hidden>
+    <div class="scan-modal-overlay" id="completeConfirmModalOverlay" role="dialog" aria-modal="true" aria-labelledby="confirmModalHeading" aria-describedby="confirmModalDescription" hidden>
       <div class="scan-modal-dialog">
-        <h3>Complete Event?</h3>
-        <p>Completing this event will close QR scanning and manual attendance immediately. All unscanned registered students will be recorded as absent.</p>
+        <h3 id="confirmModalHeading">Complete Event?</h3>
+        <p id="confirmModalDescription">
+          Are you sure you want to complete <strong id="confirmModalEventName">this event</strong>? Completing this event will close QR scanning and manual attendance immediately. All unscanned registered students will be recorded as absent.
+        </p>
+        <div class="scan-modal-warning" id="confirmModalWarning" hidden style="background:#fef2f2; border:1px solid #f87171; border-radius:8px; padding:10px 12px; color:#991b1b; font-size:13px; line-height:1.4; margin-bottom:14px;"></div>
         <div class="scan-modal-stats">
           <div class="scan-modal-stat-row">
             <span>Total Checked In</span>
@@ -392,6 +396,38 @@
         <div class="scan-modal-actions">
           <button type="button" id="btnCancelCompleteModal" class="btn-modal-cancel">Cancel</button>
           <button type="button" id="btnConfirmCompleteModal" class="btn-complete-event">Confirm &amp; Complete</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Walk-in Toggle Confirmation Modal -->
+    <div class="scan-modal-overlay" id="walkInConfirmModalOverlay" role="dialog" aria-modal="true" aria-labelledby="walkInModalHeading" aria-describedby="walkInModalDescription" hidden>
+      <div class="scan-modal-dialog">
+        <h3 id="walkInModalHeading">Change Walk-in Policy?</h3>
+        <p id="walkInModalDescription">
+          Are you sure you want to change walk-in attendance settings?
+        </p>
+        <div class="scan-modal-actions">
+          <button type="button" id="btnCancelWalkInModal" class="btn-modal-cancel">Cancel</button>
+          <button type="button" id="btnConfirmWalkInModal" class="btn-complete-event">Confirm</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Manual Check-In Confirmation Modal -->
+    <div class="scan-modal-overlay" id="manualConfirmModalOverlay" role="dialog" aria-modal="true" aria-labelledby="manualConfirmModalHeading" aria-describedby="manualConfirmModalDescription" hidden>
+      <div class="scan-modal-dialog">
+        <h3 id="manualConfirmModalHeading">Confirm Check-In?</h3>
+        <p id="manualConfirmModalDescription">
+          Record attendance for student <strong id="manualConfirmStudentNo">—</strong>?
+        </p>
+        <div class="scan-modal-warning" id="manualConfirmWalkInNotice" hidden>
+          <span class="warning-icon">ℹ</span>
+          <span>This student is not pre-registered and will be checked in as a <strong>Walk-in</strong>.</span>
+        </div>
+        <div class="scan-modal-actions">
+          <button type="button" id="btnCancelManualConfirm" class="btn-modal-cancel">Cancel</button>
+          <button type="button" id="btnAcceptManualConfirm" class="btn-complete-event">Confirm Check-In</button>
         </div>
       </div>
     </div>

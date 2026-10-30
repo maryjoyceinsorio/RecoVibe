@@ -2,20 +2,79 @@
  * RecoVibe - Unified Create Event Page (Teacher & Event Organizer)
  * Complies with strict role-based access, accessible design, live preview,
  * readiness checks, conflict checking, reusable past events, and robust input rules.
+ * Keep in sync with the other role's create event page.
  */
-import { auth, rtdb, functions, isFirebaseConfigured } from "../UserStudent/firebaseConfig.js";
+import { auth, db, rtdb, functions, isFirebaseConfigured } from "../UserStudent/firebaseConfig.js";
+import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { httpsCallable } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-functions.js";
+import { ref, onValue, off, update, get } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+import { collection, doc, getDocs, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-const APPROVER_DIRECTORY = {
-  event_head: { key: "event_head", label: "Event Head", stage: 1, defaultOn: true, required: true },
-  vp_doc: { key: "vp_doc", label: "VP for Documentation", stage: 2, defaultOn: true, required: true },
-  vp_ext: { key: "vp_ext", label: "VP for External", stage: 3, defaultOn: false, required: false, suggestIf: "outsideGuests" },
-  org_pres: { key: "org_pres", label: "Org President", stage: 4, defaultOn: true, required: true },
-  org_adv: { key: "org_adv", label: "Org Adviser", stage: 5, defaultOn: true, required: true },
-  sir_abelida: { key: "sir_abelida", label: "Sir Abelida", stage: 6, defaultOn: true, required: true },
-  hap: { key: "hap", label: "HAP", stage: 7, defaultOn: true, required: true },
-  osas: { key: "osas", label: "OSAS", stage: 8, defaultOn: true, required: true },
-};
+const FAVORITES_LIMIT = 5;
+
+let systemApprovalStages = [
+  { id: "stage-1", name: "Organization President", reviewer: "Organization President", required: true },
+  { id: "stage-2", name: "Organization Adviser Review", reviewer: "Organization Adviser (Sir Migs)", required: true },
+  { id: "stage-3", name: "OSAS Review", reviewer: "Ma'am Joyce - OSAS", required: true },
+  { id: "stage-4", name: "Director Review", reviewer: "Ma'am Margarita - Director", required: true },
+  { id: "stage-5", name: "Final Approval & Publishing", reviewer: "Authorized approver(s)", required: true },
+];
+
+function loadCachedApprovalStages() {
+  try {
+    const cached = localStorage.getItem("recovibe_approval_stages");
+    if (cached) {
+      let parsed = JSON.parse(cached);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        if (!parsed.some((s) => (s.name || "").toLowerCase().includes("president"))) {
+          parsed = [
+            { id: "stage-pres", name: "Organization President", reviewer: "Organization President", required: true },
+            ...parsed,
+          ];
+        }
+        systemApprovalStages = parsed;
+      }
+    }
+  } catch {}
+}
+loadCachedApprovalStages();
+
+const PARTNER_ORGS_POOL = [
+  { id: "aces", name: "ACES", subtitle: "Association of Computer Engineering Students" },
+  { id: "alpha", name: "ALPHA", subtitle: "External organization / entity" },
+  { id: "aeces", name: "AECES", subtitle: "Association of Electronics and Communications Engineering Students" },
+  { id: "chrms", name: "CHRMS", subtitle: "Council of Hotel and Restaurant Management Students" },
+  { id: "cites", name: "CITES", subtitle: "Computer and Information Technology Educational Society" },
+  { id: "csc", name: "CSC", subtitle: "Central Student Council" },
+  { id: "ibits", name: "IBITS", subtitle: "Institute of Bachelors in Information Technology Studies" },
+  { id: "iiee", name: "IIEE", subtitle: "Institute of Integrated Electrical Engineers" },
+  { id: "jma", name: "JMA", subtitle: "Junior Marketing Association" },
+  { id: "jpcs", name: "JPCS", subtitle: "Junior Philippine Computer Society" },
+  { id: "jpia", name: "JPIA", subtitle: "Junior Philippine Institute of Accountants" },
+  { id: "pasoa", name: "PASOA", subtitle: "Philippine Association of Students in Office Administration" },
+  { id: "pice", name: "PICE", subtitle: "Philippine Institute of Civil Engineers" },
+  { id: "pupcite", name: "PUP CITE", subtitle: "PUP Center for Information Technology and Engineering" },
+];
+
+let partnerOrgsPool = [...PARTNER_ORGS_POOL];
+
+function loadCachedOrganizations() {
+  try {
+    const cached = localStorage.getItem("recovibe_organizations");
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        partnerOrgsPool = parsed.map((org) => {
+          if (typeof org === "string") return { id: org.toLowerCase(), name: org, subtitle: org };
+          const code = org.code || org.name || "ORG";
+          const sub = org.name || org.subtitle || code;
+          return { id: code.toLowerCase(), name: code, subtitle: sub };
+        });
+      }
+    }
+  } catch {}
+}
+loadCachedOrganizations();
 
 (function initCreateEventModule() {
   "use strict";
@@ -36,6 +95,7 @@ const APPROVER_DIRECTORY = {
     return;
   }
   root.setAttribute("data-theme", "light");
+  root.hidden = false;
 
   // Check URL parameters for explicit unauthorized testing (e.g. ?role=Student or ?role=Admin)
   const urlParams = new URLSearchParams(location.search);
@@ -63,10 +123,52 @@ const APPROVER_DIRECTORY = {
   const organizerOrgName = String(organizerProfile.organization || organizerProfile.orgName || organizerProfile.name || "IBITS").trim();
 
   const readOnlyOrganizerValue = isOrganizerPage ? organizerOrgName : teacherName;
-  const defaultEventSource = isOrganizerPage ? "" : "Teachers / Faculty";
+  function getAutomaticEventSource() {
+    if (isOrganizerPage) {
+      if (/csc/i.test(organizerOrgName)) return "CSC";
+      return "Organization";
+    }
+    return "Teachers / Faculty";
+  }
+  const defaultEventSource = getAutomaticEventSource();
+
+  function normalizeEventSource(src) {
+    if (!src) return defaultEventSource;
+    if (["Academic Organization", "Non-Academic Organization", "Student Council", "Organization"].includes(src)) {
+      return "Organization";
+    }
+    return src;
+  }
 
   const storageKeyEvents = isOrganizerPage ? "recovibeOrganizerEvents" : "recovibeTeacherEvents";
   const redirectListUrl = isOrganizerPage ? "EventOrganizerMyEvents.html" : "TeacherMyEvent.html";
+
+  let currentAuthUid = auth?.currentUser?.uid || userIdentifier;
+
+  function getEffectiveUid() {
+    return auth?.currentUser?.uid || currentAuthUid || userIdentifier;
+  }
+
+  function getStoredReuseLibrary() {
+    const uid = getEffectiveUid();
+    const stored = readJSON(`recovibeReuseLibrary_${uid}`, null) ||
+                   readJSON(`recovibeReuseLibrary_${userIdentifier}`, null) ||
+                   {};
+    return stored;
+  }
+
+  function saveStoredReuseLibrary(data) {
+    const uid = getEffectiveUid();
+    writeJSON(`recovibeReuseLibrary_${userIdentifier}`, data);
+    if (uid && uid !== userIdentifier) {
+      writeJSON(`recovibeReuseLibrary_${uid}`, data);
+    }
+  }
+
+  let reuseLibrary = getStoredReuseLibrary();
+  let activeReuseListenerRef = null;
+  let activeConfirmationTriggerBtn = null;
+  const undoTimeouts = new Map();
 
   // System Settings
   const systemSettings = readJSON("recovibeSystemSettings", {}) || {};
@@ -113,11 +215,48 @@ const APPROVER_DIRECTORY = {
     "PUP Official",
     "CSC",
     "Teachers / Faculty",
-    "Student Council",
-    "Academic Organization",
-    "Non-Academic Organization",
+    "Organization",
     "External",
   ];
+
+  // Helper: Registration end must strictly be 1 or 2 days before event date
+  function calculateAutoRegistrationEnd(eventDateStr) {
+    if (!eventDateStr) return "";
+    const [y, m, d] = eventDateStr.split("-").map(Number);
+    const evDate = new Date(y, m - 1, d);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const daysDiff = Math.round((evDate - today) / (1000 * 60 * 60 * 24));
+    const daysBefore = daysDiff >= 3 ? 2 : 1;
+    const targetDate = new Date(evDate);
+    targetDate.setDate(targetDate.getDate() - daysBefore);
+    const ty = targetDate.getFullYear();
+    const tm = String(targetDate.getMonth() + 1).padStart(2, "0");
+    const td = String(targetDate.getDate()).padStart(2, "0");
+    return `${ty}-${tm}-${td}T23:59`;
+  }
+
+  function calculateMaxRegistrationEnd(eventDateStr) {
+    if (!eventDateStr) return "";
+    const [y, m, d] = eventDateStr.split("-").map(Number);
+    const maxDate = new Date(y, m - 1, d);
+    maxDate.setDate(maxDate.getDate() - 1); // Strictly at least 1 day before event
+    const my = maxDate.getFullYear();
+    const mm = String(maxDate.getMonth() + 1).padStart(2, "0");
+    const md = String(maxDate.getDate()).padStart(2, "0");
+    return `${my}-${mm}-${md}T23:59`;
+  }
+
+  function getDefaultEventDate(todayStr) {
+    if (!todayStr) return "";
+    const [y, m, d] = todayStr.split("-").map(Number);
+    const dt = new Date(y, m - 1, d);
+    dt.setDate(dt.getDate() + 3); // 3 days ahead by default so 1-2 days before registration fits naturally
+    const ty = dt.getFullYear();
+    const tm = String(dt.getMonth() + 1).padStart(2, "0");
+    const td = String(dt.getDate()).padStart(2, "0");
+    return `${ty}-${tm}-${td}`;
+  }
 
   const CATEGORIES = [
     "Academic & Learning",
@@ -186,11 +325,13 @@ const APPROVER_DIRECTORY = {
 
   // 4. State Management
   const state = {
-    mode: "existing", // "existing" (default) | "new"
+    mode: "new", // "new" (default) | "existing" — start on the Create New Event form
     searchQuery: "",
     isCopied: false,
     copiedFrom: null,
     editingEventId: null,
+    draftId: null,
+    clientRequestId: null,
     dirty: false,
     selectedCategories: [],
     participatingFaculty: isOrganizerPage
@@ -198,14 +339,23 @@ const APPROVER_DIRECTORY = {
       : [{ id: userIdentifier, name: teacherName, email: teacherProfile.email || "faculty@pup.edu.ph" }],
     participantDocs: [],
     approvalDocs: [],
+    adminDocs: {},
     conflict: null,
     highlightedFields: new Set(),
     categoryDropdownOpen: false,
     deadlineManuallyEdited: false,
+    targetAudience: "Mixed audience",
+    isCollaboration: false,
+    partnerOrganizations: [],
+    collaborationNotes: "",
+    externalGuests: [],
     outsideGuests: false,
-    selectedApprovers: Object.keys(APPROVER_DIRECTORY).filter(
-      (k) => APPROVER_DIRECTORY[k].defaultOn || APPROVER_DIRECTORY[k].required
-    ),
+    addAsFavorite: false,
+    activeConfirm: null,
+    isActionBusy: false,
+    reuseLoading: false,
+    reuseError: null,
+    selectedApprovers: systemApprovalStages.map((s) => s.id),
   };
 
   Object.defineProperty(state, "participantFiles", {
@@ -296,7 +446,7 @@ const APPROVER_DIRECTORY = {
           title: "IBITS General Assembly 2025",
           organizer: organizerOrgName,
           organizerName: organizerOrgName,
-          source: "Academic Organization",
+          source: "Organization",
           category: "Orgs & Student Acts, Leadership & Career",
           categories: ["Orgs & Student Acts", "Leadership & Career"],
           targetYear: "All Levels",
@@ -316,7 +466,7 @@ const APPROVER_DIRECTORY = {
           title: "Web Development Bootcamp & Tech Talk",
           organizer: organizerOrgName,
           organizerName: organizerOrgName,
-          source: "Academic Organization",
+          source: "Organization",
           category: "Tech & Innovation, Academic & Learning",
           categories: ["Tech & Innovation", "Academic & Learning"],
           targetYear: "2nd Year",
@@ -336,7 +486,7 @@ const APPROVER_DIRECTORY = {
           title: "CodeFest 2025: Hackathon Championship",
           organizer: organizerOrgName,
           organizerName: organizerOrgName,
-          source: "Academic Organization",
+          source: "Organization",
           category: "Competitions, Tech & Innovation",
           categories: ["Competitions", "Tech & Innovation"],
           targetYear: "All Levels",
@@ -410,24 +560,196 @@ const APPROVER_DIRECTORY = {
     return filtered;
   }
 
-  // 8. Load Faculty Pool for Chips Suggestions
+  // 8. Load Faculty Pool from Database (Firestore adminUser / users & RTDB)
+  let dbFacultyPool = [];
+  let isFacultyDbInitialized = false;
+
+  const DEFAULT_FACULTY_FALLBACK = [
+    { id: "fac-1", name: "Prof. Maria Santos", email: "msantos@pup.edu.ph", department: "College of Computer and Information Sciences" },
+    { id: "fac-2", name: "Engr. Roberto Cruz", email: "rcruz@pup.edu.ph", department: "College of Engineering" },
+    { id: "fac-3", name: "Dr. Elena Alcantara", email: "ealcantara@pup.edu.ph", department: "Department of Mathematics" },
+    { id: "fac-4", name: "Prof. Antonio Reyes", email: "areyes@pup.edu.ph", department: "College of Business Administration" },
+    { id: "fac-5", name: "Prof. Grace Dizon", email: "gdizon@pup.edu.ph", department: "College of Education" },
+    { id: "fac-6", name: "Engr. Kenneth Bautista", email: "kbautista@pup.edu.ph", department: "College of Engineering" },
+  ];
+
   function loadFacultyPool() {
-    const pool = [
-      { id: "fac-1", name: "Prof. Maria Santos", email: "msantos@pup.edu.ph" },
-      { id: "fac-2", name: "Engr. Roberto Cruz", email: "rcruz@pup.edu.ph" },
-      { id: "fac-3", name: "Dr. Elena Alcantara", email: "ealcantara@pup.edu.ph" },
-      { id: "fac-4", name: "Prof. Antonio Reyes", email: "areyes@pup.edu.ph" },
-      { id: "fac-5", name: "Prof. Grace Dizon", email: "gdizon@pup.edu.ph" },
-      { id: "fac-6", name: "Engr. Kenneth Bautista", email: "kbautista@pup.edu.ph" },
-    ];
-    if (teacherName && !pool.some((f) => f.name.toLowerCase() === teacherName.toLowerCase())) {
-      pool.unshift({ id: userIdentifier, name: teacherName, email: teacherProfile.email || "faculty@pup.edu.ph" });
+    if (!isFacultyDbInitialized) {
+      initFacultyDatabaseListener();
     }
-    return pool;
+
+    const facultyMap = new Map();
+
+    DEFAULT_FACULTY_FALLBACK.forEach((f) => facultyMap.set(f.name.toLowerCase(), { ...f }));
+
+    if (teacherName && !facultyMap.has(teacherName.toLowerCase())) {
+      facultyMap.set(teacherName.toLowerCase(), {
+        id: userIdentifier,
+        name: teacherName,
+        email: teacherProfile?.email || "faculty@pup.edu.ph",
+        department: teacherProfile?.department || "Faculty",
+      });
+    }
+
+    if (Array.isArray(dbFacultyPool)) {
+      dbFacultyPool.forEach((f) => {
+        if (f && f.name) {
+          facultyMap.set(f.name.toLowerCase(), f);
+        }
+      });
+    }
+
+    return Array.from(facultyMap.values());
+  }
+
+  function initFacultyDatabaseListener() {
+    if (isFacultyDbInitialized) return;
+    isFacultyDbInitialized = true;
+
+    try {
+      const cached = localStorage.getItem("recovibe_faculty_cache");
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          dbFacultyPool = parsed;
+        }
+      }
+    } catch (e) {}
+
+    if (isFirebaseConfigured && db) {
+      try {
+        onSnapshot(collection(db, "adminUser"), (snapshot) => {
+          const loaded = [];
+          snapshot.docs.forEach((docSnap) => {
+            const data = docSnap.data() || {};
+            const role = String(data.role || data.userRole || "").toLowerCase();
+            if (role.includes("teach") || role.includes("facult") || role.includes("prof") || role.includes("instructor") || role.includes("adviser")) {
+              const familyFirstName = [data.lastName, data.firstName].filter(Boolean).join(" ");
+              const name = data.fullName || familyFirstName || data.name || data.displayName;
+              if (name && typeof name === "string" && name.trim()) {
+                const cleanName = name.trim();
+                loaded.push({
+                  id: docSnap.id,
+                  name: cleanName,
+                  email: data.email || `${cleanName.toLowerCase().replace(/\s+/g, ".")}@pup.edu.ph`,
+                  department: data.department || "Faculty",
+                });
+              }
+            }
+          });
+
+          if (loaded.length > 0) {
+            const mergedMap = new Map();
+            DEFAULT_FACULTY_FALLBACK.forEach((f) => mergedMap.set(f.name.toLowerCase(), f));
+            loaded.forEach((f) => mergedMap.set(f.name.toLowerCase(), f));
+            dbFacultyPool = Array.from(mergedMap.values());
+            try {
+              localStorage.setItem("recovibe_faculty_cache", JSON.stringify(dbFacultyPool));
+            } catch {}
+          }
+        }, (err) => {
+          console.warn("[CreateEvent] adminUser listener failed, trying getDocs fallback:", err);
+          fetchDatabaseFacultyOnce();
+        });
+      } catch (err) {
+        console.warn("[CreateEvent] Failed to listen to adminUser:", err);
+        fetchDatabaseFacultyOnce();
+      }
+
+      try {
+        onSnapshot(doc(db, "system_settings", "global_config"), (docSnap) => {
+          if (docSnap.exists()) {
+            const data = docSnap.data() || {};
+            if (Array.isArray(data.approvalStages) && data.approvalStages.length > 0) {
+              let stages = data.approvalStages;
+              if (!stages.some((s) => (s.name || "").toLowerCase().includes("president"))) {
+                stages = [
+                  { id: "stage-pres", name: "Organization President", reviewer: "Organization President", required: true },
+                  ...stages,
+                ];
+              }
+              systemApprovalStages = stages;
+              try {
+                localStorage.setItem("recovibe_approval_stages", JSON.stringify(stages));
+              } catch {}
+              renderApprovers();
+            }
+
+            if (Array.isArray(data.organizations) && data.organizations.length > 0) {
+              partnerOrgsPool = data.organizations.map((org) => {
+                if (typeof org === "string") return { id: org.toLowerCase(), name: org, subtitle: org };
+                const code = org.code || org.name || "ORG";
+                const sub = org.name || org.subtitle || code;
+                return { id: code.toLowerCase(), name: code, subtitle: sub };
+              });
+              try {
+                localStorage.setItem("recovibe_organizations", JSON.stringify(data.organizations));
+              } catch {}
+              renderPartnerOrgSelectOptions();
+            }
+
+            if (data.mainOrganization) {
+              try {
+                localStorage.setItem("recovibe_main_org", data.mainOrganization);
+              } catch {}
+              const hint = document.getElementById("targetAudienceHint");
+              if (hint) {
+                hint.textContent = `Organization members only refers to members of ${data.mainOrganization}.`;
+              }
+            }
+          }
+        });
+      } catch (err) {
+        console.warn("[CreateEvent] Failed to listen to system_settings/global_config:", err);
+      }
+
+  function renderPartnerOrgSelectOptions() {
+    const select = document.getElementById("partnerOrgSelect");
+    if (!select) return;
+    const currentVal = select.value;
+    select.innerHTML = `
+      <option value="" disabled ${!currentVal ? "selected" : ""}>Select organization...</option>
+      ${partnerOrgsPool.map(org => `<option value="${escapeHTML(org.id)}">${escapeHTML(org.name)} - ${escapeHTML(org.subtitle)}</option>`).join("")}
+    `;
+    if (currentVal && partnerOrgsPool.some(o => o.id === currentVal)) {
+      select.value = currentVal;
+    }
+  }
+
+      fetchDatabaseFacultyOnce();
+    }
+  }
+
+  async function fetchDatabaseFacultyOnce() {
+    if (!isFirebaseConfigured || !db) return;
+    try {
+      const usersSnap = await getDocs(collection(db, "users"));
+      usersSnap.forEach((docSnap) => {
+        const data = docSnap.data() || {};
+        const role = String(data.role || data.userRole || "").toLowerCase();
+        if (role.includes("teach") || role.includes("facult") || role.includes("prof") || role.includes("instructor")) {
+          const familyFirstName = [data.lastName, data.firstName].filter(Boolean).join(" ");
+          const name = data.fullName || familyFirstName || data.name || data.displayName;
+          if (name && typeof name === "string" && name.trim()) {
+            const cleanName = name.trim();
+            const exists = dbFacultyPool.some((f) => f.name.toLowerCase() === cleanName.toLowerCase());
+            if (!exists) {
+              dbFacultyPool.push({
+                id: docSnap.id,
+                name: cleanName,
+                email: data.email || `${cleanName.toLowerCase().replace(/\s+/g, ".")}@pup.edu.ph`,
+                department: data.department || "Faculty",
+              });
+            }
+          }
+        }
+      });
+    } catch (e) {}
   }
 
   // 9. Render Unauthorized Message
   function renderUnauthorized(heading, message) {
+    root.hidden = false;
     root.innerHTML = `
       <div class="ce-unauthorized-wrap">
         <div class="ce-unauthorized-card">
@@ -485,37 +807,220 @@ const APPROVER_DIRECTORY = {
 
     setupEventHandlers();
     updateDescCounter();
+    updateRationaleCounter();
     checkVenueCapacityHint();
     updateAllReadinessChecks();
     updateLivePreview();
   }
 
-  // 11. "Create Existing Event" View
-  function renderExistingEventsView() {
+  // 11. "Create Existing Event" View & Favorites/Recently Logic
+  let reuseLoadingTimeout = null;
+  function attachReuseLibraryListener(uid) {
+    if (!rtdb || !isFirebaseConfigured) return;
+    if (activeReuseListenerRef) {
+      try { off(activeReuseListenerRef); } catch (e) {}
+    }
+    const hasLocalData = (reuseLibrary && Object.keys(reuseLibrary).length > 0) || loadCurrentUserEvents().length > 0;
+    if (!hasLocalData) {
+      state.reuseLoading = true;
+    }
+    if (reuseLoadingTimeout) {
+      clearTimeout(reuseLoadingTimeout);
+      reuseLoadingTimeout = null;
+    }
+    reuseLoadingTimeout = setTimeout(() => {
+      if (state.reuseLoading) {
+        state.reuseLoading = false;
+        if (state.mode === "existing") {
+          refreshExistingEventsLists();
+        }
+      }
+    }, 1500);
+
+    activeReuseListenerRef = ref(rtdb, `reuseLibrary/${uid}`);
+    onValue(
+      activeReuseListenerRef,
+      (snapshot) => {
+        if (reuseLoadingTimeout) {
+          clearTimeout(reuseLoadingTimeout);
+          reuseLoadingTimeout = null;
+        }
+        state.reuseLoading = false;
+        state.reuseError = null;
+        const val = snapshot.val();
+        if (val && typeof val === "object" && Object.keys(val).length > 0) {
+          reuseLibrary = { ...reuseLibrary, ...val };
+          saveStoredReuseLibrary(reuseLibrary);
+        } else {
+          const localVal = getStoredReuseLibrary();
+          if (localVal && Object.keys(localVal).length > 0) {
+            reuseLibrary = { ...localVal, ...reuseLibrary };
+          }
+        }
+        if (state.mode === "existing") {
+          refreshExistingEventsLists();
+        }
+      },
+      (err) => {
+        if (reuseLoadingTimeout) {
+          clearTimeout(reuseLoadingTimeout);
+          reuseLoadingTimeout = null;
+        }
+        console.warn("Could not load reuseLibrary from RTDB:", err);
+        state.reuseLoading = false;
+        reuseLibrary = getStoredReuseLibrary();
+        if (state.mode === "existing") {
+          refreshExistingEventsLists();
+        }
+      }
+    );
+  }
+
+  // Keep in sync with the other role's page.
+  onAuthStateChanged(auth, async (user) => {
+    if (!user) {
+      // If neither Firebase Auth nor local organizer session exists, redirect to login
+      if (!organizerId && !organizerProfile?.email) {
+        location.replace(isOrganizerPage ? "EventOrganizerLogin.html" : "../UserTeacher/TeacherLogin.html");
+      }
+      return;
+    }
+
+    if (rtdb) {
+      try {
+        const roleSnapshot = await get(ref(rtdb, `roles/${user.uid}`));
+        const userRole = roleSnapshot.val();
+        // Disallow students and non-creator roles
+        if (userRole === "student") {
+          renderUnauthorized("Access Restricted", "This page is available only to Event Organizers and Teachers. Students cannot create events.");
+          return;
+        }
+      } catch (error) {
+        console.warn("Could not verify event creator role from RTDB:", error);
+      }
+    }
+
+    root.hidden = false;
+    currentAuthUid = user.uid;
+    const userStored = readJSON(`recovibeReuseLibrary_${user.uid}`, null);
+    if (userStored && typeof userStored === "object") {
+      reuseLibrary = { ...reuseLibrary, ...userStored };
+      saveStoredReuseLibrary(reuseLibrary);
+    }
+    if (rtdb) {
+      attachReuseLibraryListener(user.uid);
+      await loadDraftForEditing(user.uid);
+    }
+  });
+
+  function getEventTimestamp(ev) {
+    if (!ev) return 0;
+    const raw = ev.date || ev.dateISO || ev.eventDate || ev.startAt || "";
+    if (!raw) return 0;
+    const d = new Date(raw);
+    return isNaN(d.getTime()) ? 0 : d.getTime();
+  }
+
+  function formatLastHeldDate(dateVal) {
+    if (!dateVal) return "Date TBA";
+    const str = String(dateVal);
+    const d = new Date(str.includes("T") ? str : `${str.substring(0, 10)}T00:00:00`);
+    if (isNaN(d.getTime())) return str;
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+
+  let statusDismissTimer = null;
+  function announceStatus(message, isError = false) {
+    const el = document.getElementById("reuseStatusLine");
+    if (el) {
+      if (statusDismissTimer) {
+        clearTimeout(statusDismissTimer);
+        statusDismissTimer = null;
+      }
+      el.textContent = message;
+      el.classList.toggle("is-error", isError);
+      el.hidden = false;
+      if (!isError) {
+        statusDismissTimer = setTimeout(() => {
+          if (el.textContent === message && !el.classList.contains("is-error")) {
+            el.hidden = true;
+          }
+        }, 5000);
+      }
+    }
+  }
+
+  function getCategorizedPastEvents() {
     const past = loadCurrentUserEvents();
     const query = (state.searchQuery || "").trim().toLowerCase();
 
-    const filtered = past.filter((ev) => {
-      if (!query) return true;
-      const title = (ev.title || ev.eventName || "").toLowerCase();
-      const venue = (ev.venue || ev.location || "").toLowerCase();
-      const cat = (ev.category || "").toLowerCase();
-      return title.includes(query) || venue.includes(query) || cat.includes(query);
-    });
+    const favoriteEvents = [];
+    const recentEvents = [];
 
-    const commonKeywords = /assembly|orientation|seminar|workshop|general|meeting|training|convocation|bootcamp/i;
-    const commonEvents = [];
-    const uniqueEvents = [];
+    past.forEach((ev) => {
+      if (!ev) return;
+      const id = String(ev.id || ev.eventId);
+      const mark = reuseLibrary[id] || {};
+      const isFav = mark.favorite === true;
+      const isHidden = mark.hidden === true;
 
-    filtered.forEach((ev) => {
-      const t = (ev.title || ev.eventName || "").trim();
-      if (ev.isCommon || commonKeywords.test(t)) {
-        commonEvents.push(ev);
-      } else {
-        uniqueEvents.push(ev);
+      if (isFav) {
+        favoriteEvents.push(ev);
+      } else if (!isHidden || undoTimeouts.has(id)) {
+        recentEvents.push(ev);
       }
     });
 
+    favoriteEvents.sort((a, b) => getEventTimestamp(b) - getEventTimestamp(a));
+    recentEvents.sort((a, b) => getEventTimestamp(b) - getEventTimestamp(a));
+
+    const filterFn = (ev) => {
+      if (!query) return true;
+      const title = (ev.title || ev.eventName || "").toLowerCase();
+      const venue = (ev.venue || ev.location || "").toLowerCase();
+      const cat = (ev.category || (Array.isArray(ev.categories) ? ev.categories.join(" ") : "")).toLowerCase();
+      return title.includes(query) || venue.includes(query) || cat.includes(query);
+    };
+
+    return {
+      allFavorites: favoriteEvents,
+      allRecent: recentEvents,
+      filteredFavorites: favoriteEvents.filter(filterFn),
+      filteredRecent: recentEvents.filter(filterFn),
+      query,
+    };
+  }
+
+  function renderExistingColumnsHtml() {
+    const { filteredFavorites, filteredRecent, query } = getCategorizedPastEvents();
+
+    return `
+      <div class="ce-existing-columns">
+        <div class="ce-existing-col" data-col="favorites">
+          <h3 class="ce-existing-col-title">Favorite Events (${filteredFavorites.length} of ${FAVORITES_LIMIT})</h3>
+          <div class="ce-existing-col-list">
+            ${filteredFavorites.length === 0
+              ? `<div class="ce-existing-empty"><p>${query ? `No favorites match “${escapeHTML(query)}”.` : "No favorites yet. Add an event from Recently Events to keep it here."}</p></div>`
+              : filteredFavorites.map((ev) => renderPastEventCard(ev, "favorite")).join("")}
+          </div>
+        </div>
+
+        <div class="ce-existing-col" data-col="recent">
+          <h3 class="ce-existing-col-title">Recently Events (${filteredRecent.length})</h3>
+          <div class="ce-existing-col-list">
+            ${filteredRecent.length === 0
+              ? `<div class="ce-existing-empty"><p>${query ? `No recent events match “${escapeHTML(query)}”.` : "No recent events."}</p></div>`
+              : filteredRecent.map((ev) => renderPastEventCard(ev, "recent")).join("")}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function renderExistingEventsView() {
     return `
       <div class="ce-existing-view">
         <div class="ce-search-wrap">
@@ -527,51 +1032,635 @@ const APPROVER_DIRECTORY = {
                  aria-label="Search past events">
         </div>
 
-        <div class="ce-existing-columns">
-          <div class="ce-existing-col">
-            <h3 class="ce-existing-col-title">Common Events (${commonEvents.length})</h3>
-            <div class="ce-existing-col-list">
-              ${commonEvents.length === 0
-                ? '<div class="ce-existing-empty"><p>No common past events found.</p></div>'
-                : commonEvents.map((ev) => renderPastEventCard(ev)).join("")}
-            </div>
-          </div>
+        <div class="ce-status-line" id="reuseStatusLine" aria-live="polite" role="status" hidden></div>
 
-          <div class="ce-existing-col">
-            <h3 class="ce-existing-col-title">Unique Events (${uniqueEvents.length})</h3>
-            <div class="ce-existing-col-list">
-              ${uniqueEvents.length === 0
-                ? '<div class="ce-existing-empty"><p>No unique past events found.</p></div>'
-                : uniqueEvents.map((ev) => renderPastEventCard(ev)).join("")}
+        ${state.reuseLoading && Object.keys(reuseLibrary).length === 0 && loadCurrentUserEvents().length === 0
+          ? `
+            <div class="ce-existing-columns">
+              <div class="ce-existing-col">
+                <h3 class="ce-existing-col-title">Favorite Events (...)</h3>
+                <div class="ce-existing-col-list">
+                  <div class="ce-skeleton-card"></div>
+                  <div class="ce-skeleton-card"></div>
+                </div>
+              </div>
+              <div class="ce-existing-col">
+                <h3 class="ce-existing-col-title">Recently Events (...)</h3>
+                <div class="ce-existing-col-list">
+                  <div class="ce-skeleton-card"></div>
+                  <div class="ce-skeleton-card"></div>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
+          `
+          : state.reuseError && loadCurrentUserEvents().length === 0
+          ? `
+            <div class="ce-existing-error" role="alert">
+              <p>Couldn't load events</p>
+              <button type="button" class="ce-btn-secondary" id="btnRetryLoadEvents">Try again</button>
+            </div>
+          `
+          : renderExistingColumnsHtml()}
       </div>
     `;
   }
 
-  function renderPastEventCard(ev) {
-    const id = ev.id || ev.eventId || "ev-" + Math.random();
+  function renderPastEventCard(ev, listType) {
+    const id = String(ev.id || ev.eventId || "ev-" + Math.random());
     const title = ev.title || ev.eventName || "Untitled Event";
-    const date = ev.date || ev.dateISO || ev.eventDate || "Past date";
-    const venue = ev.venue || ev.location || "Venue not set";
+    const date = formatLastHeldDate(ev.date || ev.dateISO || ev.eventDate);
+    const venue = ev.venue || ev.location || "AVR1 | PUP Biñan";
+
+    const isUndo = undoTimeouts.has(id);
+    const isConfirmOpen = state.activeConfirm && state.activeConfirm.eventId === id;
 
     return `
-      <div class="ce-existing-card" data-event-id="${escapeHTML(id)}">
+      <div class="ce-existing-card" data-event-id="${escapeHTML(id)}" data-list-type="${escapeHTML(listType)}">
         <div class="ce-existing-card-body">
           <h4 class="ce-existing-title">${escapeHTML(title)}</h4>
           <div class="ce-existing-meta">
             <span>Last held ${escapeHTML(date)} · ${escapeHTML(venue)}</span>
           </div>
         </div>
-        <button type="button" class="ce-reuse-btn" data-reuse-id="${escapeHTML(id)}" aria-label="Reuse ${escapeHTML(title)}">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
-          </svg>
-          Reuse
-        </button>
+        ${isUndo
+          ? `
+            <div class="ce-card-undo" role="status">
+              <span>Removed “${escapeHTML(title)}” from Recently Events.</span>
+              <button type="button" class="ce-undo-btn" data-undo-id="${escapeHTML(id)}" aria-label="Undo removing ${escapeHTML(title)}">Undo</button>
+            </div>
+          `
+          : isConfirmOpen
+          ? `
+            <div class="ce-card-confirm ${state.activeConfirm.isDanger ? "is-danger" : ""}" role="alertdialog" aria-labelledby="confirm-msg-${escapeHTML(id)}">
+              <p class="ce-confirm-msg" id="confirm-msg-${escapeHTML(id)}">${state.activeConfirm.message}</p>
+              <div class="ce-card-confirm-actions">
+                ${state.activeConfirm.buttonsHtml}
+              </div>
+            </div>
+          `
+          : listType === "favorite"
+          ? `
+            <div class="ce-existing-actions">
+              <button type="button" class="ce-reuse-btn" data-action="reuse" data-event-id="${escapeHTML(id)}" aria-label="Reuse ${escapeHTML(title)}" ${state.isActionBusy ? "disabled" : ""}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+                </svg>
+                Reuse
+              </button>
+              <button type="button" class="ce-btn-unfavorite" data-action="unfavorite" data-event-id="${escapeHTML(id)}" aria-label="Remove ${escapeHTML(title)} from favorites" ${state.isActionBusy ? "disabled" : ""}>
+                Remove from favorites
+              </button>
+            </div>
+          `
+          : `
+            <div class="ce-existing-actions">
+              <button type="button" class="ce-reuse-btn" data-action="reuse" data-event-id="${escapeHTML(id)}" aria-label="Reuse ${escapeHTML(title)}" ${state.isActionBusy ? "disabled" : ""}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+                </svg>
+                Reuse
+              </button>
+              <button type="button" class="ce-btn-favorite" data-action="favorite" data-event-id="${escapeHTML(id)}" aria-label="Add ${escapeHTML(title)} to favorites" ${state.isActionBusy ? "disabled" : ""}>
+                Add to favorites
+              </button>
+              <button type="button" class="ce-btn-remove" data-action="remove" data-event-id="${escapeHTML(id)}" aria-label="Remove ${escapeHTML(title)}" ${state.isActionBusy ? "disabled" : ""}>
+                Remove
+              </button>
+            </div>
+          `
+        }
       </div>
     `;
+  }
+
+  function closeActiveConfirmation() {
+    if (activeConfirmationTriggerBtn) {
+      try { activeConfirmationTriggerBtn.focus(); } catch (e) {}
+      activeConfirmationTriggerBtn = null;
+    }
+    state.activeConfirm = null;
+    refreshExistingEventsLists();
+  }
+
+  function focusFirstConfirmationButton(eventId) {
+    setTimeout(() => {
+      const card = root.querySelector(`.ce-existing-card[data-event-id="${eventId}"]`);
+      if (card) {
+        const firstBtn = card.querySelector(".ce-card-confirm-actions button, .ce-confirm-actions button");
+        if (firstBtn) firstBtn.focus();
+      }
+    }, 10);
+  }
+
+  function handleCardActionClick(action, eventId, triggerBtn) {
+    const past = loadCurrentUserEvents();
+    const eventObj = past.find((x) => String(x.id || x.eventId) === String(eventId));
+    if (!eventObj) return;
+
+    // Clear previous error message if any
+    const statusLine = document.getElementById("reuseStatusLine");
+    if (statusLine && statusLine.classList.contains("is-error")) {
+      statusLine.hidden = true;
+      statusLine.textContent = "";
+      statusLine.classList.remove("is-error");
+    }
+
+    activeConfirmationTriggerBtn = triggerBtn;
+    const title = eventObj.title || eventObj.eventName || "this event";
+    const date = formatLastHeldDate(eventObj.date || eventObj.dateISO || eventObj.eventDate);
+
+    if (action === "reuse") {
+      state.activeConfirm = {
+        eventId,
+        type: "reuse",
+        message: `Reuse this event? Create another event like “${escapeHTML(title)}”. Its details are copied over, and you check the ones that usually change.`,
+        buttonsHtml: `
+          <button type="button" class="ce-btn-primary" data-confirm-action="do-reuse" data-event-id="${escapeHTML(eventId)}">Reuse event</button>
+          <button type="button" class="ce-btn-secondary" data-confirm-action="cancel">Cancel</button>
+        `,
+        isDanger: false,
+      };
+      refreshExistingEventsLists();
+      focusFirstConfirmationButton(eventId);
+    } else if (action === "unfavorite") {
+      state.activeConfirm = {
+        eventId,
+        type: "unfavorite",
+        message: `Remove from Favorite Events? “${escapeHTML(title)}” moves back to Recently Events.`,
+        buttonsHtml: `
+          <button type="button" class="ce-btn-primary" data-confirm-action="do-unfavorite" data-event-id="${escapeHTML(eventId)}">Remove from favorites</button>
+          <button type="button" class="ce-btn-secondary" data-confirm-action="cancel">Cancel</button>
+        `,
+        isDanger: false,
+      };
+      refreshExistingEventsLists();
+      focusFirstConfirmationButton(eventId);
+    } else if (action === "favorite") {
+      // 1. Favorites limit validation (at most 5)
+      const currentFavCount = Object.values(reuseLibrary).filter((m) => m && m.favorite === true).length;
+      if (currentFavCount >= FAVORITES_LIMIT) {
+        state.activeConfirm = {
+          eventId,
+          type: "limit-full",
+          message: "Favorites are full. You can have up to 5 favorites. Remove one from Favorite Events first.",
+          buttonsHtml: `
+            <button type="button" class="ce-btn-primary" data-confirm-action="cancel">Got it</button>
+          `,
+          isDanger: false,
+        };
+        refreshExistingEventsLists();
+        focusFirstConfirmationButton(eventId);
+        return;
+      }
+
+      // 2. Duplicate favorite validation
+      const targetLower = title.trim().toLowerCase();
+      const duplicateFav = past.find((p) => {
+        if (!p) return false;
+        const pId = String(p.id || p.eventId);
+        if (pId === eventId) return false;
+        const isFav = reuseLibrary[pId]?.favorite === true;
+        const pTitle = (p.title || p.eventName || "").trim().toLowerCase();
+        return isFav && pTitle === targetLower;
+      });
+
+      if (duplicateFav) {
+        const dupTitle = duplicateFav.title || duplicateFav.eventName || "existing favorite";
+        const dupDate = formatLastHeldDate(duplicateFav.date || duplicateFav.dateISO || duplicateFav.eventDate);
+        state.activeConfirm = {
+          eventId,
+          type: "duplicate",
+          message: `A favorite named “${escapeHTML(dupTitle)}” already exists (last held ${escapeHTML(dupDate)}). Replace it with this one (last held ${escapeHTML(date)}), or keep both?`,
+          buttonsHtml: `
+            <button type="button" class="ce-btn-primary" data-confirm-action="do-replace" data-event-id="${escapeHTML(eventId)}" data-replace-id="${escapeHTML(duplicateFav.id || duplicateFav.eventId)}">Replace it</button>
+            <button type="button" class="ce-btn-secondary" data-confirm-action="do-keepboth" data-event-id="${escapeHTML(eventId)}">Keep both</button>
+            <button type="button" class="ce-btn-secondary" data-confirm-action="cancel">Cancel</button>
+          `,
+          isDanger: false,
+        };
+        refreshExistingEventsLists();
+        focusFirstConfirmationButton(eventId);
+        return;
+      }
+
+      // Standard favorite confirmation
+      state.activeConfirm = {
+        eventId,
+        type: "favorite",
+        message: `Add to Favorite Events? “${escapeHTML(title)}” moves from Recently Events to Favorite Events.`,
+        buttonsHtml: `
+          <button type="button" class="ce-btn-primary" data-confirm-action="do-favorite" data-event-id="${escapeHTML(eventId)}">Add to favorites</button>
+          <button type="button" class="ce-btn-secondary" data-confirm-action="cancel">Cancel</button>
+        `,
+        isDanger: false,
+      };
+      refreshExistingEventsLists();
+      focusFirstConfirmationButton(eventId);
+    } else if (action === "remove") {
+      state.activeConfirm = {
+        eventId,
+        type: "remove",
+        message: "Remove from Recently Events? This only takes it off this list. The event and its records are not deleted. You can undo for a few seconds.",
+        buttonsHtml: `
+          <button type="button" class="ce-btn-danger" data-confirm-action="do-remove" data-event-id="${escapeHTML(eventId)}">Remove</button>
+          <button type="button" class="ce-btn-secondary" data-confirm-action="cancel">Cancel</button>
+        `,
+        isDanger: true,
+      };
+      refreshExistingEventsLists();
+      focusFirstConfirmationButton(eventId);
+    }
+  }
+
+  async function executeSetFavorite({ eventId, favorite, replaceEventId, allowDuplicate, title }) {
+    if (isFirebaseConfigured && functions) {
+      try {
+        const setFavFn = httpsCallable(functions, "setFavorite");
+        const callPromise = setFavFn({ eventId, favorite, replaceEventId, allowDuplicate, title });
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Cloud Function timeout")), 2000)
+        );
+        const res = await Promise.race([callPromise, timeoutPromise]);
+        return res?.data;
+      } catch (err) {
+        // If the Cloud Function returned a domain validation error (e.g. limit or duplicate), rethrow it
+        const errMsg = err.details?.message || err.message || "";
+        if (
+          errMsg.includes("Favorites are full") ||
+          errMsg.includes("already exists") ||
+          err.code === "functions/failed-precondition" ||
+          err.code === "functions/already-exists"
+        ) {
+          throw new Error(errMsg);
+        }
+        console.warn("Cloud Function setFavorite notice (offline/local fallback):", err);
+      }
+    }
+
+    // Direct RTDB update if configured
+    if (isFirebaseConfigured && rtdb) {
+      const uid = getEffectiveUid();
+      try {
+        const itemRef = ref(rtdb, `reuseLibrary/${uid}/${eventId}`);
+        const updatePromise = update(itemRef, { favorite: Boolean(favorite), updatedAt: Date.now() });
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("RTDB timeout")), 1500)
+        );
+        await Promise.race([updatePromise, timeoutPromise]);
+        if (replaceEventId) {
+          const repRef = ref(rtdb, `reuseLibrary/${uid}/${replaceEventId}`);
+          await Promise.race([
+            update(repRef, { favorite: false, updatedAt: Date.now() }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error("RTDB timeout")), 1500))
+          ]);
+        }
+      } catch (rtdbErr) {
+        console.warn("RTDB update notice (using local storage fallback):", rtdbErr.message || rtdbErr);
+      }
+    }
+
+    return { success: true };
+  }
+
+  async function executeSetHidden({ eventId, hidden }) {
+    if (isFirebaseConfigured && rtdb) {
+      const uid = getEffectiveUid();
+      try {
+        const itemRef = ref(rtdb, `reuseLibrary/${uid}/${eventId}`);
+        const updatePromise = update(itemRef, { hidden: Boolean(hidden), updatedAt: Date.now() });
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("RTDB timeout")), 1500)
+        );
+        await Promise.race([updatePromise, timeoutPromise]);
+        return { success: true };
+      } catch (err) {
+        console.warn("Could not update hidden in RTDB:", err.message || err);
+      }
+    }
+    return { success: true };
+  }
+
+  async function handleConfirmActionClick(btn) {
+    const confirmAction = btn.dataset.confirmAction;
+    const eventId = btn.dataset.eventId;
+
+    if (confirmAction === "cancel") {
+      closeActiveConfirmation();
+      return;
+    }
+
+    const past = loadCurrentUserEvents();
+    const eventObj = past.find((x) => String(x.id || x.eventId) === String(eventId));
+    const title = eventObj ? (eventObj.title || eventObj.eventName || "Event") : "Event";
+
+    if (confirmAction === "do-reuse") {
+      closeActiveConfirmation();
+      if (eventObj) {
+        prefillFormFromEvent(eventObj);
+      }
+      return;
+    }
+
+    try {
+      if (confirmAction === "do-unfavorite") {
+        reuseLibrary[eventId] = {
+          ...(reuseLibrary[eventId] || {}),
+          favorite: false,
+          updatedAt: Date.now(),
+        };
+        saveStoredReuseLibrary(reuseLibrary);
+        closeActiveConfirmation();
+        announceStatus(`“${title}” moved back to Recently Events.`);
+
+        (async () => {
+          try {
+            await executeSetFavorite({ eventId, favorite: false, title });
+          } catch (err) {
+            reuseLibrary[eventId] = {
+              ...(reuseLibrary[eventId] || {}),
+              favorite: true,
+              updatedAt: Date.now(),
+            };
+            saveStoredReuseLibrary(reuseLibrary);
+            refreshExistingEventsLists();
+            announceStatus(err.message || "Failed to update favorites.", true);
+          }
+        })();
+      } else if (confirmAction === "do-favorite") {
+        reuseLibrary[eventId] = {
+          ...(reuseLibrary[eventId] || {}),
+          favorite: true,
+          hidden: reuseLibrary[eventId]?.hidden || false,
+          updatedAt: Date.now(),
+        };
+        saveStoredReuseLibrary(reuseLibrary);
+        closeActiveConfirmation();
+        announceStatus(`Added “${title}” to Favorite Events.`);
+
+        (async () => {
+          try {
+            await executeSetFavorite({ eventId, favorite: true, title });
+          } catch (err) {
+            if (reuseLibrary[eventId]) {
+              reuseLibrary[eventId].favorite = false;
+              reuseLibrary[eventId].updatedAt = Date.now();
+            }
+            saveStoredReuseLibrary(reuseLibrary);
+            refreshExistingEventsLists();
+            announceStatus(err.message || "Failed to add to favorites.", true);
+          }
+        })();
+      } else if (confirmAction === "do-replace") {
+        const replaceId = btn.dataset.replaceId;
+        reuseLibrary[eventId] = {
+          ...(reuseLibrary[eventId] || {}),
+          favorite: true,
+          hidden: reuseLibrary[eventId]?.hidden || false,
+          updatedAt: Date.now(),
+        };
+        if (replaceId && reuseLibrary[replaceId]) {
+          reuseLibrary[replaceId].favorite = false;
+          reuseLibrary[replaceId].updatedAt = Date.now();
+        }
+        saveStoredReuseLibrary(reuseLibrary);
+        closeActiveConfirmation();
+        announceStatus(`Added “${title}” to Favorite Events.`);
+
+        (async () => {
+          try {
+            await executeSetFavorite({ eventId, favorite: true, replaceEventId: replaceId, title });
+          } catch (err) {
+            if (reuseLibrary[eventId]) {
+              reuseLibrary[eventId].favorite = false;
+            }
+            if (replaceId && reuseLibrary[replaceId]) {
+              reuseLibrary[replaceId].favorite = true;
+            }
+            saveStoredReuseLibrary(reuseLibrary);
+            refreshExistingEventsLists();
+            announceStatus(err.message || "Failed to replace favorite.", true);
+          }
+        })();
+      } else if (confirmAction === "do-keepboth") {
+        reuseLibrary[eventId] = {
+          ...(reuseLibrary[eventId] || {}),
+          favorite: true,
+          hidden: reuseLibrary[eventId]?.hidden || false,
+          updatedAt: Date.now(),
+        };
+        saveStoredReuseLibrary(reuseLibrary);
+        closeActiveConfirmation();
+        announceStatus(`Added “${title}” to Favorite Events.`);
+
+        (async () => {
+          try {
+            await executeSetFavorite({ eventId, favorite: true, allowDuplicate: true, title });
+          } catch (err) {
+            if (reuseLibrary[eventId]) {
+              reuseLibrary[eventId].favorite = false;
+            }
+            saveStoredReuseLibrary(reuseLibrary);
+            refreshExistingEventsLists();
+            announceStatus(err.message || "Failed to add favorite.", true);
+          }
+        })();
+      } else if (confirmAction === "do-remove") {
+        reuseLibrary[eventId] = {
+          ...(reuseLibrary[eventId] || {}),
+          hidden: true,
+          updatedAt: Date.now(),
+        };
+        saveStoredReuseLibrary(reuseLibrary);
+        state.activeConfirm = null;
+
+        if (undoTimeouts.has(eventId)) {
+          clearTimeout(undoTimeouts.get(eventId));
+        }
+        const timerHandle = setTimeout(() => {
+          undoTimeouts.delete(eventId);
+          refreshExistingEventsLists();
+        }, 8000);
+        undoTimeouts.set(eventId, timerHandle);
+
+        refreshExistingEventsLists();
+        announceStatus(`Removed “${title}” from Recently Events.`);
+
+        (async () => {
+          try {
+            await executeSetHidden({ eventId, hidden: true });
+          } catch (err) {
+            console.warn("Could not update hidden in RTDB:", err);
+          }
+        })();
+      }
+    } catch (err) {
+      console.error("Action error:", err);
+      announceStatus(err.message || "Action failed. Please try again.", true);
+    }
+  }
+
+  function handleUndoClick(eventId) {
+    if (undoTimeouts.has(eventId)) {
+      clearTimeout(undoTimeouts.get(eventId));
+      undoTimeouts.delete(eventId);
+    }
+    const past = loadCurrentUserEvents();
+    const eventObj = past.find((x) => String(x.id || x.eventId) === String(eventId));
+    const title = eventObj ? (eventObj.title || eventObj.eventName || "Event") : "Event";
+
+    reuseLibrary[eventId] = { ...(reuseLibrary[eventId] || {}), hidden: false, updatedAt: Date.now() };
+    saveStoredReuseLibrary(reuseLibrary);
+    refreshExistingEventsLists();
+    announceStatus(`Restored “${title}” to Recently Events.`);
+
+    (async () => {
+      try {
+        await executeSetHidden({ eventId, hidden: false });
+      } catch (err) {
+        console.warn("Could not sync undo hidden to RTDB:", err);
+      }
+    })();
+  }
+
+  function updateConfirmationButtonsBusy(isBusy) {
+    const confirmEl = root.querySelector(".ce-card-confirm");
+    if (confirmEl) {
+      confirmEl.querySelectorAll("button").forEach((b) => {
+        b.disabled = isBusy;
+      });
+    }
+  }
+
+  function refreshExistingEventsLists() {
+    const container = root.querySelector(".ce-existing-view");
+    if (!container) return;
+
+    const colsContainer = container.querySelector(".ce-existing-columns") || container.querySelector(".ce-existing-error");
+    if (colsContainer) {
+      colsContainer.outerHTML = renderExistingColumnsHtml();
+      attachExistingViewCardListeners();
+    }
+  }
+
+  function attachExistingViewCardListeners() {
+    const container = root.querySelector(".ce-existing-view");
+    if (!container) return;
+
+    container.querySelectorAll("[data-action]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        handleCardActionClick(btn.dataset.action, btn.dataset.eventId, btn);
+      });
+    });
+
+    container.querySelectorAll("[data-confirm-action]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        handleConfirmActionClick(btn);
+      });
+    });
+
+    container.querySelectorAll("[data-undo-id]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        handleUndoClick(btn.dataset.undoId);
+      });
+    });
+
+    const retryBtn = document.getElementById("btnRetryLoadEvents");
+    if (retryBtn) {
+      retryBtn.addEventListener("click", () => {
+        attachReuseLibraryListener(currentAuthUid);
+      });
+    }
+  }
+
+  function attachExistingViewListeners() {
+    const container = root.querySelector(".ce-existing-view");
+    if (!container) return;
+
+    const searchInput = document.getElementById("searchPastEvents");
+    if (searchInput) {
+      searchInput.addEventListener("input", () => {
+        state.searchQuery = searchInput.value || "";
+        refreshExistingEventsLists();
+      });
+    }
+
+    attachExistingViewCardListeners();
+  }
+
+  async function handlePostSaveFavorite(eventObj) {
+    if (!eventObj) return;
+    const eventId = String(eventObj.id || eventObj.eventId);
+    const title = eventObj.title || eventObj.eventName || "Event";
+
+    const currentFavCount = Object.values(reuseLibrary).filter((m) => m && m.favorite === true).length;
+    if (currentFavCount >= FAVORITES_LIMIT) {
+      showToast("Favorites are full. You can have up to 5 favorites. Remove one from Favorite Events first.");
+      return;
+    }
+
+    const past = loadCurrentUserEvents();
+    const targetLower = title.trim().toLowerCase();
+    const duplicateFav = past.find((p) => {
+      if (!p) return false;
+      const pId = String(p.id || p.eventId);
+      if (pId === eventId) return false;
+      const isFav = reuseLibrary[pId]?.favorite === true;
+      const pTitle = (p.title || p.eventName || "").trim().toLowerCase();
+      return isFav && pTitle === targetLower;
+    });
+
+    try {
+      if (duplicateFav) {
+        const dupTitle = duplicateFav.title || duplicateFav.eventName || "existing favorite";
+        const dupDate = formatLastHeldDate(duplicateFav.date || duplicateFav.dateISO || duplicateFav.eventDate);
+        return new Promise((resolve) => {
+          showConfirmModal({
+            title: "Duplicate Favorite Name",
+            text: `A favorite named “${dupTitle}” already exists (last held ${dupDate}). Replace it with this one, or keep both?`,
+            confirmText: "Replace it",
+            cancelText: "Keep both",
+            onConfirm: async () => {
+              try {
+                const repId = duplicateFav.id || duplicateFav.eventId;
+                reuseLibrary[eventId] = { ...(reuseLibrary[eventId] || {}), favorite: true, hidden: false, updatedAt: Date.now() };
+                if (reuseLibrary[repId]) {
+                  reuseLibrary[repId].favorite = false;
+                  reuseLibrary[repId].updatedAt = Date.now();
+                }
+                saveStoredReuseLibrary(reuseLibrary);
+                showToast(`Added “${title}” to Favorite Events.`);
+                await executeSetFavorite({ eventId, favorite: true, replaceEventId: repId, title });
+              } catch (e) {
+                showToast(e.message || "Failed to favorite event.");
+              }
+              resolve();
+            },
+            onCancel: async () => {
+              try {
+                reuseLibrary[eventId] = { ...(reuseLibrary[eventId] || {}), favorite: true, hidden: false, updatedAt: Date.now() };
+                saveStoredReuseLibrary(reuseLibrary);
+                showToast(`Added “${title}” to Favorite Events.`);
+                await executeSetFavorite({ eventId, favorite: true, allowDuplicate: true, title });
+              } catch (e) {
+                showToast(e.message || "Failed to favorite event.");
+              }
+              resolve();
+            },
+          });
+        });
+      } else {
+        reuseLibrary[eventId] = { ...(reuseLibrary[eventId] || {}), favorite: true, hidden: false, updatedAt: Date.now() };
+        saveStoredReuseLibrary(reuseLibrary);
+        showToast(`Added “${title}” to Favorite Events.`);
+        await executeSetFavorite({ eventId, favorite: true, title });
+      }
+    } catch (err) {
+      console.error("handlePostSaveFavorite error:", err);
+      showToast(err.message || "Could not add to favorites.");
+    }
   }
 
   function calculateNextLogicalDate(oldDateStr) {
@@ -599,6 +1688,10 @@ const APPROVER_DIRECTORY = {
   // 12. Create / Edit Form View (Left Form, Right Sticky Side Panel)
   function renderCreateFormView(manilaInfo) {
     const isEditMode = Boolean(state.editingEventId);
+    const defaultEventDate = getDefaultEventDate(manilaInfo.todayStr);
+    const initialRegStart = `${manilaInfo.todayStr}T08:00`;
+    const initialRegEnd = calculateAutoRegistrationEnd(defaultEventDate);
+    const initialMaxRegEnd = calculateMaxRegistrationEnd(defaultEventDate);
 
     return `
       ${state.isCopied && state.copiedFrom ? `
@@ -655,13 +1748,13 @@ const APPROVER_DIRECTORY = {
                 <div class="ce-field" id="wrap-eventSource">
                   <label for="eventSource">Event Source</label>
                   <select id="eventSource" name="eventSource">
-                    ${isOrganizerPage ? '<option value="">Select source (optional)...</option>' : ""}
                     ${EVENT_SOURCES.map((src) => `
                       <option value="${escapeHTML(src)}" ${src === defaultEventSource ? "selected" : ""}>
                         ${escapeHTML(src)}
                       </option>
                     `).join("")}
                   </select>
+                  <small class="ce-hint">Automatically set based on your account credentials.</small>
                 </div>
 
                 <!-- Category Multi-Select Dropdown with Checkboxes (1 to 3 allowed) -->
@@ -712,13 +1805,13 @@ const APPROVER_DIRECTORY = {
                 <h2 class="ce-card-title">2. Schedule & Venue</h2>
               </div>
               <div class="ce-fields-grid">
-                <!-- Date with Manila Min/Max -->
+                <!-- Date Start with Manila Min/Max -->
                 <div class="ce-field ${state.highlightedFields.has("eventDate") ? "is-copied-highlight" : ""}" id="wrap-eventDate">
-                  <label for="eventDate">Date <span class="ce-req">*</span></label>
+                  <label for="eventDate">Date Start <span class="ce-req">*</span></label>
                   <input type="date"
                          id="eventDate"
                          name="eventDate"
-                         value="${escapeHTML(manilaInfo.todayStr)}"
+                         value="${escapeHTML(defaultEventDate)}"
                          min="${escapeHTML(manilaInfo.todayStr)}"
                          max="${escapeHTML(manilaInfo.maxDateStr)}"
                          required
@@ -727,7 +1820,31 @@ const APPROVER_DIRECTORY = {
                   <p class="ce-error" id="error-eventDate" hidden></p>
                 </div>
 
-                <!-- Time Start: Default 8:00 AM, min 8:00 AM -->
+                <!-- Date End with Min locked to Date Start -->
+                <div class="ce-field ${state.highlightedFields.has("eventDateEnd") ? "is-copied-highlight" : ""}" id="wrap-eventDateEnd">
+                  <label for="eventDateEnd">Date End <span class="ce-req">*</span></label>
+                  <input type="date"
+                         id="eventDateEnd"
+                         name="eventDateEnd"
+                         value="${escapeHTML(defaultEventDate)}"
+                         min="${escapeHTML(defaultEventDate || manilaInfo.todayStr)}"
+                         max="${escapeHTML(manilaInfo.maxDateStr)}"
+                         required
+                         aria-describedby="error-eventDateEnd">
+                  <p class="ce-error" id="error-eventDateEnd" hidden></p>
+                </div>
+
+                <!-- Daily Schedule Dropdown -->
+                <div class="ce-field" id="wrap-dailySchedule">
+                  <label for="dailySchedule">Daily schedule <span class="ce-req">*</span></label>
+                  <select id="dailySchedule" name="dailySchedule" required aria-describedby="error-dailySchedule">
+                    <option value="Same time each day">Same time each day</option>
+                    <option value="Different time by day">Different time by day</option>
+                  </select>
+                  <p class="ce-error" id="error-dailySchedule" hidden></p>
+                </div>
+
+                <!-- Time Start: Default 8:00 AM, min 8:00 AM (for Same time each day) -->
                 <div class="ce-field ${state.highlightedFields.has("timeStart") ? "is-copied-highlight" : ""}" id="wrap-timeStart">
                   <label for="timeStart">Time Start <span class="ce-req">*</span></label>
                   <div class="ce-timepicker-wrap" id="picker-wrap-timeStart">
@@ -760,7 +1877,7 @@ const APPROVER_DIRECTORY = {
                   <p class="ce-error" id="error-timeStart" hidden></p>
                 </div>
 
-                <!-- Time End: Default 8:00 PM, max 8:00 PM -->
+                <!-- Time End: Default 8:00 PM, max 8:00 PM (for Same time each day) -->
                 <div class="ce-field ${state.highlightedFields.has("timeEnd") ? "is-copied-highlight" : ""}" id="wrap-timeEnd">
                   <label for="timeEnd">Time End <span class="ce-req">*</span></label>
                   <div class="ce-timepicker-wrap" id="picker-wrap-timeEnd">
@@ -793,6 +1910,17 @@ const APPROVER_DIRECTORY = {
                   <p class="ce-error" id="error-timeEnd" hidden></p>
                 </div>
 
+                <!-- Different time by day container (Photo 3) -->
+                <div class="ce-field ce-field--full" id="wrap-dailyScheduleContainer" hidden>
+                  <div class="ce-daily-schedule-card">
+                    <p class="ce-daily-hint">Set a separate start and end time for each event date.</p>
+                    <div class="ce-daily-schedule-list" id="dailyScheduleList">
+                      <!-- Dynamic rows for each date -->
+                    </div>
+                  </div>
+                  <p class="ce-error" id="error-dailySchedule" hidden></p>
+                </div>
+
                 <!-- Grouped Venue Dropdown -->
                 <div class="ce-field" id="wrap-venue">
                   <label for="venue">Venue <span class="ce-req">*</span></label>
@@ -818,23 +1946,56 @@ const APPROVER_DIRECTORY = {
                          name="maxCapacity"
                          min="1"
                          step="1"
-                         placeholder="e.g. 100"
+                         placeholder="Expected Participants"
                          aria-describedby="venueCapacityHint error-maxCapacity">
                   <small class="ce-hint" id="venueCapacityHint">Select a venue to view capacity limit.</small>
                   <p class="ce-error" id="error-maxCapacity" hidden></p>
                 </div>
 
-                <!-- Weather Contingency: Read-Only & Auto-Linked to Venue -->
+                <!-- Venue Type: Read-Only & Auto-Linked to Venue -->
                 <div class="ce-field" id="wrap-weatherContingency">
-                  <label for="weatherContingency">Weather Contingency <span class="ce-readonly-tag">(Auto-linked)</span></label>
+                  <label for="weatherContingency">Venue Type <span class="ce-readonly-tag">(Auto-linked)</span></label>
                   <input type="text"
                          id="weatherContingency"
                          name="weatherContingency"
                          readonly
                          class="ce-input--readonly"
-                         placeholder="Select a venue to determine weather contingency"
+                         placeholder="Select a venue to determine venue type"
                          aria-describedby="error-weatherContingency">
                   <p class="ce-error" id="error-weatherContingency" hidden></p>
+                </div>
+
+                <!-- Outside PUP Additional Fields (Conditional) -->
+                <div class="ce-field ce-field--full" id="wrap-customVenueName" hidden>
+                  <label for="customVenueName">Venue Name <span class="ce-req">*</span></label>
+                  <input type="text"
+                         id="customVenueName"
+                         name="customVenueName"
+                         placeholder="e.g. Grand Ballroom, Tagaytay Country Hotel"
+                         aria-describedby="error-customVenueName">
+                  <p class="ce-error" id="error-customVenueName" hidden></p>
+                </div>
+
+                <div class="ce-field ce-field--full" id="wrap-customVenueAddress" hidden>
+                  <label for="customVenueAddress">Exact Address <span class="ce-req">*</span></label>
+                  <input type="text"
+                         id="customVenueAddress"
+                         name="customVenueAddress"
+                         placeholder="e.g. Aguinaldo Highway, Silang Junction North, Tagaytay City, Cavite"
+                         aria-describedby="error-customVenueAddress">
+                  <p class="ce-error" id="error-customVenueAddress" hidden></p>
+                </div>
+
+                <!-- Online / Virtual Additional Field (Conditional) -->
+                <div class="ce-field ce-field--full" id="wrap-onlineMeetingLink" hidden>
+                  <label for="onlineMeetingLink">Meeting Link <span class="ce-req">*</span></label>
+                  <input type="text"
+                         id="onlineMeetingLink"
+                         name="onlineMeetingLink"
+                         placeholder="e.g. https://meet.google.com/abc-defg-hij or Zoom meeting link"
+                         aria-describedby="error-onlineMeetingLink">
+                  <small class="ce-hint">Provide the meeting link or virtual platform URL.</small>
+                  <p class="ce-error" id="error-onlineMeetingLink" hidden></p>
                 </div>
               </div>
             </section>
@@ -845,14 +2006,84 @@ const APPROVER_DIRECTORY = {
                 <h2 class="ce-card-title">3. Approval Chain & Attendees</h2>
               </div>
               <div class="ce-fields-grid">
-                <div class="ce-field ce-field--full ce-field--toggle" id="wrap-outsideGuests">
-                  <span class="ce-toggle-label">Outside Guests</span>
-                  <label class="ce-switch">
-                    <input type="checkbox" id="outsideGuests" name="outsideGuests">
-                    <span class="ce-slider"></span>
+                <!-- Target Audience -->
+                <div class="ce-field ce-field--full" id="wrap-targetAudience">
+                  <label for="targetAudience" class="ce-label">
+                    Target audience
+                    <span class="ce-req" style="color: #dc2626; display: block; margin-top: -2px;">*</span>
                   </label>
-                  <span class="ce-toggle-text">Outside guests will attend this event</span>
+                  <select id="targetAudience" name="targetAudience" class="ce-select" required aria-describedby="targetAudienceHint error-targetAudience">
+                    <option value="Mixed audience">Mixed audience</option>
+                    <option value="Organization members only">Organization members only</option>
+                    <option value="PUP Students only">PUP Students only</option>
+                    <option value="Faculty & Staff only">Faculty & Staff only</option>
+                    <option value="Open to all">Open to all</option>
+                  </select>
+                  <small class="ce-hint" id="targetAudienceHint">Organization members only refers to members of the main organizing organization.</small>
+                  <p class="ce-error" id="error-targetAudience" hidden></p>
                 </div>
+
+                <!-- Partner Organizations -->
+                <div class="ce-field ce-field--full ce-partner-section" id="wrap-partnerOrgs">
+                  <div class="ce-partner-header">
+                    <div class="ce-partner-title-wrap">
+                      <h3 class="ce-partner-title">Partner organizations</h3>
+                      <p class="ce-partner-subtitle">Choose one or more registered organizations and assign each a role.</p>
+                    </div>
+                    <label class="ce-collab-checkbox-label">
+                      <input type="checkbox" id="isCollaboration" name="isCollaboration" ${state.isCollaboration ? "checked" : ""}>
+                      <span class="ce-collab-custom-box">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                          <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                      </span>
+                      <span class="ce-collab-text">Collaboration</span>
+                    </label>
+                  </div>
+
+                  <div class="ce-partner-body" id="partnerBody" ${state.isCollaboration ? "" : 'style="display:none;"'}>
+                    <div class="ce-partner-add-row">
+                      <select id="partnerOrgSelect" class="ce-select" aria-label="Select organization">
+                        <option value="" disabled selected>Select organization...</option>
+                        ${partnerOrgsPool.map(org => `<option value="${escapeHTML(org.id)}">${escapeHTML(org.name)} - ${escapeHTML(org.subtitle)}</option>`).join("")}
+                      </select>
+                      <select id="partnerRoleSelect" class="ce-select" aria-label="Role">
+                        <option value="Co-Organizer" selected>Co-Organizer</option>
+                        <option value="Sponsor">Sponsor</option>
+                        <option value="Partner">Partner</option>
+                      </select>
+                      <button type="button" id="btnAddPartner" class="ce-btn-add-partner">+ Add</button>
+                    </div>
+
+                    <div class="ce-partner-list" id="partnerOrgList">
+                      <!-- Dynamic partner item cards -->
+                    </div>
+
+                    <div class="ce-collab-notes-wrap">
+                      <label for="collaborationNotes" class="ce-label">Collaboration notes</label>
+                      <textarea id="collaborationNotes" name="collaborationNotes" rows="3" placeholder="Responsibilities, deliverables, cost sharing...">${escapeHTML(state.collaborationNotes || "")}</textarea>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- External Guests or Speakers -->
+                <div class="ce-field ce-field--full ce-guests-section" id="wrap-externalGuests">
+                  <div class="ce-guests-header">
+                    <div class="ce-guests-title-wrap">
+                      <h3 class="ce-guests-title">External guests or speakers</h3>
+                      <p class="ce-guests-subtitle">Add one entry per guest. Guests do not need RECOVIBE accounts.</p>
+                    </div>
+                    <button type="button" id="btnAddGuest" class="ce-btn-add-guest">+ Add guest</button>
+                  </div>
+
+                  <div class="ce-guests-list" id="externalGuestsList">
+                    <!-- Dynamic guest cards -->
+                  </div>
+                  <p class="ce-error" id="error-externalGuests" hidden></p>
+                </div>
+
+                <!-- Hidden outside guests toggle input for sequential approver sync -->
+                <input type="checkbox" id="outsideGuests" name="outsideGuests" style="display:none;" ${state.outsideGuests ? "checked" : ""}>
 
                 <div class="ce-field ce-field--full" id="wrap-approverList">
                   <div class="ce-label-split" style="margin-bottom: 8px;">
@@ -876,22 +2107,38 @@ const APPROVER_DIRECTORY = {
                 <h2 class="ce-card-title">4. Registration Information</h2>
               </div>
               <div class="ce-fields-grid">
-                <!-- Registration Deadline (Defaults to event Date at 11:59 PM) -->
-                <div class="ce-field ${state.highlightedFields.has("registrationDeadline") ? "is-copied-highlight" : ""}" id="wrap-registrationDeadline">
-                  <div class="ce-label-split">
-                    <label for="registrationDeadline">Registration Deadline <span class="ce-req">*</span></label>
-                    <button type="button" class="ce-text-link" id="btnResetAutoDeadline" title="Reset to 11:59 PM of event date">Reset to auto</button>
-                  </div>
+                <!-- Registration Start -->
+                <div class="ce-field ${state.highlightedFields.has("registrationStart") ? "is-copied-highlight" : ""}" id="wrap-registrationStart">
+                  <label for="registrationStart">Registration Start <span class="ce-req">*</span></label>
                   <input type="datetime-local"
-                         id="registrationDeadline"
-                         name="registrationDeadline"
-                         value="${escapeHTML(manilaInfo.todayStr)}T23:59"
+                         id="registrationStart"
+                         name="registrationStart"
+                         value="${escapeHTML(initialRegStart)}"
                          required
-                         aria-describedby="error-registrationDeadline">
-                  <p class="ce-error" id="error-registrationDeadline" hidden></p>
+                         aria-describedby="error-registrationStart">
+                  <small class="ce-hint">Date and time when registration opens.</small>
+                  <p class="ce-error" id="error-registrationStart" hidden></p>
                 </div>
 
-                <div class="ce-field ce-field--toggle" id="wrap-attendanceRequired">
+                <!-- Registration End (1-2 days before event date) -->
+                <div class="ce-field ${state.highlightedFields.has("registrationEnd") || state.highlightedFields.has("registrationDeadline") ? "is-copied-highlight" : ""}" id="wrap-registrationEnd">
+                  <div class="ce-label-split">
+                    <label for="registrationEnd">Registration End <span class="ce-req">*</span></label>
+                    <button type="button" class="ce-text-link" id="btnResetAutoDeadline" title="Reset to 1-2 days before event date">Reset to auto</button>
+                  </div>
+                  <input type="datetime-local"
+                         id="registrationEnd"
+                         name="registrationEnd"
+                         value="${escapeHTML(initialRegEnd)}"
+                         max="${escapeHTML(initialMaxRegEnd)}"
+                         required
+                         aria-describedby="error-registrationEnd">
+                  <input type="hidden" id="registrationDeadline" name="registrationDeadline" value="${escapeHTML(initialRegEnd)}">
+                  <small class="ce-hint">Must be 1 or 2 days before the event date.</small>
+                  <p class="ce-error" id="error-registrationEnd" hidden></p>
+                </div>
+
+                <div class="ce-field ce-field--full ce-field--toggle" id="wrap-attendanceRequired">
                   <span class="ce-toggle-label">Attendance Tracking</span>
                   <label class="ce-switch">
                     <input type="checkbox" id="attendanceRequired" name="attendanceRequired" checked>
@@ -902,10 +2149,10 @@ const APPROVER_DIRECTORY = {
               </div>
             </section>
 
-            <!-- Card 4: Event Details -->
+            <!-- Card 5: Event Details -->
             <section class="ce-card" id="card-details">
               <div class="ce-card-header">
-                <h2 class="ce-card-title">4. Event Details & Faculty</h2>
+                <h2 class="ce-card-title">5. Event Details & Faculty</h2>
               </div>
               <div class="ce-fields-grid">
                 <div class="ce-field ce-field--full" id="wrap-description">
@@ -920,13 +2167,26 @@ const APPROVER_DIRECTORY = {
                             placeholder="Provide a comprehensive summary of the event objectives, agenda, and target outcomes..."></textarea>
                 </div>
 
-                <!-- Key Details with bullet support -->
+                <!-- Rationale: Just like Event Description -->
+                <div class="ce-field ce-field--full" id="wrap-rationale">
+                  <div class="ce-label-split">
+                    <label for="rationale">Rationale</label>
+                    <span class="ce-counter" id="rationaleCharCounter">0 / 1500</span>
+                  </div>
+                  <textarea id="rationale"
+                            name="rationale"
+                            rows="4"
+                            maxlength="1500"
+                            placeholder="Provide the rationale, background, and justification for organizing this event..."></textarea>
+                </div>
+
+                <!-- Objectives (formerly Key Details) with bullet support -->
                 <div class="ce-field ce-field--full" id="wrap-keyDetails">
-                  <label for="keyDetails">Key Details <small>(bulleted list)</small></label>
+                  <label for="keyDetails">Objectives <small>(bulleted list)</small></label>
                   <textarea id="keyDetails"
                             name="keyDetails"
                             rows="3"
-                            placeholder="• Event highlights&#10;• Special guests&#10;• Certificate provided"></textarea>
+                            placeholder="• Event objective 1&#10;• Event objective 2&#10;• Expected learning outcome"></textarea>
                 </div>
 
                 <!-- Requirements & Reminders with bullet support -->
@@ -948,8 +2208,8 @@ const APPROVER_DIRECTORY = {
                            class="ce-chip-input"
                            placeholder="Type to search faculty (optional)..."
                            autocomplete="off">
+                    <div class="ce-chip-suggestions" id="facultySuggestions" hidden></div>
                   </div>
-                  <div class="ce-chip-suggestions" id="facultySuggestions" hidden></div>
                   <p class="ce-inline-hint" id="facultyNoNumbersHint" style="color: #b3261e; font-size: 12px; margin-top: 4px;" hidden></p>
                   <small class="ce-hint">Participating faculty members who will attend or facilitate (optional).</small>
                 </div>
@@ -1008,49 +2268,36 @@ const APPROVER_DIRECTORY = {
               <div class="ce-card-header">
                 <h2 class="ce-card-title">5. Attached Documents</h2>
               </div>
-              <div class="ce-documents-grid">
-                <!-- Participant Documents -->
-                <div class="ce-dropzone-group" id="wrap-participantDocs">
-                  <div class="ce-dropzone-title-bar">
-                    <h3 class="ce-dropzone-title">Participant Documents <small>(Optional)</small></h3>
-                  </div>
-                  <div class="ce-dropzone"
-                       id="dropzoneParticipant"
-                       tabindex="0"
-                       role="region"
-                       aria-label="Upload participant documents">
-                    <!-- Dropzone content rendered by component -->
-                  </div>
-                  <p class="ce-error ce-dropzone-error" id="error-participantDocs" hidden></p>
-                  <input type="file"
-                         id="inputParticipantFiles"
-                         accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                         multiple
-                         hidden>
-                </div>
 
-                <!-- Approval Documents (Required) -->
-                <div class="ce-dropzone-group" id="wrap-approvalDocs">
-                  <div class="ce-dropzone-title-bar">
-                    <h3 class="ce-dropzone-title">
-                      Approval Documents <span class="ce-req" id="reqStarApproval">*</span>
-                    </h3>
-                    <p class="ce-dropzone-req-note" id="reqMsgApproval">At least 1 approval document is required before submission</p>
-                  </div>
-                  <div class="ce-dropzone"
-                       id="dropzoneApproval"
-                       tabindex="0"
-                       role="region"
-                       aria-label="Upload approval documents">
-                    <!-- Dropzone content rendered by component -->
-                  </div>
-                  <p class="ce-error ce-dropzone-error" id="error-approvalDocs" hidden></p>
-                  <input type="file"
-                         id="inputApprovalFiles"
-                         accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                         multiple
-                         hidden>
+              <!-- Documents for Admin review -->
+              <div class="ce-admin-docs-container">
+                <div class="ce-admin-docs-title-bar">
+                  <h3 class="ce-admin-docs-title">Documents for Admin review</h3>
                 </div>
+                <div class="ce-admin-docs-list" id="adminDocsList">
+                  <!-- Rendered dynamically based on selected venue -->
+                </div>
+                <p class="ce-admin-docs-notice">Proposal files are tracked in this browser session for review only; secure server upload is not enabled.</p>
+              </div>
+
+              <!-- Participant Documents (Optional) -->
+              <div class="ce-dropzone-group" id="wrap-participantDocs" style="margin-top: 24px;">
+                <div class="ce-dropzone-title-bar">
+                  <h3 class="ce-dropzone-title">Participant Documents <small>(Optional)</small></h3>
+                </div>
+                <div class="ce-dropzone"
+                     id="dropzoneParticipant"
+                     tabindex="0"
+                     role="region"
+                     aria-label="Upload participant documents">
+                  <!-- Dropzone content rendered by component -->
+                </div>
+                <p class="ce-error ce-dropzone-error" id="error-participantDocs" hidden></p>
+                <input type="file"
+                       id="inputParticipantFiles"
+                       accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                       multiple
+                       hidden>
               </div>
             </section>
           </form>
@@ -1163,7 +2410,7 @@ const APPROVER_DIRECTORY = {
               <li class="ce-check-item is-failed" id="check-deadline">
                 <span class="ce-check-icon" aria-hidden="true">✕</span>
                 <span class="ce-check-status-sr sr-only">Not yet: </span>
-                <span class="ce-check-label">Deadline is on or before 11:59 PM of event date</span>
+                <span class="ce-check-label">Registration end is 1 or 2 days before event date</span>
               </li>
               <li class="ce-check-item is-failed" id="check-capacity">
                 <span class="ce-check-icon" aria-hidden="true">✕</span>
@@ -1192,6 +2439,9 @@ const APPROVER_DIRECTORY = {
             <span id="bottomStatusText">Review your event information before submitting.</span>
           </div>
           <div class="ce-bottom-actions">
+            <button type="button" class="ce-btn-secondary ${state.addAsFavorite ? "is-active" : ""}" id="btnAddAsFavorite" aria-pressed="${Boolean(state.addAsFavorite)}">
+              ${state.addAsFavorite ? "★ Added as Favorite" : "☆ Add as Favorite"}
+            </button>
             <button type="button" class="ce-btn-secondary" id="btnCancelEvent">
               Cancel
             </button>
@@ -1206,10 +2456,18 @@ const APPROVER_DIRECTORY = {
       </footer>
 
       <!-- Confirmation Pop-Up Modal -->
-      <div class="ce-dialog-layer" id="ceConfirmModal" role="dialog" aria-modal="true" aria-labelledby="confirmModalTitle" hidden>
+      <div class="ce-dialog-layer" id="ceConfirmModal" role="alertdialog" aria-modal="true" aria-labelledby="confirmModalTitle" hidden>
         <div class="ce-confirm">
           <h2 id="confirmModalTitle">Confirm Action</h2>
           <p id="confirmModalText">Are you sure you want to proceed?</p>
+          <div class="ce-confirm-summary" id="confirmModalSummary" style="display:none;"></div>
+          <p class="ce-confirm-explainer" id="confirmModalExplainer" style="display:none;"></p>
+          <div class="ce-confirm-checkbox-wrap" id="confirmModalCheckboxWrap" style="display:none;">
+            <label class="ce-confirm-checkbox-label">
+              <input type="checkbox" id="confirmModalCheckbox" class="ce-confirm-checkbox-input" />
+              <span id="confirmModalCheckboxText" class="ce-confirm-checkbox-text">I confirm the details are accurate and ready for review.</span>
+            </label>
+          </div>
           <div class="ce-confirm-actions">
             <button type="button" class="ce-btn-secondary" id="confirmModalCancelBtn">Cancel</button>
             <button type="button" class="ce-btn-primary" id="confirmModalPrimaryBtn">Confirm</button>
@@ -1232,18 +2490,30 @@ const APPROVER_DIRECTORY = {
           state.dirty = false;
           state.isCopied = false;
           state.copiedFrom = null;
+          state.editingEventId = null;
+          state.activeConfirm = null;
+          if (newMode === "existing") {
+            state.reuseLoading = false;
+          }
           state.mode = newMode;
           render();
         },
       });
       return;
     }
+    if (newMode === "existing") {
+      state.isCopied = false;
+      state.copiedFrom = null;
+      state.editingEventId = null;
+      state.activeConfirm = null;
+      state.reuseLoading = false;
+    }
     state.mode = newMode;
     render();
   }
 
   // 14. Prefill Form from Copied/Existing Event
-  function prefillFormFromEvent(ev) {
+  function prefillFormFromEvent(ev, preserveDates = false) {
     state.isCopied = true;
     state.copiedFrom = ev;
     state.mode = "new";
@@ -1272,19 +2542,79 @@ const APPROVER_DIRECTORY = {
       state.participatingFaculty = [];
     }
 
+    state.adminDocs = {};
+    if (ev.adminDocuments && typeof ev.adminDocuments === "object") {
+      state.adminDocs = { ...ev.adminDocuments };
+    } else if (Array.isArray(ev.approvalDocuments)) {
+      ev.approvalDocuments.forEach((doc) => {
+        if (doc.docKey) state.adminDocs[doc.docKey] = doc;
+      });
+    }
+
+    state.targetAudience = ev.targetAudience || "Mixed audience";
+    state.isCollaboration = ev.isCollaboration !== undefined ? Boolean(ev.isCollaboration) : Boolean(Array.isArray(ev.partnerOrganizations) && ev.partnerOrganizations.length > 0);
+    state.partnerOrganizations = Array.isArray(ev.partnerOrganizations) ? [...ev.partnerOrganizations] : [];
+    state.collaborationNotes = ev.collaborationNotes || "";
+    state.externalGuests = Array.isArray(ev.externalGuests) ? [...ev.externalGuests] : [];
+    state.outsideGuests = Boolean((state.externalGuests && state.externalGuests.length > 0) || ev.outsideGuests);
+
     render();
+    renderAdminDocuments();
 
     const form = document.getElementById("createEventMainForm");
     if (form) {
       if (form.eventName) form.eventName.value = ev.title || ev.eventName || "";
-      if (form.eventSource && ev.source) form.eventSource.value = ev.source;
+      if (form.eventSource) form.eventSource.value = normalizeEventSource(ev.source);
       if (form.targetYear && ev.targetYear) form.targetYear.value = ev.targetYear;
-      if (form.eventDate) form.eventDate.value = calculateNextLogicalDate(ev.date || ev.dateISO || ev.eventDate);
+      if (form.targetAudience) form.targetAudience.value = state.targetAudience;
+      if (form.isCollaboration) form.isCollaboration.checked = state.isCollaboration;
+      if (form.collaborationNotes) form.collaborationNotes.value = state.collaborationNotes;
+      const savedDate = ev.date || ev.dateISO || ev.eventDate || "";
+      const nextDate = preserveDates ? savedDate : calculateNextLogicalDate(savedDate);
+      if (form.eventDate) form.eventDate.value = nextDate;
+      if (form.eventDateEnd) {
+        const nextEndDate = ev.dateEnd || ev.endDate || ev.endDateISO || nextDate;
+        form.eventDateEnd.value = nextEndDate >= nextDate ? nextEndDate : nextDate;
+        form.eventDateEnd.min = nextDate;
+      }
+      if (form.dailySchedule) {
+        form.dailySchedule.value = ev.dailySchedule || "Same time each day";
+      }
+      handleDailyScheduleToggle();
+      if (form.dailySchedule && form.dailySchedule.value === "Different time by day" && Array.isArray(ev.dailySchedules)) {
+        renderDailyScheduleRows();
+        ev.dailySchedules.forEach((ds) => {
+          const row = document.querySelector(`.ce-daily-schedule-row[data-date="${ds.date}"]`);
+          if (row) {
+            const s = row.querySelector(".ce-daily-start-input");
+            const e = row.querySelector(".ce-daily-end-input");
+            if (s && ds.timeStart) s.value = ds.timeStart;
+            if (e && ds.timeEnd) e.value = ds.timeEnd;
+          }
+        });
+      }
+      const manilaInfo = getManilaDateInfo();
+      if (form.registrationStart) {
+        form.registrationStart.value = ev.registrationStart || `${manilaInfo.todayStr}T08:00`;
+      }
+      if (form.registrationEnd) {
+        form.registrationEnd.value = preserveDates
+          ? (ev.registrationEnd || ev.registrationDeadline || "")
+          : calculateAutoRegistrationEnd(nextDate);
+        form.registrationEnd.max = calculateMaxRegistrationEnd(nextDate);
+      }
+      if (form.registrationDeadline) {
+        form.registrationDeadline.value = form.registrationEnd ? form.registrationEnd.value : "";
+      }
       if (form.timeStart && ev.timeStart) form.timeStart.value = ev.timeStart;
       if (form.timeEnd && ev.timeEnd) form.timeEnd.value = ev.timeEnd;
       if (form.venue && ev.venue) form.venue.value = ev.venue;
+      if (form.customVenueName) form.customVenueName.value = ev.customVenueName || ev.venueName || ev.building || "";
+      if (form.customVenueAddress) form.customVenueAddress.value = ev.customVenueAddress || ev.venueAddress || ev.roomNumber || "";
+      if (form.onlineMeetingLink) form.onlineMeetingLink.value = ev.onlineMeetingLink || ev.meetingLink || "";
       if (form.maxCapacity && ev.maxCapacity) form.maxCapacity.value = ev.maxCapacity;
       if (form.description && ev.description) form.description.value = ev.description;
+      if (form.rationale && ev.rationale) form.rationale.value = ev.rationale;
 
       if (form.keyDetails) {
         if (Array.isArray(ev.keyDetails) && ev.keyDetails.length) {
@@ -1294,6 +2624,75 @@ const APPROVER_DIRECTORY = {
         } else {
           form.keyDetails.value = "• ";
         }
+      }
+
+      async function loadDraftForEditing(uid) {
+        const draftId = new URLSearchParams(location.search).get("draft");
+        if (!draftId) return;
+        try {
+          const snapshot = await get(ref(rtdb, `drafts/${uid}/${draftId}`));
+          const draft = snapshot.val();
+          if (!draft || draft.status !== "draft") {
+            showToast("We couldn't find that draft in your list.");
+            return;
+          }
+          state.draftId = draftId;
+          prefillFormFromEvent(draft, true);
+          state.dirty = false;
+        } catch (error) {
+          console.error("Could not load event draft:", error);
+          showToast("Couldn't load this draft. Please try again.");
+        }
+      }
+
+      function serializeFormForServer(status) {
+        const payload = serializeEvent(status);
+        ["id", "eventId", "organizer", "organizerName", "organizerId", "organizerUid",
+          "createdBy", "createdByRole", "creatorRole", "source"].forEach((key) => delete payload[key]);
+        payload.status = status.toLowerCase();
+        payload.approvers = [...state.selectedApprovers];
+        if (state.draftId) payload.draftId = state.draftId;
+        return payload;
+      }
+
+      function showServerFieldErrors(error) {
+        const fields = error?.details?.fields;
+        if (!Array.isArray(fields) || fields.length === 0) return false;
+        let firstControl = null;
+        fields.forEach(({ field, message }) => {
+          const control = document.getElementById(field) ||
+            document.querySelector(`[name="${CSS.escape(field)}"]`);
+          const wrapper = control?.closest(".ce-field") || document.getElementById(`wrap-${field}`);
+          if (!wrapper) return;
+          let errorNode = wrapper.querySelector(".ce-error");
+          if (!errorNode) {
+            errorNode = document.createElement("p");
+            errorNode.className = "ce-error";
+            wrapper.appendChild(errorNode);
+          }
+          errorNode.textContent = String(message || "Please check this field.");
+          errorNode.hidden = false;
+          wrapper.classList.add("has-error");
+          control?.setAttribute("aria-invalid", "true");
+          if (!firstControl) firstControl = control;
+        });
+        firstControl?.focus();
+        return true;
+      }
+
+      function getFriendlyFunctionError(error, fallback) {
+        const message = String(error?.message || "").replace(/^functions\/[a-z-]+:\s*/i, "").trim();
+        if (message && !/^(internal|unknown|unauthenticated|permission-denied|invalid-argument)$/i.test(message)) {
+          return message;
+        }
+        return fallback;
+      }
+
+      function setRequestBusy(button, busy, idleLabel) {
+        if (!button) return;
+        button.disabled = busy;
+        button.setAttribute("aria-busy", String(busy));
+        button.textContent = busy ? "Saving…" : idleLabel;
       }
 
       if (form.requirements) {
@@ -1321,6 +2720,7 @@ const APPROVER_DIRECTORY = {
       updateAllReadinessChecks();
       updateLivePreview();
       updateDescCounter();
+      updateRationaleCounter();
 
       const dateField = document.getElementById("wrap-eventDate");
       if (dateField) {
@@ -1351,63 +2751,27 @@ const APPROVER_DIRECTORY = {
       });
     }
 
-    // Reuse past event cards
-    root.querySelectorAll(".ce-reuse-btn, .ce-existing-card").forEach((card) => {
-      card.addEventListener("click", (e) => {
-        const reuseId = e.target.closest("[data-reuse-id]")?.dataset.reuseId ||
-                        e.target.closest("[data-event-id]")?.dataset.eventId;
-        if (!reuseId) return;
-        const past = loadCurrentUserEvents();
-        const found = past.find((x) => String(x.id || x.eventId) === String(reuseId));
-        if (found) {
-          prefillFormFromEvent(found);
-        }
-      });
-    });
+    // Existing events view listeners
+    attachExistingViewListeners();
 
-    // Search past events filter
-    const searchInput = document.getElementById("searchPastEvents");
-    if (searchInput) {
-      searchInput.addEventListener("input", () => {
-        state.searchQuery = searchInput.value || "";
-        const container = root.querySelector(".ce-existing-view");
-        if (container) {
-          const past = loadCurrentUserEvents();
-          const q = (state.searchQuery || "").trim().toLowerCase();
-          const filtered = past.filter((ev) => {
-            if (!q) return true;
-            const title = (ev.title || ev.eventName || "").toLowerCase();
-            const venue = (ev.venue || ev.location || "").toLowerCase();
-            const cat = (ev.category || "").toLowerCase();
-            return title.includes(q) || venue.includes(q) || cat.includes(q);
-          });
-          const commonKeywords = /assembly|orientation|seminar|workshop|general|meeting|training|convocation|bootcamp/i;
-          const commonEvents = [];
-          const uniqueEvents = [];
-          filtered.forEach((ev) => {
-            const t = (ev.title || ev.eventName || "").trim();
-            if (ev.isCommon || commonKeywords.test(t)) commonEvents.push(ev);
-            else uniqueEvents.push(ev);
-          });
-
-          const colLists = container.querySelectorAll(".ce-existing-col");
-          if (colLists[0]) {
-            colLists[0].querySelector(".ce-existing-col-title").textContent = `Common Events (${commonEvents.length})`;
-            colLists[0].querySelector(".ce-existing-col-list").innerHTML =
-              commonEvents.length === 0
-                ? '<div class="ce-existing-empty"><p>No common past events found.</p></div>'
-                : commonEvents.map((ev) => renderPastEventCard(ev)).join("");
-          }
-          if (colLists[1]) {
-            colLists[1].querySelector(".ce-existing-col-title").textContent = `Unique Events (${uniqueEvents.length})`;
-            colLists[1].querySelector(".ce-existing-col-list").innerHTML =
-              uniqueEvents.length === 0
-                ? '<div class="ce-existing-empty"><p>No unique past events found.</p></div>'
-                : uniqueEvents.map((ev) => renderPastEventCard(ev)).join("");
-          }
-        }
+    // Add as Favorite toggle button in Create New Event form
+    const btnAddFav = document.getElementById("btnAddAsFavorite");
+    if (btnAddFav) {
+      btnAddFav.addEventListener("click", () => {
+        state.addAsFavorite = !state.addAsFavorite;
+        btnAddFav.classList.toggle("is-active", state.addAsFavorite);
+        btnAddFav.setAttribute("aria-pressed", String(state.addAsFavorite));
+        btnAddFav.innerHTML = state.addAsFavorite ? "★ Added as Favorite" : "☆ Add as Favorite";
       });
     }
+
+    // Dismiss active confirmation on Escape key
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && state.activeConfirm) {
+        e.preventDefault();
+        closeActiveConfirmation();
+      }
+    });
 
     // Input change and dirty marking
     [
@@ -1415,13 +2779,22 @@ const APPROVER_DIRECTORY = {
       "eventSource",
       "targetYear",
       "eventDate",
+      "eventDateEnd",
+      "dailySchedule",
       "timeStart",
       "timeEnd",
       "venue",
+      "customVenueName",
+      "customVenueAddress",
+      "onlineMeetingLink",
       "maxCapacity",
+      "registrationStart",
+      "registrationEnd",
+      "registrationDeadline",
       "attendanceRequired",
       "weatherContingency",
       "description",
+      "rationale",
       "keyDetails",
       "requirements",
       "contactName",
@@ -1431,55 +2804,105 @@ const APPROVER_DIRECTORY = {
       const el = document.getElementById(id);
       if (el) {
         const handler = () => {
+          const isInsidePupVenue = document.getElementById("venue")?.value.toLowerCase().includes("inside pup");
+          if (id === "customVenueAddress" && isInsidePupVenue) {
+            el.value = el.value.replace(/\D/g, "").slice(0, 3);
+          }
           state.dirty = true;
           clearFieldError(id);
           removeHighlight(id);
           updateAllReadinessChecks();
           updateLivePreview();
           if (id === "description") updateDescCounter();
-          if (id === "venue" || id === "maxCapacity") checkVenueCapacityHint();
+          if (id === "rationale") updateRationaleCounter();
+          if (id === "venue" || id === "maxCapacity" || id === "customVenueName" || id === "customVenueAddress" || id === "onlineMeetingLink") checkVenueCapacityHint();
           if (id === "eventName") checkDuplicateNameWarning();
-          if (id === "eventDate") checkDateHolidayNotice();
+          if (id === "eventDate") {
+            checkDateHolidayNotice();
+            const dEnd = document.getElementById("eventDateEnd");
+            if (dEnd) {
+              dEnd.min = el.value;
+              if (dEnd.value && dEnd.value < el.value) {
+                dEnd.value = el.value;
+              }
+            }
+            if (document.getElementById("dailySchedule")?.value === "Different time by day") {
+              renderDailyScheduleRows();
+            }
+          }
+          if (id === "eventDateEnd") {
+            if (document.getElementById("dailySchedule")?.value === "Different time by day") {
+              renderDailyScheduleRows();
+            }
+          }
+          if (id === "dailySchedule") {
+            handleDailyScheduleToggle();
+          }
         };
         el.addEventListener("input", handler);
         el.addEventListener("change", handler);
       }
     });
 
-    // Date Auto-Follow for Registration Deadline
+    // Date Auto-Follow for Registration Start & End
     const dateInput = document.getElementById("eventDate");
+    const regStartInput = document.getElementById("registrationStart");
+    const regEndInput = document.getElementById("registrationEnd");
     const deadlineInput = document.getElementById("registrationDeadline");
-    if (dateInput && deadlineInput) {
+
+    function syncDeadlineWithEnd() {
+      if (regEndInput && deadlineInput) {
+        deadlineInput.value = regEndInput.value;
+      }
+    }
+
+    if (dateInput && regEndInput) {
       dateInput.addEventListener("change", () => {
-        if (!state.deadlineManuallyEdited) {
-          const dVal = dateInput.value;
-          if (dVal) {
-            deadlineInput.value = `${dVal}T23:59`;
-            deadlineInput.dispatchEvent(new Event("input", { bubbles: true }));
+        const dVal = dateInput.value;
+        if (dVal) {
+          const maxEnd = calculateMaxRegistrationEnd(dVal);
+          regEndInput.max = maxEnd;
+          if (!state.deadlineManuallyEdited || regEndInput.value > maxEnd) {
+            regEndInput.value = calculateAutoRegistrationEnd(dVal);
+            syncDeadlineWithEnd();
+            regEndInput.dispatchEvent(new Event("input", { bubbles: true }));
           }
         }
       });
 
-      deadlineInput.addEventListener("input", () => {
+      regEndInput.addEventListener("input", () => {
         state.deadlineManuallyEdited = true;
+        syncDeadlineWithEnd();
       });
+
+      if (regStartInput) {
+        regStartInput.addEventListener("input", () => {
+          updateAllReadinessChecks();
+          updateLivePreview();
+        });
+      }
 
       const btnResetDeadline = document.getElementById("btnResetAutoDeadline");
       if (btnResetDeadline) {
         btnResetDeadline.addEventListener("click", () => {
-          const dVal = dateInput.value || getManilaDateInfo().todayStr;
-          deadlineInput.value = `${dVal}T23:59`;
+          const dVal = dateInput.value || getDefaultEventDate(getManilaDateInfo().todayStr);
+          const autoEnd = calculateAutoRegistrationEnd(dVal);
+          regEndInput.max = calculateMaxRegistrationEnd(dVal);
+          regEndInput.value = autoEnd;
+          syncDeadlineWithEnd();
           state.deadlineManuallyEdited = false;
+          clearFieldError("registrationEnd");
           clearFieldError("registrationDeadline");
-          deadlineInput.dispatchEvent(new Event("input", { bubbles: true }));
-          deadlineInput.dispatchEvent(new Event("change", { bubbles: true }));
-          showToast("Registration deadline reset to 11:59 PM of event date.");
+          regEndInput.dispatchEvent(new Event("input", { bubbles: true }));
+          regEndInput.dispatchEvent(new Event("change", { bubbles: true }));
+          showToast("Registration end reset to 1-2 days before the event date.");
         });
       }
     }
 
     // Set up Input Rules Helpers
     setupCategoryDropdown();
+    handleDailyScheduleToggle();
     setupFacultyChipsInput();
     setupCustomTimepickers();
     setupContactPhoneInput();
@@ -1487,6 +2910,7 @@ const APPROVER_DIRECTORY = {
     setupBulletTextarea("requirements");
     setupNoNumbersInput("contactName", "contactNameNoNumbersHint");
     setupNoNumbersInput("facultySearchInput", "facultyNoNumbersHint");
+    setupAudienceAndCollaboration();
     setupApproverChain();
     setupDropzone({
       stateKey: "participantDocs",
@@ -1498,18 +2922,7 @@ const APPROVER_DIRECTORY = {
       maxSizeBytes: 10 * 1024 * 1024,
       helperText: "PDF, DOC, DOCX, JPG, PNG up to 10MB (max 5)",
     });
-    setupDropzone({
-      stateKey: "approvalDocs",
-      dropzoneId: "dropzoneApproval",
-      inputId: "inputApprovalFiles",
-      errorId: "error-approvalDocs",
-      isRequired: true,
-      reqMsgId: "reqMsgApproval",
-      reqStarId: "reqStarApproval",
-      maxFiles: 5,
-      maxSizeBytes: 10 * 1024 * 1024,
-      helperText: "Letter of request, activity approval, endorsements (min 1 required)",
-    });
+    renderAdminDocuments();
 
     // Cancel Button with Confirmation Modal
     const btnCancel = document.getElementById("btnCancelEvent");
@@ -1544,11 +2957,27 @@ const APPROVER_DIRECTORY = {
           text: "Save this event as a draft? You can return and continue editing it at any time.",
           confirmText: "Save Draft",
           cancelText: "Cancel",
-          onConfirm: () => {
-            const draft = serializeEvent("Draft");
-            persistEvent(draft);
-            state.dirty = false;
-            showToast("Draft saved successfully!");
+          onConfirm: async () => {
+            if (state.isActionBusy) return;
+            state.isActionBusy = true;
+            setRequestBusy(btnSaveDraft, true, "Save Draft");
+            try {
+              const saveDraftFn = httpsCallable(functions, "saveEventDraft");
+              const result = await saveDraftFn(serializeFormForServer("draft"));
+              const savedDraftId = result?.data?.draftId;
+              if (!savedDraftId) throw new Error("The draft could not be saved.");
+              state.draftId = savedDraftId;
+              state.dirty = false;
+              sessionStorage.setItem("recovibeEventNotice", "Draft saved.");
+              location.href = `${redirectListUrl}?draft=${encodeURIComponent(savedDraftId)}`;
+            } catch (error) {
+              console.error("Could not save event draft:", error);
+              showServerFieldErrors(error);
+              showToast(getFriendlyFunctionError(error, "Couldn't save your draft. Please try again."));
+            } finally {
+              state.isActionBusy = false;
+              setRequestBusy(btnSaveDraft, false, "Save Draft");
+            }
           },
         });
       });
@@ -1566,88 +2995,118 @@ const APPROVER_DIRECTORY = {
         showConfirmModal({
           title: requireApproval ? "Submit for Approval?" : "Publish Event?",
           text: requireApproval
-            ? "Once submitted, this event proposal will enter the 8-step approval chain for review."
+            ? "Are you sure you want to submit this event for approval? Once submitted, this event proposal will enter the sequential approval chain for review."
             : "Are you sure you want to publish this event? It will immediately become live.",
-          confirmText: requireApproval ? "Submit Proposal" : "Publish Event",
-          cancelText: "Cancel",
+          confirmText: "Yes",
+          cancelText: "No",
+          checkboxText: "I confirm the details are accurate and ready for review.",
           onConfirm: async () => {
-            const finalStatus = requireApproval ? "Pending Approval" : "Published";
-            const form = document.getElementById("createEventMainForm");
-            const title = form?.eventName?.value.trim() || "Untitled Event";
-            const date = form?.eventDate?.value || "";
-            const timeStart = form?.timeStart?.value || "08:00 AM";
-            const timeEnd = form?.timeEnd?.value || "08:00 PM";
-            const venue = form?.venue?.value || "PUP Biñan Campus";
-            const category = state.selectedCategories.join(", ") || "Academic & Learning";
-            const outsideGuests = Boolean(form?.outsideGuests?.checked);
-
-            let serverEventId = null;
-            if (isFirebaseConfigured && functions) {
-              try {
-                const createProposalFn = httpsCallable(functions, "createEventProposal");
-                const res = await createProposalFn({
-                  name: title,
-                  venue,
-                  category,
-                  startAt: `${date} ${timeStart}`,
-                  endAt: `${date} ${timeEnd}`,
-                  outsideGuests,
-                  approvers: state.selectedApprovers,
-                  files: [...state.approvalDocs, ...state.participantDocs].map((f) => ({
-                    name: f.name || f.fileName || "Document",
-                    path: f.path || f.url || "",
-                  })),
-                });
-                if (res?.data?.eventId) {
-                  serverEventId = res.data.eventId;
-                }
-              } catch (cfErr) {
-                console.warn("Cloud Function createEventProposal notice:", cfErr);
-              }
+            if (state.isActionBusy) return;
+            state.isActionBusy = true;
+            setRequestBusy(btnSubmit, true, "Submit for Approval");
+            try {
+              const payload = serializeFormForServer("pending");
+              payload.clientRequestId = state.clientRequestId || crypto.randomUUID();
+              state.clientRequestId = payload.clientRequestId;
+              const createProposalFn = httpsCallable(functions, "createEventProposal");
+              const result = await createProposalFn(payload);
+              const eventId = result?.data?.eventId;
+              if (!eventId) throw new Error("The server did not confirm the event submission.");
+              state.dirty = false;
+              const firstReviewer = String(result.data.firstReviewer || "the first reviewer");
+              sessionStorage.setItem(
+                "recovibeEventNotice",
+                `Submitted. ${firstReviewer} was notified.`,
+              );
+              location.href = `${redirectListUrl}?new=${encodeURIComponent(eventId)}`;
+            } catch (error) {
+              console.error("Could not submit event proposal:", error);
+              showServerFieldErrors(error);
+              showToast(getFriendlyFunctionError(error, "Couldn't submit your event. Your form is still here; please try again."));
+            } finally {
+              state.isActionBusy = false;
+              setRequestBusy(btnSubmit, false, "Submit for Approval");
             }
-
-            const eventObj = serializeEvent(finalStatus);
-            if (serverEventId) {
-              eventObj.id = serverEventId;
-              eventObj.eventId = serverEventId;
-            }
-            eventObj.outsideGuests = outsideGuests;
-            eventObj.approvers = [...state.selectedApprovers];
-            persistEvent(eventObj);
-            state.dirty = false;
-            showToast("Event submitted for approval successfully!");
-            setTimeout(() => {
-              location.href = redirectListUrl;
-            }, 1000);
           },
         });
       });
     }
+
+    // Keep in sync with the other role's create event page.
+    window.addEventListener("beforeunload", (e) => {
+      if (state.dirty) {
+        e.preventDefault();
+        e.returnValue = "You have unsaved changes. Would you like to save as a draft before leaving?";
+        return e.returnValue;
+      }
+    });
+
+    document.addEventListener("click", (e) => {
+      const link = e.target.closest("a[href]");
+      if (!link) return;
+      const href = link.getAttribute("href");
+      if (!href || href.startsWith("#") || href.startsWith("javascript:") || href.startsWith("mailto:") || href.startsWith("tel:")) return;
+      if (state.dirty && !state.isActionBusy) {
+        e.preventDefault();
+        const form = document.getElementById("createEventMainForm");
+        const nameVal = form?.eventName?.value.trim() || "";
+        showConfirmModal({
+          title: "Unsaved Changes",
+          text: "You have unsaved changes on this event. Would you like to save this as a draft before leaving?",
+          confirmText: nameVal.length >= 3 ? "Save Draft" : "Discard",
+          cancelText: "Keep Editing",
+          onConfirm: async () => {
+            if (nameVal.length >= 3) {
+              try {
+                if (functions) {
+                  const saveDraftFn = httpsCallable(functions, "saveEventDraft");
+                  const result = await saveDraftFn(serializeFormForServer("draft"));
+                  if (result?.data?.draftId) {
+                    sessionStorage.setItem("recovibeEventNotice", "Draft saved.");
+                  }
+                }
+              } catch (err) {
+                console.warn("Could not save draft before leaving:", err);
+              }
+            }
+            state.dirty = false;
+            location.href = href;
+          },
+        });
+      }
+    });
   }
 
-  function setupApproverChain() {
+  function renderApprovers() {
     const list = document.getElementById("approverList");
     const countText = document.getElementById("approverCountText");
-    const outsideCheckbox = document.getElementById("outsideGuests");
+    const hintText = document.getElementById("approverHintText");
     const errEl = document.getElementById("error-approvers");
     if (!list) return;
 
-    const keys = Object.keys(APPROVER_DIRECTORY).sort(
-      (a, b) => (APPROVER_DIRECTORY[a].stage || 0) - (APPROVER_DIRECTORY[b].stage || 0)
-    );
+    // Ensure all required stages are included in state.selectedApprovers
+    systemApprovalStages.forEach((stage) => {
+      if (stage.required && !state.selectedApprovers.includes(stage.id)) {
+        state.selectedApprovers.push(stage.id);
+      }
+    });
 
     function updateStepTags() {
-      const checkedKeys = keys.filter((k) => {
-        const input = document.getElementById(`approver-${k}`);
-        return input ? input.checked : state.selectedApprovers.includes(k);
-      });
-      state.selectedApprovers = checkedKeys;
+      const checkedIds = systemApprovalStages
+        .map((s) => s.id)
+        .filter((id) => {
+          const input = document.getElementById(`approver-${id}`);
+          const stage = systemApprovalStages.find((s) => s.id === id);
+          if (stage?.required) return true;
+          return input ? input.checked : state.selectedApprovers.includes(id);
+        });
+      state.selectedApprovers = checkedIds;
 
       let currentStep = 1;
-      keys.forEach((key) => {
-        const tag = document.getElementById(`stepTag-${key}`);
-        const item = document.getElementById(`approverItem-${key}`);
-        const isChecked = checkedKeys.includes(key);
+      systemApprovalStages.forEach((stage) => {
+        const tag = document.getElementById(`stepTag-${stage.id}`);
+        const item = document.getElementById(`approverItem-${stage.id}`);
+        const isChecked = checkedIds.includes(stage.id);
         if (tag) {
           if (isChecked) {
             tag.textContent = `Step ${currentStep}`;
@@ -1664,11 +3123,11 @@ const APPROVER_DIRECTORY = {
       });
 
       if (countText) {
-        countText.textContent = `${checkedKeys.length} approver${checkedKeys.length === 1 ? "" : "s"} selected`;
+        countText.textContent = `${checkedIds.length} approver${checkedIds.length === 1 ? "" : "s"} selected`;
       }
 
       if (errEl) {
-        if (checkedKeys.length === 0) {
+        if (checkedIds.length === 0) {
           errEl.hidden = false;
           errEl.textContent = "At least one approver must be selected.";
         } else {
@@ -1678,26 +3137,30 @@ const APPROVER_DIRECTORY = {
       }
     }
 
-    list.innerHTML = keys
-      .map((key) => {
-        const info = APPROVER_DIRECTORY[key];
-        const isPreChecked = state.selectedApprovers.includes(key);
-        const isReq = Boolean(info.required);
-        const isSuggest = info.suggestIf === "outsideGuests";
+    if (hintText) {
+      hintText.textContent = `Approvals run sequentially in ${systemApprovalStages.length} steps. Each step opens only after the one before approves. Unticked approvers are skipped and the rest are numbered by position.`;
+    }
+
+    list.innerHTML = systemApprovalStages
+      .map((stage) => {
+        const isPreChecked = stage.required || state.selectedApprovers.includes(stage.id);
+        const isReq = Boolean(stage.required);
+        const reviewerExtra = stage.reviewer && stage.reviewer.trim() !== stage.name.trim()
+          ? `<span style="font-size:12px;color:#6b7280;margin-left:6px;font-weight:normal;">(${escapeHTML(stage.reviewer)})</span>`
+          : "";
 
         return `
-          <div class="ce-approver-item ${isPreChecked ? "is-selected" : ""} ${isReq ? "is-disabled" : ""}" id="approverItem-${key}">
+          <div class="ce-approver-item ${isPreChecked ? "is-selected" : ""} ${isReq ? "is-disabled" : ""}" id="approverItem-${stage.id}">
             <div class="ce-approver-col-left">
-              <span class="ce-step-tag" id="stepTag-${key}">Step -</span>
-              <span class="ce-approver-name">${escapeHTML(info.label)}</span>
+              <span class="ce-step-tag" id="stepTag-${stage.id}">Step -</span>
+              <span class="ce-approver-name">${escapeHTML(stage.name)} ${reviewerExtra}</span>
               ${isReq ? '<span class="ce-req-badge">Required</span>' : ""}
-              ${isSuggest ? `<span class="ce-suggested-badge" id="suggestBadge-${key}" ${state.outsideGuests ? "" : "hidden"}>Suggested: outside guests</span>` : ""}
             </div>
             <div class="ce-approver-col-right">
               <input type="checkbox"
                      class="ce-approver-checkbox"
-                     id="approver-${key}"
-                     data-key="${key}"
+                     id="approver-${stage.id}"
+                     data-key="${stage.id}"
                      ${isPreChecked ? "checked" : ""}
                      ${isReq ? "disabled" : ""}>
             </div>
@@ -1706,9 +3169,9 @@ const APPROVER_DIRECTORY = {
       })
       .join("");
 
-    keys.forEach((key) => {
-      const input = document.getElementById(`approver-${key}`);
-      if (input && !APPROVER_DIRECTORY[key].required) {
+    systemApprovalStages.forEach((stage) => {
+      const input = document.getElementById(`approver-${stage.id}`);
+      if (input && !stage.required) {
         input.addEventListener("change", () => {
           updateStepTags();
           state.dirty = true;
@@ -1716,173 +3179,347 @@ const APPROVER_DIRECTORY = {
       }
     });
 
-    if (outsideCheckbox) {
-      outsideCheckbox.addEventListener("change", (e) => {
-        state.outsideGuests = Boolean(e.target.checked);
-        const vpExtInput = document.getElementById("approver-vp_ext");
-        const vpExtBadge = document.getElementById("suggestBadge-vp_ext");
-        if (state.outsideGuests) {
-          if (vpExtInput && !vpExtInput.checked) {
-            vpExtInput.checked = true;
-          }
-          if (vpExtBadge) vpExtBadge.hidden = false;
-        } else {
-          if (vpExtBadge) vpExtBadge.hidden = true;
-        }
-        updateStepTags();
-        state.dirty = true;
-      });
-    }
-
     updateStepTags();
   }
 
-  // 16. Custom 3-Column Scrollable Timepicker (Hour, Minute, AM/PM)
-  function setupCustomTimepickers() {
-    var PICKER_HOURS = ["12", "01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11"];
-    var PICKER_MINUTES = [];
-    for (var i = 0; i < 60; i++) {
-      PICKER_MINUTES.push(String(i).padStart(2, "0"));
+  function setupApproverChain() {
+    renderApprovers();
+  }
+
+  // 16. Custom 3-Column Scrollable Timepicker (Hour, Minute, AM/PM) & Daily Schedule
+  const PICKER_HOURS = ["12", "01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11"];
+  const PICKER_MINUTES = [];
+  for (let i = 0; i < 60; i++) {
+    PICKER_MINUTES.push(String(i).padStart(2, "0"));
+  }
+  const PICKER_PERIODS = ["AM", "PM"];
+
+  function attachCustomTimepicker(fieldId, fallbackPeriod) {
+    const input = document.getElementById(fieldId);
+    const wrap = document.getElementById("picker-wrap-" + fieldId);
+    const dropdown = document.getElementById("dropdown-" + fieldId);
+    const toggleBtn = document.getElementById("btnToggle-" + fieldId);
+    if (!input || !wrap || !dropdown) return;
+    if (wrap.dataset.timepickerInit === "true") return;
+    wrap.dataset.timepickerInit = "true";
+
+    const hourCol = dropdown.querySelector('[data-col="hour"]');
+    const minCol = dropdown.querySelector('[data-col="minute"]');
+    const periodCol = dropdown.querySelector('[data-col="period"]');
+    if (!hourCol || !minCol || !periodCol) return;
+
+    hourCol.innerHTML = PICKER_HOURS.map((h) => `<div class="ce-timepicker-item" data-value="${h}" role="button" tabindex="0">${h}</div>`).join("");
+    minCol.innerHTML = PICKER_MINUTES.map((m) => `<div class="ce-timepicker-item" data-value="${m}" role="button" tabindex="0">${m}</div>`).join("");
+    periodCol.innerHTML = PICKER_PERIODS.map((p) => `<div class="ce-timepicker-item" data-value="${p}" role="button" tabindex="0">${p}</div>`).join("");
+
+    function parseCurrent() {
+      const val = (input.value || "").trim();
+      const match = /^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i.exec(val);
+      if (match) {
+        return {
+          h: match[1].padStart(2, "0"),
+          m: match[2].padStart(2, "0"),
+          p: (match[3] || "AM").toUpperCase(),
+        };
+      }
+      return fallbackPeriod === "PM" ? { h: "08", m: "00", p: "PM" } : { h: "08", m: "00", p: "AM" };
     }
-    var PICKER_PERIODS = ["AM", "PM"];
 
-    ["timeStart", "timeEnd"].forEach(function(fieldId) {
-      var input = document.getElementById(fieldId);
-      var wrap = document.getElementById("picker-wrap-" + fieldId);
-      var dropdown = document.getElementById("dropdown-" + fieldId);
-      var toggleBtn = document.getElementById("btnToggle-" + fieldId);
-      if (!input || !wrap || !dropdown) return;
-
-      var hourCol = dropdown.querySelector('[data-col="hour"]');
-      var minCol = dropdown.querySelector('[data-col="minute"]');
-      var periodCol = dropdown.querySelector('[data-col="period"]');
-      if (!hourCol || !minCol || !periodCol) return;
-
-      // Populate columns
-      hourCol.innerHTML = PICKER_HOURS.map(function(h) {
-        return '<div class="ce-timepicker-item" data-value="' + h + '" role="button" tabindex="0">' + h + '</div>';
-      }).join("");
-
-      minCol.innerHTML = PICKER_MINUTES.map(function(m) {
-        return '<div class="ce-timepicker-item" data-value="' + m + '" role="button" tabindex="0">' + m + '</div>';
-      }).join("");
-
-      periodCol.innerHTML = PICKER_PERIODS.map(function(p) {
-        return '<div class="ce-timepicker-item" data-value="' + p + '" role="button" tabindex="0">' + p + '</div>';
-      }).join("");
-
-      function parseCurrent() {
-        var val = (input.value || "").trim();
-        var match = /^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i.exec(val);
-        if (match) {
-          return {
-            h: match[1].padStart(2, "0"),
-            m: match[2].padStart(2, "0"),
-            p: (match[3] || "AM").toUpperCase()
-          };
-        }
-        return fieldId === "timeStart" ? { h: "08", m: "00", p: "AM" } : { h: "08", m: "00", p: "PM" };
-      }
-
-      function syncActiveClasses(scrollToCenter) {
-        var cur = parseCurrent();
-
-        hourCol.querySelectorAll(".ce-timepicker-item").forEach(function(el) {
-          var isMatch = el.dataset.value === cur.h;
-          el.classList.toggle("is-selected", isMatch);
-          if (isMatch && scrollToCenter) {
-            el.scrollIntoView({ block: "center", behavior: "auto" });
-          }
-        });
-
-        minCol.querySelectorAll(".ce-timepicker-item").forEach(function(el) {
-          var isMatch = el.dataset.value === cur.m;
-          el.classList.toggle("is-selected", isMatch);
-          if (isMatch && scrollToCenter) {
-            el.scrollIntoView({ block: "center", behavior: "auto" });
-          }
-        });
-
-        periodCol.querySelectorAll(".ce-timepicker-item").forEach(function(el) {
-          var isMatch = el.dataset.value === cur.p;
-          el.classList.toggle("is-selected", isMatch);
-          if (isMatch && scrollToCenter) {
-            el.scrollIntoView({ block: "center", behavior: "auto" });
-          }
-        });
-      }
-
-      function openDropdown() {
-        document.querySelectorAll(".ce-timepicker-dropdown").forEach(function(d) {
-          if (d !== dropdown) d.hidden = true;
-        });
-        document.querySelectorAll(".ce-timepicker-input").forEach(function(inp) {
-          if (inp !== input) inp.setAttribute("aria-expanded", "false");
-        });
-
-        dropdown.hidden = false;
-        input.setAttribute("aria-expanded", "true");
-        syncActiveClasses(true);
-      }
-
-      function closeDropdown() {
-        dropdown.hidden = true;
-        input.setAttribute("aria-expanded", "false");
-      }
-
-      function updateValue(newH, newM, newP) {
-        var cur = parseCurrent();
-        var h = newH !== undefined ? newH : cur.h;
-        var m = newM !== undefined ? newM : cur.m;
-        var p = newP !== undefined ? newP : cur.p;
-        input.value = h + ":" + m + " " + p;
-        syncActiveClasses(false);
-
-        input.dispatchEvent(new Event("input", { bubbles: true }));
-        input.dispatchEvent(new Event("change", { bubbles: true }));
-      }
-
-      hourCol.addEventListener("click", function(e) {
-        var item = e.target.closest(".ce-timepicker-item");
-        if (item) updateValue(item.dataset.value, undefined, undefined);
+    function syncActiveClasses(scrollToCenter) {
+      const cur = parseCurrent();
+      hourCol.querySelectorAll(".ce-timepicker-item").forEach((el) => {
+        const isMatch = el.dataset.value === cur.h;
+        el.classList.toggle("is-selected", isMatch);
+        if (isMatch && scrollToCenter) el.scrollIntoView({ block: "center", behavior: "auto" });
       });
-
-      minCol.addEventListener("click", function(e) {
-        var item = e.target.closest(".ce-timepicker-item");
-        if (item) updateValue(undefined, item.dataset.value, undefined);
+      minCol.querySelectorAll(".ce-timepicker-item").forEach((el) => {
+        const isMatch = el.dataset.value === cur.m;
+        el.classList.toggle("is-selected", isMatch);
+        if (isMatch && scrollToCenter) el.scrollIntoView({ block: "center", behavior: "auto" });
       });
-
-      periodCol.addEventListener("click", function(e) {
-        var item = e.target.closest(".ce-timepicker-item");
-        if (item) updateValue(undefined, undefined, item.dataset.value);
+      periodCol.querySelectorAll(".ce-timepicker-item").forEach((el) => {
+        const isMatch = el.dataset.value === cur.p;
+        el.classList.toggle("is-selected", isMatch);
+        if (isMatch && scrollToCenter) el.scrollIntoView({ block: "center", behavior: "auto" });
       });
+    }
 
-      input.addEventListener("click", function() {
+    function openDropdown() {
+      document.querySelectorAll(".ce-timepicker-dropdown").forEach((d) => {
+        if (d !== dropdown) d.hidden = true;
+      });
+      document.querySelectorAll(".ce-timepicker-input").forEach((inp) => {
+        if (inp !== input) inp.setAttribute("aria-expanded", "false");
+      });
+      dropdown.hidden = false;
+      input.setAttribute("aria-expanded", "true");
+      syncActiveClasses(true);
+    }
+
+    function closeDropdown() {
+      dropdown.hidden = true;
+      input.setAttribute("aria-expanded", "false");
+    }
+
+    function updateValue(newH, newM, newP) {
+      const cur = parseCurrent();
+      const h = newH !== undefined ? newH : cur.h;
+      const m = newM !== undefined ? newM : cur.m;
+      const p = newP !== undefined ? newP : cur.p;
+      input.value = `${h}:${m} ${p}`;
+      syncActiveClasses(false);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+
+    hourCol.addEventListener("click", (e) => {
+      const item = e.target.closest(".ce-timepicker-item");
+      if (item) updateValue(item.dataset.value, undefined, undefined);
+    });
+
+    minCol.addEventListener("click", (e) => {
+      const item = e.target.closest(".ce-timepicker-item");
+      if (item) updateValue(undefined, item.dataset.value, undefined);
+    });
+
+    periodCol.addEventListener("click", (e) => {
+      const item = e.target.closest(".ce-timepicker-item");
+      if (item) updateValue(undefined, undefined, item.dataset.value);
+    });
+
+    input.addEventListener("click", () => {
+      if (dropdown.hidden) openDropdown();
+      else closeDropdown();
+    });
+
+    if (toggleBtn) {
+      toggleBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
         if (dropdown.hidden) openDropdown();
         else closeDropdown();
       });
+    }
 
-      if (toggleBtn) {
-        toggleBtn.addEventListener("click", function(e) {
-          e.stopPropagation();
-          if (dropdown.hidden) openDropdown();
-          else closeDropdown();
-        });
+    wrap.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !dropdown.hidden) {
+        closeDropdown();
+        input.focus();
       }
+    });
 
-      wrap.addEventListener("keydown", function(e) {
-        if (e.key === "Escape" && !dropdown.hidden) {
-          closeDropdown();
-          input.focus();
-        }
+    document.addEventListener("click", (e) => {
+      if (!wrap.contains(e.target)) {
+        closeDropdown();
+      }
+    });
+  }
+
+  function setupCustomTimepickers() {
+    attachCustomTimepicker("timeStart", "AM");
+    attachCustomTimepicker("timeEnd", "PM");
+  }
+
+  function getDatesInRange(startDateStr, endDateStr) {
+    if (!startDateStr) return [];
+    const endStr = endDateStr || startDateStr;
+    const [sy, sm, sd] = startDateStr.split("-").map(Number);
+    const [ey, em, ed] = endStr.split("-").map(Number);
+    const start = new Date(sy, sm - 1, sd);
+    const end = new Date(ey, em - 1, ed);
+
+    if (isNaN(start.getTime()) || isNaN(end.getTime()) || end < start) {
+      return [startDateStr];
+    }
+
+    const dates = [];
+    const curr = new Date(start);
+    let count = 0;
+    while (curr <= end && count < 60) {
+      const y = curr.getFullYear();
+      const m = String(curr.getMonth() + 1).padStart(2, "0");
+      const d = String(curr.getDate()).padStart(2, "0");
+      dates.push(`${y}-${m}-${d}`);
+      curr.setDate(curr.getDate() + 1);
+      count++;
+    }
+    return dates;
+  }
+
+  function renderDailyScheduleRows() {
+    const listEl = document.getElementById("dailyScheduleList");
+    if (!listEl) return;
+
+    const form = document.getElementById("createEventMainForm");
+    const dStart = form?.eventDate?.value;
+    const dEnd = form?.eventDateEnd?.value || dStart;
+    const dates = getDatesInRange(dStart, dEnd);
+
+    if (dates.length === 0) {
+      listEl.innerHTML = '<p class="ce-muted" style="padding: 12px 0;">Please select valid start and end dates.</p>';
+      return;
+    }
+
+    const existing = {};
+    listEl.querySelectorAll(".ce-daily-schedule-row").forEach((row) => {
+      const dt = row.dataset.date;
+      const s = row.querySelector(".ce-daily-start-input")?.value;
+      const e = row.querySelector(".ce-daily-end-input")?.value;
+      if (dt) existing[dt] = { start: s, end: e };
+    });
+
+    const defaultStart = form?.timeStart?.value || "08:00 AM";
+    const defaultEnd = form?.timeEnd?.value || "08:00 PM";
+
+    listEl.innerHTML = dates.map((dateStr, idx) => {
+      const [y, m, d] = dateStr.split("-").map(Number);
+      const dateObj = new Date(y, m - 1, d);
+      const formattedDate = dateObj.toLocaleDateString("en-US", {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        year: "numeric"
       });
 
-      document.addEventListener("click", function(e) {
-        if (!wrap.contains(e.target)) {
-          closeDropdown();
-        }
+      const startVal = existing[dateStr]?.start || defaultStart;
+      const endVal = existing[dateStr]?.end || defaultEnd;
+
+      return `
+        <div class="ce-daily-schedule-row" data-date="${dateStr}" id="dailyRow_${idx}">
+          <div class="ce-daily-date-col">
+            <span class="ce-daily-date-text">${escapeHTML(formattedDate)}</span>
+          </div>
+
+          <div class="ce-daily-time-col">
+            <label for="dailyStart_${idx}" class="ce-daily-time-label">Start</label>
+            <div class="ce-timepicker-wrap" id="picker-wrap-dailyStart_${idx}">
+              <input type="text"
+                     id="dailyStart_${idx}"
+                     name="dailyStart_${idx}"
+                     class="ce-timepicker-input ce-daily-start-input"
+                     value="${escapeHTML(startVal)}"
+                     readonly
+                     required
+                     placeholder="--:-- --"
+                     aria-label="Start time for ${escapeHTML(formattedDate)}"
+                     aria-expanded="false"
+                     aria-haspopup="true">
+              <button type="button" class="ce-timepicker-btn" id="btnToggle-dailyStart_${idx}" aria-label="Choose start time" tabindex="-1">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <polyline points="12 6 12 12 16 14"></polyline>
+                </svg>
+              </button>
+              <div class="ce-timepicker-dropdown" id="dropdown-dailyStart_${idx}" hidden>
+                <div class="ce-timepicker-cols">
+                  <div class="ce-timepicker-col" data-col="hour" aria-label="Hours"></div>
+                  <div class="ce-timepicker-col" data-col="minute" aria-label="Minutes"></div>
+                  <div class="ce-timepicker-col" data-col="period" aria-label="Period"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="ce-daily-time-col">
+            <label for="dailyEnd_${idx}" class="ce-daily-time-label">End</label>
+            <div class="ce-timepicker-wrap" id="picker-wrap-dailyEnd_${idx}">
+              <input type="text"
+                     id="dailyEnd_${idx}"
+                     name="dailyEnd_${idx}"
+                     class="ce-timepicker-input ce-daily-end-input"
+                     value="${escapeHTML(endVal)}"
+                     readonly
+                     required
+                     placeholder="--:-- --"
+                     aria-label="End time for ${escapeHTML(formattedDate)}"
+                     aria-expanded="false"
+                     aria-haspopup="true">
+              <button type="button" class="ce-timepicker-btn" id="btnToggle-dailyEnd_${idx}" aria-label="Choose end time" tabindex="-1">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <polyline points="12 6 12 16 14"></polyline>
+                </svg>
+              </button>
+              <div class="ce-timepicker-dropdown" id="dropdown-dailyEnd_${idx}" hidden>
+                <div class="ce-timepicker-cols">
+                  <div class="ce-timepicker-col" data-col="hour" aria-label="Hours"></div>
+                  <div class="ce-timepicker-col" data-col="minute" aria-label="Minutes"></div>
+                  <div class="ce-timepicker-col" data-col="period" aria-label="Period"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    dates.forEach((_, idx) => {
+      attachCustomTimepicker(`dailyStart_${idx}`, "AM");
+      attachCustomTimepicker(`dailyEnd_${idx}`, "PM");
+
+      const sInp = document.getElementById(`dailyStart_${idx}`);
+      const eInp = document.getElementById(`dailyEnd_${idx}`);
+      if (sInp) sInp.addEventListener("input", () => {
+        state.dirty = true;
+        clearFieldError("dailySchedule");
+        updateAllReadinessChecks();
+        updateLivePreview();
+      });
+      if (eInp) eInp.addEventListener("input", () => {
+        state.dirty = true;
+        clearFieldError("dailySchedule");
+        updateAllReadinessChecks();
+        updateLivePreview();
       });
     });
+  }
+
+  function handleDailyScheduleToggle() {
+    const sel = document.getElementById("dailySchedule");
+    const wrapStart = document.getElementById("wrap-timeStart");
+    const wrapEnd = document.getElementById("wrap-timeEnd");
+    const wrapDaily = document.getElementById("wrap-dailyScheduleContainer");
+
+    const isDifferent = sel?.value === "Different time by day";
+
+    if (wrapStart) {
+      wrapStart.hidden = isDifferent;
+      wrapStart.style.display = isDifferent ? "none" : "";
+    }
+    if (wrapEnd) {
+      wrapEnd.hidden = isDifferent;
+      wrapEnd.style.display = isDifferent ? "none" : "";
+    }
+    if (wrapDaily) {
+      wrapDaily.hidden = !isDifferent;
+      wrapDaily.style.display = isDifferent ? "" : "none";
+      if (isDifferent) {
+        renderDailyScheduleRows();
+      }
+    }
+    clearFieldError("dailySchedule");
+    updateAllReadinessChecks();
+    updateLivePreview();
+  }
+
+  function collectDailySchedules() {
+    const list = [];
+    const container = document.getElementById("dailyScheduleList");
+    if (!container) return list;
+    container.querySelectorAll(".ce-daily-schedule-row").forEach((row) => {
+      const dt = row.dataset.date;
+      const sInput = row.querySelector(".ce-daily-start-input");
+      const eInput = row.querySelector(".ce-daily-end-input");
+      const dtText = row.querySelector(".ce-daily-date-text")?.textContent || dt;
+      if (dt) {
+        list.push({
+          date: dt,
+          dateFormatted: dtText,
+          timeStart: sInput?.value || "",
+          timeEnd: eInput?.value || "",
+        });
+      }
+    });
+    return list;
   }
 
   // 17. Contact Phone "09" Lock Helper
@@ -2074,44 +3711,176 @@ const APPROVER_DIRECTORY = {
   }
 
   // 20. Confirmation Modal Helper
-  function showConfirmModal({ title, text, confirmText, cancelText, onConfirm }) {
+  // Keep in sync with the other role's create event page.
+  function showConfirmModal({ title, text, summaryHtml, explainerText, confirmText, cancelText, onConfirm, onCancel, checkboxText, requireCheckbox, triggerEl, isSubmittingRef }) {
     const modal = document.getElementById("ceConfirmModal");
     const titleEl = document.getElementById("confirmModalTitle");
     const textEl = document.getElementById("confirmModalText");
+    const summaryEl = document.getElementById("confirmModalSummary");
+    const explainerEl = document.getElementById("confirmModalExplainer");
     const primaryBtn = document.getElementById("confirmModalPrimaryBtn");
     const cancelBtn = document.getElementById("confirmModalCancelBtn");
+    const checkboxWrap = document.getElementById("confirmModalCheckboxWrap");
+    const checkbox = document.getElementById("confirmModalCheckbox");
+    const checkboxTextEl = document.getElementById("confirmModalCheckboxText");
 
     if (!modal) return;
 
     if (titleEl) titleEl.textContent = title || "Confirm Action";
-    if (textEl) textEl.textContent = text || "Are you sure you want to proceed?";
+    if (textEl) {
+      if (text) {
+        textEl.textContent = text;
+        textEl.style.display = "";
+      } else {
+        textEl.textContent = "";
+        textEl.style.display = "none";
+      }
+    }
+
+    if (summaryEl) {
+      if (summaryHtml) {
+        summaryEl.innerHTML = summaryHtml;
+        summaryEl.style.display = "flex";
+      } else {
+        summaryEl.innerHTML = "";
+        summaryEl.style.display = "none";
+      }
+    }
+
+    if (explainerEl) {
+      if (explainerText) {
+        explainerEl.textContent = explainerText;
+        explainerEl.style.display = "block";
+      } else {
+        explainerEl.textContent = "";
+        explainerEl.style.display = "none";
+      }
+    }
+
     if (primaryBtn) primaryBtn.textContent = confirmText || "Confirm";
-    if (cancelBtn) cancelBtn.textContent = cancelText || "Cancel";
+    if (cancelBtn) {
+      if (cancelText === null) {
+        cancelBtn.hidden = true;
+      } else {
+        cancelBtn.hidden = false;
+        cancelBtn.textContent = cancelText || "Cancel";
+      }
+    }
+
+    const needsCheckbox = Boolean(checkboxText || requireCheckbox);
+    if (checkboxWrap) {
+      if (needsCheckbox) {
+        checkboxWrap.style.display = "block";
+        if (checkbox) checkbox.checked = false;
+        if (checkboxTextEl && typeof checkboxText === "string") {
+          checkboxTextEl.textContent = checkboxText;
+        }
+        if (primaryBtn) primaryBtn.disabled = true;
+      } else {
+        checkboxWrap.style.display = "none";
+        if (checkbox) checkbox.checked = false;
+        if (primaryBtn) primaryBtn.disabled = false;
+      }
+    } else if (primaryBtn) {
+      primaryBtn.disabled = false;
+    }
 
     modal.hidden = false;
     modal.classList.add("is-visible");
-    primaryBtn?.focus();
+
+    // Keydown trap for focus and Escape
+    const handleModalKeydown = (e) => {
+      if (e.key === "Escape") {
+        if (isSubmittingRef && isSubmittingRef()) return;
+        e.preventDefault();
+        e.stopPropagation();
+        closeModal();
+        if (typeof onCancel === "function") onCancel();
+        return;
+      }
+      if (e.key === "Tab") {
+        const focusable = modal.querySelectorAll('button:not([disabled]):not([hidden]), [href], input:not([disabled]):not([hidden]), [tabindex]:not([tabindex="-1"])');
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey) {
+          if (document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+          }
+        } else {
+          if (document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
+      }
+    };
+    document.addEventListener("keydown", handleModalKeydown, true);
+
+    if (needsCheckbox && checkbox) {
+      checkbox.focus();
+    } else if (cancelBtn && !cancelBtn.hidden) {
+      cancelBtn.focus();
+    } else {
+      primaryBtn?.focus();
+    }
 
     function closeModal() {
+      document.removeEventListener("keydown", handleModalKeydown, true);
       modal.hidden = true;
       modal.classList.remove("is-visible");
-      primaryBtn.onclick = null;
-      cancelBtn.onclick = null;
+      if (summaryEl) {
+        summaryEl.innerHTML = "";
+        summaryEl.style.display = "none";
+      }
+      if (explainerEl) {
+        explainerEl.textContent = "";
+        explainerEl.style.display = "none";
+      }
+      if (textEl) textEl.style.display = "";
+      if (cancelBtn) cancelBtn.hidden = false;
+      if (checkboxWrap) checkboxWrap.style.display = "none";
+      if (checkbox) {
+        checkbox.checked = false;
+        checkbox.onchange = null;
+      }
+      if (primaryBtn) {
+        primaryBtn.disabled = false;
+        primaryBtn.onclick = null;
+      }
+      if (cancelBtn) cancelBtn.onclick = null;
       modal.onclick = null;
+      if (triggerEl && typeof triggerEl.focus === "function") {
+        try { triggerEl.focus(); } catch (e) {}
+      }
+    }
+
+    if (checkbox && needsCheckbox) {
+      checkbox.onchange = () => {
+        if (primaryBtn) {
+          primaryBtn.disabled = !checkbox.checked;
+        }
+      };
     }
 
     primaryBtn.onclick = () => {
-      closeModal();
-      if (typeof onConfirm === "function") onConfirm();
+      if (primaryBtn.disabled) return;
+      if (typeof onConfirm === "function") onConfirm(closeModal);
+      else closeModal();
     };
 
     cancelBtn.onclick = () => {
+      if (isSubmittingRef && isSubmittingRef()) return;
       closeModal();
+      if (typeof onCancel === "function") onCancel();
     };
 
     modal.onclick = (e) => {
       if (e.target === modal) {
+        if (isSubmittingRef && isSubmittingRef()) return;
         closeModal();
+        if (typeof onCancel === "function") onCancel();
       }
     };
   }
@@ -2132,13 +3901,21 @@ const APPROVER_DIRECTORY = {
     }
   }
 
+  function updateRationaleCounter() {
+    const el = document.getElementById("rationale");
+    const counter = document.getElementById("rationaleCharCounter");
+    if (el && counter) {
+      counter.textContent = `${el.value.length} / 1500`;
+    }
+  }
+
   function checkVenueCapacityHint() {
     const venueEl = document.getElementById("venue");
     const hint = document.getElementById("venueCapacityHint");
     const weatherEl = document.getElementById("weatherContingency");
     if (!venueEl) return;
 
-    const chosenVenue = venueEl.value;
+    const chosenVenue = (venueEl.value || "").trim();
     const venueRecord = VENUES_FLAT_MAP[chosenVenue];
 
     if (venueRecord && venueRecord.maxCapacity) {
@@ -2160,6 +3937,58 @@ const APPROVER_DIRECTORY = {
       }
       weatherEl.dispatchEvent(new Event("input", { bubbles: true }));
     }
+
+    // Toggle conditional venue fields
+    const wrapOutsideName = document.getElementById("wrap-customVenueName");
+    const wrapOutsideAddr = document.getElementById("wrap-customVenueAddress");
+    const wrapOnlineLink = document.getElementById("wrap-onlineMeetingLink");
+
+    const vLower = chosenVenue.toLowerCase();
+    const isOutside = vLower.includes("outside pup");
+    const isInsideOther = vLower.includes("inside pup");
+    const isCustomVenue = isOutside || isInsideOther;
+    const isOnline = vLower.includes("online") || venueRecord?.type === "online";
+
+    if (wrapOutsideName) {
+      wrapOutsideName.hidden = !isCustomVenue;
+      wrapOutsideName.style.display = isCustomVenue ? "" : "none";
+      const lbl = wrapOutsideName.querySelector("label");
+      const inp = document.getElementById("customVenueName");
+      if (lbl) {
+        lbl.innerHTML = isInsideOther ? 'Building <span class="ce-req">*</span>' : 'Venue Name <span class="ce-req">*</span>';
+      }
+      if (inp) {
+        inp.placeholder = isInsideOther ? "e.g. Main Building" : "e.g. Grand Ballroom, Tagaytay Country Hotel";
+      }
+      if (!isCustomVenue) {
+        clearFieldError("customVenueName");
+      }
+    }
+    if (wrapOutsideAddr) {
+      wrapOutsideAddr.hidden = !isCustomVenue;
+      wrapOutsideAddr.style.display = isCustomVenue ? "" : "none";
+      const lbl = wrapOutsideAddr.querySelector("label");
+      const inp = document.getElementById("customVenueAddress");
+      if (lbl) {
+        lbl.innerHTML = isInsideOther ? 'Room Number <span class="ce-req">*</span>' : 'Exact Address <span class="ce-req">*</span>';
+      }
+      if (inp) {
+        inp.placeholder = isInsideOther ? "e.g. Room 204" : "e.g. Aguinaldo Highway, Silang Junction North, Tagaytay City, Cavite";
+      }
+      if (!isCustomVenue) {
+        clearFieldError("customVenueAddress");
+      }
+    }
+    if (wrapOnlineLink) {
+      wrapOnlineLink.hidden = !isOnline;
+      wrapOnlineLink.style.display = isOnline ? "" : "none";
+      if (!isOnline) {
+        clearFieldError("onlineMeetingLink");
+      }
+    }
+
+    renderAdminDocuments();
+    updateAllReadinessChecks();
   }
 
   // 21. Check Duplicate Event Name against Past Events
@@ -2295,56 +4124,108 @@ const APPROVER_DIRECTORY = {
     const suggestions = document.getElementById("facultySuggestions");
     if (!input || !suggestions) return;
 
-    const allFaculty = loadFacultyPool();
+    let activeSuggestionIndex = -1;
 
-    input.addEventListener("input", () => {
-      const q = input.value.trim().toLowerCase();
+    function renderSuggestions(queryText) {
+      const q = String(queryText || "").trim().toLowerCase();
+      const allFaculty = loadFacultyPool();
+
+      let matches = [];
       if (!q) {
-        suggestions.hidden = true;
-        suggestions.innerHTML = "";
-        return;
+        matches = allFaculty.filter((f) => {
+          return !state.participatingFaculty.some((pf) => pf.id === f.id || pf.name.toLowerCase() === f.name.toLowerCase());
+        }).slice(0, 8);
+      } else {
+        matches = allFaculty.filter((f) => {
+          const notAdded = !state.participatingFaculty.some((pf) => pf.id === f.id || pf.name.toLowerCase() === f.name.toLowerCase());
+          const matchName = f.name && f.name.toLowerCase().includes(q);
+          const matchEmail = f.email && f.email.toLowerCase().includes(q);
+          const matchDept = f.department && f.department.toLowerCase().includes(q);
+          return notAdded && (matchName || matchEmail || matchDept);
+        }).slice(0, 8);
       }
 
-      const matches = allFaculty.filter((f) => {
-        const notAdded = !state.participatingFaculty.some((pf) => pf.id === f.id || pf.name === f.name);
-        return notAdded && (f.name.toLowerCase().includes(q) || (f.email && f.email.toLowerCase().includes(q)));
-      }).slice(0, 6);
+      activeSuggestionIndex = -1;
 
       if (matches.length === 0) {
-        suggestions.hidden = true;
-        suggestions.innerHTML = "";
+        if (q) {
+          suggestions.innerHTML = `
+            <div class="ce-chip-suggestion-empty" style="padding: 10px 14px; color: #8a7c73; font-size: 13px;">
+              No teachers found in database. Press Enter to add &ldquo;${escapeHTML(input.value.trim())}&rdquo;
+            </div>
+          `;
+          suggestions.hidden = false;
+          suggestions.classList.add("is-open");
+        } else {
+          suggestions.hidden = true;
+          suggestions.classList.remove("is-open");
+          suggestions.innerHTML = "";
+        }
         return;
       }
 
-      suggestions.innerHTML = matches.map((f) => `
-        <div class="ce-chip-suggestion-item" data-faculty-id="${escapeHTML(f.id)}" data-faculty-name="${escapeHTML(f.name)}" data-faculty-email="${escapeHTML(f.email || "")}">
-          <strong>${escapeHTML(f.name)}</strong>
-          <small>${escapeHTML(f.email || "Faculty")}</small>
+      suggestions.innerHTML = matches.map((f, idx) => `
+        <div class="ce-chip-suggestion-item" data-item-idx="${idx}" data-faculty-id="${escapeHTML(f.id)}" data-faculty-name="${escapeHTML(f.name)}" data-faculty-email="${escapeHTML(f.email || "")}" data-faculty-dept="${escapeHTML(f.department || "")}">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+            <strong>${escapeHTML(f.name)}</strong>
+            <span style="font-size: 11px; padding: 2px 6px; border-radius: 4px; background: #f4efe4; color: #701219; font-weight: 600;">Faculty</span>
+          </div>
+          <small style="color: #6b7280; font-size: 12px; margin-top: 2px; display: block;">
+            ${f.department ? escapeHTML(f.department) + " • " : ""}${escapeHTML(f.email || "Faculty")}
+          </small>
         </div>
       `).join("");
+
       suggestions.hidden = false;
+      suggestions.classList.add("is-open");
 
       suggestions.querySelectorAll(".ce-chip-suggestion-item").forEach((item) => {
         item.addEventListener("click", () => {
-          const fObj = {
+          addFacultyChip({
             id: item.dataset.facultyId,
             name: item.dataset.facultyName,
             email: item.dataset.facultyEmail,
-          };
-          addFacultyChip(fObj);
+            department: item.dataset.facultyDept,
+          });
           input.value = "";
           suggestions.hidden = true;
+          suggestions.classList.remove("is-open");
           suggestions.innerHTML = "";
+          input.focus();
         });
       });
+    }
+
+    input.addEventListener("focus", () => {
+      renderSuggestions(input.value);
+    });
+
+    input.addEventListener("input", () => {
+      renderSuggestions(input.value);
     });
 
     input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
+      const items = suggestions.querySelectorAll(".ce-chip-suggestion-item");
+      if (e.key === "ArrowDown") {
         e.preventDefault();
-        const first = suggestions.querySelector(".ce-chip-suggestion-item");
-        if (first) {
-          first.click();
+        if (items.length > 0) {
+          activeSuggestionIndex = (activeSuggestionIndex + 1) % items.length;
+          items.forEach((it, i) => it.classList.toggle("is-active", i === activeSuggestionIndex));
+          items[activeSuggestionIndex]?.scrollIntoView({ block: "nearest" });
+        }
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        if (items.length > 0) {
+          activeSuggestionIndex = (activeSuggestionIndex - 1 + items.length) % items.length;
+          items.forEach((it, i) => it.classList.toggle("is-active", i === activeSuggestionIndex));
+          items[activeSuggestionIndex]?.scrollIntoView({ block: "nearest" });
+        }
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        if (activeSuggestionIndex >= 0 && items[activeSuggestionIndex]) {
+          items[activeSuggestionIndex].click();
+        } else if (items.length > 0 && input.value.trim()) {
+          items[0].click();
         } else if (input.value.trim()) {
           const customName = input.value.trim().replace(/\d+/g, "");
           if (customName) {
@@ -2352,19 +4233,23 @@ const APPROVER_DIRECTORY = {
               id: "custom-" + Date.now(),
               name: customName,
               email: "Faculty Member",
+              department: "Faculty",
             });
             input.value = "";
             suggestions.hidden = true;
+            suggestions.classList.remove("is-open");
           }
         }
       } else if (e.key === "Escape") {
         suggestions.hidden = true;
+        suggestions.classList.remove("is-open");
       }
     });
 
     document.addEventListener("click", (e) => {
       if (!input.contains(e.target) && !suggestions.contains(e.target)) {
         suggestions.hidden = true;
+        suggestions.classList.remove("is-open");
       }
     });
 
@@ -2406,6 +4291,504 @@ const APPROVER_DIRECTORY = {
         removeFacultyChip(parseInt(btn.dataset.removeIdx, 10));
       });
     });
+  }
+
+  // Helper to render partner organizations list
+  function renderPartnerOrgList() {
+    const list = document.getElementById("partnerOrgList");
+    if (!list) return;
+
+    if (!state.partnerOrganizations || state.partnerOrganizations.length === 0) {
+      list.innerHTML = "";
+      return;
+    }
+
+    list.innerHTML = state.partnerOrganizations.map((org) => {
+      const initial = (org.name || "P").charAt(0).toUpperCase();
+      const currentRole = org.role || "Co-Organizer";
+      return `
+        <div class="ce-partner-item" data-partner-id="${escapeHTML(org.id)}">
+          <div class="ce-partner-info">
+            <div class="ce-partner-avatar">${escapeHTML(initial)}</div>
+            <div class="ce-partner-texts">
+              <span class="ce-partner-name">${escapeHTML(org.name)}</span>
+              <span class="ce-partner-subtitle-text">${escapeHTML(org.subtitle || "")}</span>
+            </div>
+          </div>
+          <div class="ce-partner-actions">
+            <select class="ce-partner-item-role" data-partner-id="${escapeHTML(org.id)}" aria-label="Change role for ${escapeHTML(org.name)}">
+              <option value="Co-Organizer" ${currentRole === "Co-Organizer" ? "selected" : ""}>Co-Organizer</option>
+              <option value="Sponsor" ${currentRole === "Sponsor" ? "selected" : ""}>Sponsor</option>
+              <option value="Partner" ${currentRole === "Partner" ? "selected" : ""}>Partner</option>
+            </select>
+            <button type="button" class="ce-partner-remove-btn" data-partner-id="${escapeHTML(org.id)}" aria-label="Remove ${escapeHTML(org.name)}">✕</button>
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    list.querySelectorAll(".ce-partner-item-role").forEach((select) => {
+      select.addEventListener("change", (e) => {
+        const id = select.dataset.partnerId;
+        const targetOrg = state.partnerOrganizations.find((o) => o.id === id);
+        if (targetOrg) {
+          targetOrg.role = e.target.value;
+          state.dirty = true;
+        }
+      });
+    });
+
+    list.querySelectorAll(".ce-partner-remove-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const id = btn.dataset.partnerId;
+        state.partnerOrganizations = state.partnerOrganizations.filter((o) => o.id !== id);
+        state.dirty = true;
+        renderPartnerOrgList();
+      });
+    });
+  }
+
+  // Helper to render external guests list
+  function renderExternalGuestCards() {
+    const list = document.getElementById("externalGuestsList");
+    if (!list) return;
+
+    if (!state.externalGuests || state.externalGuests.length === 0) {
+      list.innerHTML = "";
+      updateOutsideGuestsStatus();
+      return;
+    }
+
+    list.innerHTML = state.externalGuests.map((guest, idx) => `
+      <div class="ce-guest-card" data-guest-idx="${idx}">
+        <div class="ce-guest-card-header">
+          <h4 class="ce-guest-card-title">Guest ${idx + 1}</h4>
+          <button type="button" class="ce-guest-remove-btn" data-guest-idx="${idx}" aria-label="Remove Guest ${idx + 1}">✕</button>
+        </div>
+        <div class="ce-guest-card-grid">
+          <div class="ce-field">
+            <label class="ce-label">Full name <span class="ce-req" style="color:#dc2626;">*</span></label>
+            <input type="text" class="ce-guest-input ce-guest-name" data-guest-idx="${idx}" value="${escapeHTML(guest.name || "")}" placeholder="" required>
+          </div>
+          <div class="ce-field">
+            <label class="ce-label">Organization / company</label>
+            <input type="text" class="ce-guest-input ce-guest-org" data-guest-idx="${idx}" value="${escapeHTML(guest.organization || "")}" placeholder="Affiliation">
+          </div>
+          <div class="ce-field">
+            <label class="ce-label">Email / contact</label>
+            <input type="text" class="ce-guest-input ce-guest-email" data-guest-idx="${idx}" value="${escapeHTML(guest.email || "")}" placeholder="Email or phone number">
+          </div>
+          <div class="ce-field">
+            <label class="ce-label">Role / topic</label>
+            <input type="text" class="ce-guest-input ce-guest-role" data-guest-idx="${idx}" value="${escapeHTML(guest.role || "")}" placeholder="Keynote speaker, judge...">
+          </div>
+          <div class="ce-field ce-field--full" style="grid-column: span 2;">
+            <label class="ce-label">Guest access needs</label>
+            <textarea class="ce-guest-input ce-guest-access" data-guest-idx="${idx}" rows="2" placeholder="Visitor access, equipment, parking, etc.">${escapeHTML(guest.accessNeeds || "")}</textarea>
+          </div>
+        </div>
+      </div>
+    `).join("");
+
+    list.querySelectorAll(".ce-guest-remove-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const idx = parseInt(btn.dataset.guestIdx, 10);
+        if (!isNaN(idx) && idx >= 0 && idx < state.externalGuests.length) {
+          state.externalGuests.splice(idx, 1);
+          state.dirty = true;
+          renderExternalGuestCards();
+        }
+      });
+    });
+
+    list.querySelectorAll(".ce-guest-name").forEach((input) => {
+      input.addEventListener("input", (e) => {
+        const idx = parseInt(input.dataset.guestIdx, 10);
+        if (state.externalGuests[idx]) {
+          state.externalGuests[idx].name = e.target.value;
+          state.dirty = true;
+        }
+      });
+    });
+
+    list.querySelectorAll(".ce-guest-org").forEach((input) => {
+      input.addEventListener("input", (e) => {
+        const idx = parseInt(input.dataset.guestIdx, 10);
+        if (state.externalGuests[idx]) {
+          state.externalGuests[idx].organization = e.target.value;
+          state.dirty = true;
+        }
+      });
+    });
+
+    list.querySelectorAll(".ce-guest-email").forEach((input) => {
+      input.addEventListener("input", (e) => {
+        const idx = parseInt(input.dataset.guestIdx, 10);
+        if (state.externalGuests[idx]) {
+          state.externalGuests[idx].email = e.target.value;
+          state.dirty = true;
+        }
+      });
+    });
+
+    list.querySelectorAll(".ce-guest-role").forEach((input) => {
+      input.addEventListener("input", (e) => {
+        const idx = parseInt(input.dataset.guestIdx, 10);
+        if (state.externalGuests[idx]) {
+          state.externalGuests[idx].role = e.target.value;
+          state.dirty = true;
+        }
+      });
+    });
+
+    list.querySelectorAll(".ce-guest-access").forEach((input) => {
+      input.addEventListener("input", (e) => {
+        const idx = parseInt(input.dataset.guestIdx, 10);
+        if (state.externalGuests[idx]) {
+          state.externalGuests[idx].accessNeeds = e.target.value;
+          state.dirty = true;
+        }
+      });
+    });
+
+    updateOutsideGuestsStatus();
+  }
+
+  function updateOutsideGuestsStatus() {
+    const hasExternal = (state.externalGuests && state.externalGuests.length > 0) || state.targetAudience === "Open to all";
+    state.outsideGuests = hasExternal;
+    const outsideCheckbox = document.getElementById("outsideGuests");
+    if (outsideCheckbox) {
+      outsideCheckbox.checked = hasExternal;
+    }
+  }
+
+  function setupAudienceAndCollaboration() {
+    const targetAudienceSelect = document.getElementById("targetAudience");
+    if (targetAudienceSelect) {
+      if (state.targetAudience) {
+        targetAudienceSelect.value = state.targetAudience;
+      }
+      targetAudienceSelect.addEventListener("change", (e) => {
+        state.targetAudience = e.target.value;
+        state.dirty = true;
+        updateOutsideGuestsStatus();
+      });
+    }
+
+    const isCollabCheckbox = document.getElementById("isCollaboration");
+    const partnerBody = document.getElementById("partnerBody");
+    if (isCollabCheckbox) {
+      isCollabCheckbox.checked = Boolean(state.isCollaboration);
+      if (partnerBody) {
+        partnerBody.style.display = isCollabCheckbox.checked ? "" : "none";
+      }
+      isCollabCheckbox.addEventListener("change", (e) => {
+        state.isCollaboration = Boolean(e.target.checked);
+        state.dirty = true;
+        if (partnerBody) {
+          partnerBody.style.display = state.isCollaboration ? "" : "none";
+        }
+      });
+    }
+
+    const btnAddPartner = document.getElementById("btnAddPartner");
+    const partnerOrgSelect = document.getElementById("partnerOrgSelect");
+    const partnerRoleSelect = document.getElementById("partnerRoleSelect");
+    if (btnAddPartner && partnerOrgSelect) {
+      btnAddPartner.addEventListener("click", () => {
+        const selectedId = partnerOrgSelect.value;
+        if (!selectedId) return;
+        const orgInfo = partnerOrgsPool.find((o) => o.id === selectedId);
+        if (!orgInfo) return;
+
+        const role = partnerRoleSelect?.value || "Co-Organizer";
+        const existing = state.partnerOrganizations.find((o) => o.id === selectedId);
+        if (existing) {
+          existing.role = role;
+        } else {
+          state.partnerOrganizations.push({
+            id: orgInfo.id,
+            name: orgInfo.name,
+            subtitle: orgInfo.subtitle,
+            role,
+          });
+        }
+        state.dirty = true;
+        partnerOrgSelect.value = "";
+        renderPartnerOrgList();
+      });
+    }
+
+    const collabNotes = document.getElementById("collaborationNotes");
+    if (collabNotes) {
+      if (state.collaborationNotes) {
+        collabNotes.value = state.collaborationNotes;
+      }
+      collabNotes.addEventListener("input", (e) => {
+        state.collaborationNotes = e.target.value;
+        state.dirty = true;
+      });
+    }
+
+    const btnAddGuest = document.getElementById("btnAddGuest");
+    if (btnAddGuest) {
+      btnAddGuest.addEventListener("click", () => {
+        state.externalGuests.push({
+          id: `guest-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          name: "",
+          organization: "",
+          email: "",
+          role: "",
+          accessNeeds: "",
+        });
+        state.dirty = true;
+        renderExternalGuestCards();
+        const inputs = document.querySelectorAll("#externalGuestsList .ce-guest-name");
+        if (inputs.length > 0) {
+          inputs[inputs.length - 1].focus();
+        }
+      });
+    }
+
+    renderPartnerOrgList();
+    renderExternalGuestCards();
+  }
+
+  function collectExternalGuests() {
+    const list = document.querySelectorAll("#externalGuestsList .ce-guest-card");
+    if (!list || list.length === 0) return [...state.externalGuests];
+    const results = [];
+    list.forEach((card, idx) => {
+      const name = card.querySelector(".ce-guest-name")?.value.trim() || "";
+      const org = card.querySelector(".ce-guest-org")?.value.trim() || "";
+      const email = card.querySelector(".ce-guest-email")?.value.trim() || "";
+      const role = card.querySelector(".ce-guest-role")?.value.trim() || "";
+      const access = card.querySelector(".ce-guest-access")?.value.trim() || "";
+      results.push({
+        id: state.externalGuests[idx]?.id || `guest-${idx + 1}`,
+        name,
+        organization: org,
+        email,
+        role,
+        accessNeeds: access,
+      });
+    });
+    state.externalGuests = results;
+    return results;
+  }
+
+  // 24.b Dynamic Admin Review Documents by Venue
+  const ADMIN_DOCS_CONFIG = [
+    {
+      key: "conceptPaper",
+      title: "Concept Paper",
+      subtitle: "Rationale, objectives, schedule, venue, program flow, signatories, and event details.",
+      requiredFor: ["inside", "outside", "online"],
+    },
+    {
+      key: "programFlow",
+      title: "Program Flow / Itinerary",
+      subtitle: "Detailed sequence of activities and time allocations.",
+      requiredFor: ["inside", "outside", "online"],
+    },
+    {
+      key: "permissionToConduct",
+      title: "Permission to Conduct Activity",
+      subtitle: "Campus permission form, submitted at the appropriate approval stage.",
+      requiredFor: ["inside", "outside", "online"],
+    },
+    {
+      key: "participantList",
+      title: "Participant List",
+      subtitle: "List of attendees or participants for the activity.",
+      requiredFor: ["outside"],
+    },
+    {
+      key: "consentInsurance",
+      title: "Consent Forms / Insurance",
+      subtitle: "Consent and insurance documentation when applicable.",
+      requiredFor: ["outside"],
+    },
+    {
+      key: "facultyCompanion",
+      title: "Faculty Companion Confirmation",
+      subtitle: "Confirm the required regular faculty member accompanying the activity.",
+      requiredFor: ["outside"],
+    },
+  ];
+
+  function getCurrentVenueType() {
+    const venueEl = document.getElementById("venue");
+    const v = (venueEl?.value || "").toLowerCase();
+    if (v.includes("outside pup")) return "outside";
+    if (v.includes("online") || VENUES_FLAT_MAP[venueEl?.value]?.type === "online") return "online";
+    return "inside";
+  }
+
+  function syncApprovalDocsFromAdminDocs() {
+    const currentVenueType = getCurrentVenueType();
+    const visibleDocs = ADMIN_DOCS_CONFIG.filter((doc) => doc.requiredFor.includes(currentVenueType));
+    const visibleKeys = new Set(visibleDocs.map((d) => d.key));
+    state.approvalDocs = Object.keys(state.adminDocs || {})
+      .filter((k) => visibleKeys.has(k) && state.adminDocs[k])
+      .map((k) => state.adminDocs[k]);
+  }
+
+  function showAdminDocError(docKey, msg) {
+    const card = document.getElementById(`adminDocCard_${docKey}`);
+    const errEl = document.getElementById(`error-adminDoc_${docKey}`);
+    if (card) card.classList.add("has-error");
+    if (errEl) {
+      errEl.textContent = msg;
+      errEl.hidden = false;
+    }
+  }
+
+  function clearAdminDocError(docKey) {
+    const card = document.getElementById(`adminDocCard_${docKey}`);
+    const errEl = document.getElementById(`error-adminDoc_${docKey}`);
+    if (card) card.classList.remove("has-error");
+    if (errEl) {
+      errEl.textContent = "";
+      errEl.hidden = true;
+    }
+  }
+
+  function renderAdminDocuments() {
+    const container = document.getElementById("adminDocsList");
+    if (!container) return;
+
+    const currentVenueType = getCurrentVenueType();
+    const visibleDocs = ADMIN_DOCS_CONFIG.filter((doc) => doc.requiredFor.includes(currentVenueType));
+
+    container.innerHTML = visibleDocs.map((doc) => {
+      const file = state.adminDocs && state.adminDocs[doc.key];
+      return `
+        <div class="ce-admin-doc-card ${file ? 'is-uploaded' : ''}" id="adminDocCard_${doc.key}" data-doc-key="${doc.key}">
+          <div class="ce-admin-doc-left">
+            <div class="ce-admin-doc-icon-box" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#701219" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="16" y1="13" x2="8" y2="13"></line>
+                <line x1="16" y1="17" x2="8" y2="17"></line>
+                <line x1="10" y1="9" x2="8" y2="9"></line>
+              </svg>
+            </div>
+            <div class="ce-admin-doc-info">
+              <h4 class="ce-admin-doc-name">${escapeHTML(doc.title)}</h4>
+              <p class="ce-admin-doc-desc">${escapeHTML(doc.subtitle)}</p>
+              <span class="ce-admin-doc-badge">Required</span>
+              ${file ? `
+                <div class="ce-admin-doc-attached">
+                  <svg class="ce-admin-doc-check-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.5" aria-hidden="true">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                  </svg>
+                  <span class="ce-admin-doc-file-name" title="${escapeHTML(file.name)}">${escapeHTML(file.name)}</span>
+                  <span class="ce-admin-doc-file-size">(${formatFileSize(file.size)})</span>
+                </div>
+              ` : ''}
+              <p class="ce-error ce-admin-doc-error" id="error-adminDoc_${doc.key}" hidden></p>
+            </div>
+          </div>
+          <div class="ce-admin-doc-actions">
+            <input type="file"
+                   id="adminDocInput_${doc.key}"
+                   data-doc-key="${doc.key}"
+                   accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                   style="display:none;">
+            ${file ? `
+              <button type="button" class="ce-admin-doc-choose-btn ce-admin-doc-change-btn" data-doc-key="${doc.key}">Change file</button>
+              <button type="button" class="ce-admin-doc-remove-btn" data-doc-key="${doc.key}" aria-label="Remove ${escapeHTML(file.name)}" title="Remove file">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+              </button>
+            ` : `
+              <button type="button" class="ce-admin-doc-choose-btn" data-doc-key="${doc.key}">Choose file</button>
+            `}
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    visibleDocs.forEach((doc) => {
+      const input = document.getElementById(`adminDocInput_${doc.key}`);
+      const card = document.getElementById(`adminDocCard_${doc.key}`);
+      if (!input || !card) return;
+
+      const chooseBtn = card.querySelector(".ce-admin-doc-choose-btn");
+      if (chooseBtn) {
+        chooseBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          input.click();
+        });
+      }
+
+      const removeBtn = card.querySelector(".ce-admin-doc-remove-btn");
+      if (removeBtn) {
+        removeBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          delete state.adminDocs[doc.key];
+          syncApprovalDocsFromAdminDocs();
+          state.dirty = true;
+          renderAdminDocuments();
+          updateAllReadinessChecks();
+        });
+      }
+
+      input.addEventListener("change", (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const allowedExts = [".pdf", ".doc", ".docx", ".jpg", ".jpeg", ".png"];
+        const ext = "." + (file.name.split(".").pop() || "").toLowerCase();
+        if (!allowedExts.includes(ext)) {
+          showAdminDocError(doc.key, "Invalid file format. Allowed: PDF, DOC, DOCX, JPG, PNG");
+          input.value = "";
+          return;
+        }
+
+        const maxSizeBytes = 10 * 1024 * 1024;
+        if (file.size > maxSizeBytes) {
+          showAdminDocError(doc.key, "File size exceeds 10MB limit.");
+          input.value = "";
+          return;
+        }
+
+        clearAdminDocError(doc.key);
+
+        const reader = new FileReader();
+        reader.onload = (readEv) => {
+          const docObj = {
+            id: `ad_${doc.key}_${Date.now()}`,
+            docKey: doc.key,
+            docType: doc.title,
+            name: file.name,
+            size: file.size,
+            type: ext.replace(".", "").toUpperCase(),
+            mime: file.type,
+            dataUrl: readEv.target?.result || "",
+            path: readEv.target?.result || "",
+            url: readEv.target?.result || "",
+            uploadedAt: new Date().toISOString(),
+          };
+
+          if (!state.adminDocs) state.adminDocs = {};
+          state.adminDocs[doc.key] = docObj;
+          syncApprovalDocsFromAdminDocs();
+          state.dirty = true;
+          renderAdminDocuments();
+          updateAllReadinessChecks();
+        };
+        reader.readAsDataURL(file);
+        input.value = "";
+      });
+    });
+
+    syncApprovalDocsFromAdminDocs();
   }
 
   // 25. Reusable Drag & Drop File Upload Component
@@ -2897,17 +5280,33 @@ const APPROVER_DIRECTORY = {
     const dtEl = document.getElementById("previewDateTime");
     if (dtEl) {
       const d = form.eventDate?.value;
-      const ts = form.timeStart?.value;
-      const te = form.timeEnd?.value;
-      if (d && ts && te) {
-        dtEl.textContent = `${formatDatePreview(d)} · ${ts} - ${te}`;
-        dtEl.classList.remove("is-muted");
-      } else if (d) {
-        dtEl.textContent = formatDatePreview(d);
-        dtEl.classList.remove("is-muted");
+      const dEnd = form.eventDateEnd?.value;
+      const isDiff = form.dailySchedule?.value === "Different time by day";
+      const dateText = (d && dEnd && d !== dEnd)
+        ? `${formatDatePreview(d)} - ${formatDatePreview(dEnd)}`
+        : (d ? formatDatePreview(d) : "");
+
+      if (isDiff) {
+        if (dateText) {
+          dtEl.textContent = `${dateText} · Schedule differs by day`;
+          dtEl.classList.remove("is-muted");
+        } else {
+          dtEl.textContent = "Date and time not set";
+          dtEl.classList.add("is-muted");
+        }
       } else {
-        dtEl.textContent = "Date and time not set";
-        dtEl.classList.add("is-muted");
+        const ts = form.timeStart?.value;
+        const te = form.timeEnd?.value;
+        if (dateText && ts && te) {
+          dtEl.textContent = `${dateText} · ${ts} - ${te}`;
+          dtEl.classList.remove("is-muted");
+        } else if (dateText) {
+          dtEl.textContent = dateText;
+          dtEl.classList.remove("is-muted");
+        } else {
+          dtEl.textContent = "Date and time not set";
+          dtEl.classList.add("is-muted");
+        }
       }
     }
 
@@ -2915,7 +5314,19 @@ const APPROVER_DIRECTORY = {
     const venueEl = document.getElementById("previewVenue");
     if (venueEl) {
       const v = form.venue?.value;
-      venueEl.textContent = v || "Venue not set";
+      const vLower = (v || "").toLowerCase();
+      if (vLower.includes("outside pup") && form.customVenueName?.value.trim()) {
+        venueEl.textContent = `${v} (${form.customVenueName.value.trim()})`;
+      } else if (vLower.includes("inside pup") && (form.customVenueName?.value.trim() || form.customVenueAddress?.value.trim())) {
+        const bldg = form.customVenueName?.value.trim() || "";
+        const room = form.customVenueAddress?.value.trim() || "";
+        const extra = [bldg, room].filter(Boolean).join(", ");
+        venueEl.textContent = extra ? `${v} (${extra})` : v;
+      } else if (vLower.includes("online") && form.onlineMeetingLink?.value.trim()) {
+        venueEl.textContent = `${v} (${form.onlineMeetingLink.value.trim()})`;
+      } else {
+        venueEl.textContent = v || "Venue not set";
+      }
       venueEl.classList.toggle("is-muted", !v);
     }
 
@@ -2927,20 +5338,28 @@ const APPROVER_DIRECTORY = {
       capEl.classList.toggle("is-muted", !c);
     }
 
-    // Registration Deadline
+    // Registration Schedule (Start & End)
     const dlineEl = document.getElementById("previewDeadline");
     if (dlineEl) {
-      const dl = form.registrationDeadline?.value;
-      if (dl) {
+      const regStartVal = form.registrationStart?.value;
+      const regEndVal = form.registrationEnd?.value || form.registrationDeadline?.value;
+      if (regEndVal) {
         try {
-          const dObj = new Date(dl);
-          dlineEl.textContent = `Deadline: ${dObj.toLocaleDateString("en-US", { month: "short", day: "numeric" })} ${dObj.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}`;
+          const eObj = new Date(regEndVal);
+          const endFormatted = `${eObj.toLocaleDateString("en-US", { month: "short", day: "numeric" })} ${eObj.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`;
+          if (regStartVal) {
+            const sObj = new Date(regStartVal);
+            const startFormatted = `${sObj.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+            dlineEl.textContent = `Reg: ${startFormatted} – ${endFormatted}`;
+          } else {
+            dlineEl.textContent = `Reg Ends: ${endFormatted}`;
+          }
         } catch {
-          dlineEl.textContent = `Deadline: ${dl}`;
+          dlineEl.textContent = `Reg Ends: ${regEndVal}`;
         }
         dlineEl.classList.remove("is-muted");
       } else {
-        dlineEl.textContent = "Deadline not set";
+        dlineEl.textContent = "Registration not set";
         dlineEl.classList.add("is-muted");
       }
     }
@@ -3035,77 +5454,230 @@ const APPROVER_DIRECTORY = {
 
   function updateAllReadinessChecks() {
     const form = document.getElementById("createEventMainForm");
-    if (!form) return;
+    if (!form) return { readyCount: 0, total: 8, isReady: false, remainingCount: 8, failingChecks: [] };
 
     let readyCount = 0;
+    const failingChecks = [];
     const manilaInfo = getManilaDateInfo();
 
     // 1. Event name provided (min 3 chars)
     const nameVal = form.eventName?.value.trim() || "";
     const namePass = nameVal.length >= 3;
     setCheckStatus("check-name", namePass, "Event name provided (min 3 chars)");
-    if (namePass) readyCount++;
+    if (namePass) {
+      readyCount++;
+    } else {
+      failingChecks.push({
+        id: "eventName",
+        label: "Event name provided (min 3 chars)",
+        message: nameVal.length === 0 ? "Event name is required (minimum 3 characters)." : "Event name must be at least 3 characters long.",
+      });
+    }
 
     // 2. At least 1 category selected (1 to 3)
     const catPass = state.selectedCategories.length >= 1 && state.selectedCategories.length <= 3;
     setCheckStatus("check-category", catPass, "1 to 3 categories selected");
-    if (catPass) readyCount++;
+    if (catPass) {
+      readyCount++;
+    } else {
+      failingChecks.push({
+        id: "category",
+        label: "1 to 3 categories selected",
+        message: state.selectedCategories.length === 0 ? "Please select 1 to 3 categories for this event." : "You can select at most 3 categories.",
+      });
+    }
 
-    // 3. Time End is after Time Start & within 8 AM - 8 PM
-    const tStart = parseTimeInMinutes(form.timeStart?.value);
-    const tEnd = parseTimeInMinutes(form.timeEnd?.value);
+    // 3. Time End is after Time Start & within 8 AM - 8 PM (or per-day schedule valid)
+    const isDifferentDaily = form.dailySchedule?.value === "Different time by day";
     const dateVal = form.eventDate?.value || "";
     const currentMins = getManilaCurrentMinutes();
-    const passedCheck = dateVal === manilaInfo.todayStr ? (tStart !== null && tStart > currentMins) : true;
-    const timeLimitsPass = tStart !== null && tEnd !== null && tStart >= 480 && tEnd <= 1200;
-    const timesPass = timeLimitsPass && tEnd > tStart && passedCheck;
-    setCheckStatus("check-times", timesPass, timesPass ? "Time End is after Time Start" : "Time End must be after Time Start (8 AM - 8 PM)");
-    if (timesPass) readyCount++;
+    let timesPass = false;
+    let timesErrMsg = "Time End must be after Time Start (8 AM - 8 PM)";
+
+    if (isDifferentDaily) {
+      const rows = document.querySelectorAll("#dailyScheduleList .ce-daily-schedule-row");
+      if (rows.length > 0) {
+        let allRowsValid = true;
+        rows.forEach((row) => {
+          const rowDate = row.dataset.date;
+          const sInp = row.querySelector(".ce-daily-start-input")?.value;
+          const eInp = row.querySelector(".ce-daily-end-input")?.value;
+          const sMins = parseTimeInMinutes(sInp);
+          const eMins = parseTimeInMinutes(eInp);
+          const passedRow = rowDate === manilaInfo.todayStr ? (sMins !== null && sMins > currentMins) : true;
+          const limitsPass = sMins !== null && eMins !== null && sMins >= 480 && eMins <= 1200;
+          if (!limitsPass || eMins <= sMins || !passedRow) {
+            allRowsValid = false;
+          }
+        });
+        timesPass = allRowsValid;
+        if (!timesPass) timesErrMsg = "Please ensure all daily start/end times are between 8:00 AM and 8:00 PM with End after Start.";
+      } else {
+        timesErrMsg = "Please configure valid daily schedule dates and times.";
+      }
+    } else {
+      const tStart = parseTimeInMinutes(form.timeStart?.value);
+      const tEnd = parseTimeInMinutes(form.timeEnd?.value);
+      const passedCheck = dateVal === manilaInfo.todayStr ? (tStart !== null && tStart > currentMins) : true;
+      const timeLimitsPass = tStart !== null && tEnd !== null && tStart >= 480 && tEnd <= 1200;
+      timesPass = timeLimitsPass && tEnd > tStart && passedCheck;
+      if (!timesPass) {
+        if (tStart === null || tEnd === null) timesErrMsg = "Time Start and Time End are required.";
+        else if (tStart < 480) timesErrMsg = "Time Start cannot be earlier than 8:00 AM.";
+        else if (tEnd > 1200) timesErrMsg = "Time End cannot be later than 8:00 PM.";
+        else if (tEnd <= tStart) timesErrMsg = "Time End must be strictly after Time Start.";
+        else if (!passedCheck) timesErrMsg = "Start time for today has already passed.";
+      }
+    }
+
+    setCheckStatus(
+      "check-times",
+      timesPass,
+      timesPass
+        ? (isDifferentDaily ? "Daily schedule times valid" : "Time End is after Time Start")
+        : "Time End must be after Time Start (8 AM - 8 PM)"
+    );
+    if (timesPass) {
+      readyCount++;
+    } else {
+      failingChecks.push({
+        id: isDifferentDaily ? "dailySchedule" : "timeEnd",
+        label: "Time End is after Time Start",
+        message: timesErrMsg,
+      });
+    }
 
     // 4. Cross-event venue conflict check
     const venueVal = form.venue?.value || "";
-    const conflict = checkCrossEventConflict(dateVal, venueVal, form.timeStart?.value, form.timeEnd?.value);
+    let conflict = null;
+    if (isDifferentDaily) {
+      const rows = document.querySelectorAll("#dailyScheduleList .ce-daily-schedule-row");
+      for (const row of rows) {
+        const rowDate = row.dataset.date;
+        const sInp = row.querySelector(".ce-daily-start-input")?.value;
+        const eInp = row.querySelector(".ce-daily-end-input")?.value;
+        conflict = checkCrossEventConflict(rowDate, venueVal, sInp, eInp);
+        if (conflict) break;
+      }
+    } else {
+      conflict = checkCrossEventConflict(dateVal, venueVal, form.timeStart?.value, form.timeEnd?.value);
+    }
     state.conflict = conflict;
     const conflictPass = !conflict;
     setCheckStatus("check-conflict", conflictPass, conflict ? `Venue conflict with "${conflict.title || "another event"}"` : "No venue booking conflict");
-    if (conflictPass) readyCount++;
-
-    // 5. Registration deadline is on or before 11:59 PM of event date & not in past
-    let deadlinePass = false;
-    const deadlineVal = form.registrationDeadline?.value;
-    if (deadlineVal && dateVal) {
-      const dlineDate = new Date(deadlineVal);
-      const isPast = dlineDate < new Date();
-      const maxDeadlineStr = `${dateVal}T23:59`;
-      const isAfterEventDay = deadlineVal > maxDeadlineStr;
-      deadlinePass = !isNaN(dlineDate.getTime()) && !isPast && !isAfterEventDay;
+    if (conflictPass) {
+      readyCount++;
+    } else {
+      failingChecks.push({
+        id: "venue",
+        label: "No venue booking conflict",
+        message: `Venue conflict with "${conflict?.title || "another event"}" at the selected schedule.`,
+      });
     }
-    setCheckStatus("check-deadline", deadlinePass, deadlinePass ? "Deadline is on or before 11:59 PM of event date" : "Deadline cannot be in past or after event date");
-    if (deadlinePass) readyCount++;
+
+    // 5. Registration Start & End (end must strictly be 1-2 days before event date & start < end)
+    let deadlinePass = false;
+    let deadlineLabel = "Registration end must be 1 or 2 days before event date";
+    let deadlineErrMsg = "Registration end must be 1 or 2 days before event date";
+    const regStartVal = form.registrationStart?.value;
+    const regEndVal = form.registrationEnd?.value || form.registrationDeadline?.value;
+
+    if (regEndVal && dateVal) {
+      const dlineDate = new Date(regEndVal);
+      const isPast = dlineDate < new Date();
+      const maxEndStr = calculateMaxRegistrationEnd(dateVal);
+      const isNotBeforeEvent = regEndVal > maxEndStr;
+      const startBeforeEnd = !regStartVal || (new Date(regStartVal) < dlineDate);
+
+      if (!isPast && !isNotBeforeEvent && startBeforeEnd && !isNaN(dlineDate.getTime())) {
+        deadlinePass = true;
+        deadlineLabel = "Registration end is 1 or 2 days before event date";
+      } else if (isNotBeforeEvent) {
+        deadlineLabel = "Registration end cannot be on event date (must be 1-2 days before)";
+        deadlineErrMsg = "Registration end cannot be on event date (must be 1-2 days before).";
+      } else if (!startBeforeEnd) {
+        deadlineLabel = "Registration start must be earlier than Registration end";
+        deadlineErrMsg = "Registration start must be earlier than Registration end.";
+      } else if (isPast) {
+        deadlineLabel = "Registration end cannot be in the past";
+        deadlineErrMsg = "Registration end cannot be in the past.";
+      }
+    } else {
+      deadlineErrMsg = !dateVal ? "Please select Date Start first." : "Registration start and end dates are required.";
+    }
+    setCheckStatus("check-deadline", deadlinePass, deadlineLabel);
+    if (deadlinePass) {
+      readyCount++;
+    } else {
+      failingChecks.push({
+        id: "registrationEnd",
+        label: "Registration end is 1 or 2 days before event date",
+        message: deadlineErrMsg,
+      });
+    }
 
     // 6. Capacity is within venue limit
     let capacityPass = true;
+    let capErrMsg = "Capacity exceeds venue limit";
     const capVal = form.maxCapacity?.value ? parseInt(form.maxCapacity.value, 10) : null;
     const venueRecord = VENUES_FLAT_MAP[venueVal];
     const maxVenueLimit = venueRecord?.maxCapacity;
     if (capVal && maxVenueLimit) {
       capacityPass = capVal <= maxVenueLimit;
+      if (!capacityPass) capErrMsg = `Capacity cannot exceed venue maximum of ${maxVenueLimit}.`;
     }
     setCheckStatus("check-capacity", capacityPass, capacityPass ? "Capacity is within venue limit" : `Capacity exceeds venue limit of ${maxVenueLimit}`);
-    if (capacityPass) readyCount++;
+    if (capacityPass) {
+      readyCount++;
+    } else {
+      failingChecks.push({
+        id: "maxCapacity",
+        label: "Capacity is within venue limit",
+        message: capErrMsg,
+      });
+    }
 
     // 7. Contact person name and valid email (no numbers in name)
     const contactNameVal = form.contactName?.value.trim() || "";
     const contactEmailVal = form.contactEmail?.value.trim() || "";
     const noNumsInName = !/\d/.test(contactNameVal);
-    const contactPass = contactNameVal.length >= 2 && noNumsInName && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmailVal);
+    const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmailVal);
+    const contactPass = contactNameVal.length >= 2 && noNumsInName && emailValid;
+    let contactErrMsg = "Provide contact person name and valid email";
+    if (!contactPass) {
+      if (contactNameVal.length < 2) contactErrMsg = "Contact person name is required (min 2 characters).";
+      else if (!noNumsInName) contactErrMsg = "Contact person name cannot contain numbers.";
+      else if (!emailValid) contactErrMsg = "A valid email address is required for the contact person.";
+    }
     setCheckStatus("check-contact", contactPass, contactPass ? "Contact person name and email provided" : "Provide contact person name and valid email");
-    if (contactPass) readyCount++;
+    if (contactPass) {
+      readyCount++;
+    } else {
+      failingChecks.push({
+        id: contactNameVal.length < 2 || !noNumsInName ? "contactName" : "contactEmail",
+        label: "Contact person name and valid email",
+        message: contactErrMsg,
+      });
+    }
 
-    // 8. At least 1 approval document attached
-    const approvalPass = state.approvalDocs.length >= 1;
-    setCheckStatus("check-approvalDocs", approvalPass, approvalPass ? "Approval document attached" : "At least 1 approval document required");
-    if (approvalPass) readyCount++;
+    // 8. Admin review documents attached
+    const currentVenueType = getCurrentVenueType();
+    const requiredDocs = ADMIN_DOCS_CONFIG.filter((d) => d.requiredFor.includes(currentVenueType));
+    const uploadedCount = requiredDocs.filter((d) => state.adminDocs && state.adminDocs[d.key]).length;
+    const approvalPass = requiredDocs.length > 0 && uploadedCount === requiredDocs.length;
+    const checkMsg = approvalPass
+      ? `All ${requiredDocs.length} required admin documents attached`
+      : `Admin review documents (${uploadedCount}/${requiredDocs.length} attached)`;
+    setCheckStatus("check-approvalDocs", approvalPass, checkMsg);
+    if (approvalPass) {
+      readyCount++;
+    } else {
+      failingChecks.push({
+        id: "approvalDocs",
+        label: "Approval document attached",
+        message: `Admin review documents (${uploadedCount}/${requiredDocs.length} attached). Please attach required document(s).`,
+      });
+    }
 
     // Summary Badge & Progress Bar in Side Panel & Bottom Bar
     const badge = document.getElementById("checksBadge");
@@ -3131,6 +5703,14 @@ const APPROVER_DIRECTORY = {
         bText.style.color = "#b91c1c";
       }
     }
+
+    return {
+      readyCount,
+      total: 8,
+      isReady: readyCount === 8,
+      remainingCount: 8 - readyCount,
+      failingChecks,
+    };
   }
 
   function setCheckStatus(elementId, passed, labelText) {
@@ -3207,35 +5787,103 @@ const APPROVER_DIRECTORY = {
     // 3. Date Validation (Asia/Manila Today up to Dec 31, maxYear)
     const dateVal = form.eventDate?.value || "";
     if (!dateVal) {
-      markError("eventDate", "Event date is required.");
+      markError("eventDate", "Date Start is required.");
     } else if (dateVal < manilaInfo.todayStr || dateVal > manilaInfo.maxDateStr) {
       markError("eventDate", `Choose a date from today up to December 31, ${manilaInfo.maxYear}`);
     }
 
-    // 4. Time Start & Time End
-    const tStart = parseTimeInMinutes(form.timeStart?.value);
-    const tEnd = parseTimeInMinutes(form.timeEnd?.value);
-
-    if (tStart === null) {
-      markError("timeStart", "Time start is required.");
-    } else if (tStart < 480) {
-      markError("timeStart", "Time Start cannot be earlier than 8:00 AM.");
-    } else if (dateVal === manilaInfo.todayStr && tStart <= getManilaCurrentMinutes()) {
-      markError("timeStart", "Start time has already passed");
+    const dateEndVal = form.eventDateEnd?.value || "";
+    if (!dateEndVal) {
+      markError("eventDateEnd", "Date End is required.");
+    } else if (dateEndVal < dateVal) {
+      markError("eventDateEnd", "Date End cannot be earlier than Date Start.");
+    } else if (dateEndVal > manilaInfo.maxDateStr) {
+      markError("eventDateEnd", `Choose a date up to December 31, ${manilaInfo.maxYear}`);
     }
 
-    if (tEnd === null) {
-      markError("timeEnd", "Time end is required.");
-    } else if (tEnd > 1200) {
-      markError("timeEnd", "Time End cannot be later than 8:00 PM.");
-    } else if (tStart !== null && tEnd <= tStart) {
-      markError("timeEnd", "Time End must be strictly after Time Start.");
+    // 4. Time Start & Time End / Daily Schedule
+    const isDifferentDaily = form.dailySchedule?.value === "Different time by day";
+    if (isDifferentDaily) {
+      const rows = document.querySelectorAll("#dailyScheduleList .ce-daily-schedule-row");
+      if (rows.length === 0) {
+        markError("dailySchedule", "Please select valid start and end dates for daily schedule.");
+      } else {
+        let dailyError = null;
+        rows.forEach((row) => {
+          const rowDate = row.dataset.date;
+          const sInp = row.querySelector(".ce-daily-start-input")?.value;
+          const eInp = row.querySelector(".ce-daily-end-input")?.value;
+          const sMins = parseTimeInMinutes(sInp);
+          const eMins = parseTimeInMinutes(eInp);
+          if (sMins === null || eMins === null) {
+            dailyError = dailyError || "Start and End times are required for all dates.";
+          } else if (sMins < 480) {
+            dailyError = dailyError || "Daily start times cannot be earlier than 8:00 AM.";
+          } else if (eMins > 1200) {
+            dailyError = dailyError || "Daily end times cannot be later than 8:00 PM.";
+          } else if (eMins <= sMins) {
+            dailyError = dailyError || "Daily end time must be after start time.";
+          } else if (rowDate === manilaInfo.todayStr && sMins <= getManilaCurrentMinutes()) {
+            dailyError = dailyError || "Start time for today has already passed.";
+          }
+        });
+        if (dailyError) {
+          markError("dailySchedule", dailyError);
+        }
+      }
+    } else {
+      const tStart = parseTimeInMinutes(form.timeStart?.value);
+      const tEnd = parseTimeInMinutes(form.timeEnd?.value);
+
+      if (tStart === null) {
+        markError("timeStart", "Time start is required.");
+      } else if (tStart < 480) {
+        markError("timeStart", "Time Start cannot be earlier than 8:00 AM.");
+      } else if (dateVal === manilaInfo.todayStr && tStart <= getManilaCurrentMinutes()) {
+        markError("timeStart", "Start time has already passed");
+      }
+
+      if (tEnd === null) {
+        markError("timeEnd", "Time end is required.");
+      } else if (tEnd > 1200) {
+        markError("timeEnd", "Time End cannot be later than 8:00 PM.");
+      } else if (tStart !== null && tEnd <= tStart) {
+        markError("timeEnd", "Time End must be strictly after Time Start.");
+      }
     }
 
-    // 5. Venue
+    // 5. Venue & Conditional Fields
     const venueVal = form.venue?.value || "";
     if (!venueVal) {
       markError("venue", "Please select a venue for the event.");
+    } else {
+      const vLower = venueVal.toLowerCase();
+      if (vLower.includes("outside pup")) {
+        const customName = form.customVenueName?.value.trim() || "";
+        const customAddr = form.customVenueAddress?.value.trim() || "";
+        if (!customName) {
+          markError("customVenueName", "Please enter the Venue Name for outside venue.");
+        }
+        if (!customAddr) {
+          markError("customVenueAddress", "Please enter the Exact Address of the outside venue.");
+        }
+      } else if (vLower.includes("inside pup")) {
+        const customName = form.customVenueName?.value.trim() || "";
+        const customAddr = form.customVenueAddress?.value.trim() || "";
+        if (!customName) {
+          markError("customVenueName", "Please enter the Building name.");
+        }
+        if (!customAddr) {
+          markError("customVenueAddress", "Please enter the Room Number.");
+        } else if (!/^\d{1,3}$/.test(customAddr)) {
+          markError("customVenueAddress", "Room Number must contain 1 to 3 digits only.");
+        }
+      } else if (vLower.includes("online") || venueRecord?.type === "online") {
+        const link = form.onlineMeetingLink?.value.trim() || "";
+        if (!link) {
+          markError("onlineMeetingLink", "Please enter the Meeting Link for online events.");
+        }
+      }
     }
 
     // 6. Capacity
@@ -3255,18 +5903,43 @@ const APPROVER_DIRECTORY = {
       markError("venue", `Conflict: Venue is already booked on this date/time for "${state.conflict.title || "another event"}".`);
     }
 
-    // 8. Registration Deadline (cannot be in past, cannot exceed 11:59 PM of event date)
-    const deadlineVal = form.registrationDeadline?.value;
-    if (!deadlineVal) {
-      markError("registrationDeadline", "Registration deadline is required.");
+    // 8. Registration Start & Registration End
+    const regStartVal = form.registrationStart?.value;
+    const regEndVal = form.registrationEnd?.value || form.registrationDeadline?.value;
+
+    if (!regStartVal) {
+      markError("registrationStart", "Registration start date and time is required.");
+    }
+
+    if (!regEndVal) {
+      markError("registrationEnd", "Registration end date and time is required.");
     } else {
-      const dlineDate = new Date(deadlineVal);
-      if (isNaN(dlineDate.getTime())) {
-        markError("registrationDeadline", "Please enter a valid registration deadline date and time.");
-      } else if (dlineDate < new Date()) {
-        markError("registrationDeadline", "Registration deadline cannot be in the past.");
-      } else if (dateVal && deadlineVal > `${dateVal}T23:59`) {
-        markError("registrationDeadline", "Registration deadline cannot be later than 11:59 PM of the event date.");
+      const regEndDate = new Date(regEndVal);
+      const isPast = regEndDate < new Date();
+      if (isNaN(regEndDate.getTime())) {
+        markError("registrationEnd", "Please enter a valid registration end date and time.");
+      } else if (isPast) {
+        markError("registrationEnd", "Registration end cannot be in the past.");
+      } else if (dateVal) {
+        const [ey, em, ed] = dateVal.split("-").map(Number);
+        const eventDayStart = new Date(ey, em - 1, ed, 0, 0, 0);
+        const maxEndStr = calculateMaxRegistrationEnd(dateVal);
+
+        if (regEndVal > maxEndStr || regEndDate >= eventDayStart) {
+          markError(
+            "registrationEnd",
+            "Registration end cannot be on the exact date of the event. It must be 1 or 2 days before the event."
+          );
+        }
+      }
+    }
+
+    if (regStartVal && regEndVal) {
+      const sDate = new Date(regStartVal);
+      const eDate = new Date(regEndVal);
+      if (!isNaN(sDate.getTime()) && !isNaN(eDate.getTime()) && sDate >= eDate) {
+        markError("registrationStart", "Registration start must be earlier than Registration end.");
+        markError("registrationEnd", "Registration end must be after Registration start.");
       }
     }
 
@@ -3292,14 +5965,62 @@ const APPROVER_DIRECTORY = {
       }
     }
 
-    // 12. Approval Documents
-    if (state.approvalDocs.length === 0) {
-      markError("approvalDocs", "At least 1 approval document is required before submission.");
+    // 12. Admin Review Documents
+    const currentVenueType = getCurrentVenueType();
+    const requiredDocs = ADMIN_DOCS_CONFIG.filter((d) => d.requiredFor.includes(currentVenueType));
+    let missingDocs = [];
+    requiredDocs.forEach((doc) => {
+      const uploaded = state.adminDocs && state.adminDocs[doc.key];
+      if (!uploaded) {
+        missingDocs.push(doc);
+        showAdminDocError(doc.key, `${doc.title} is required before submission.`);
+      } else {
+        clearAdminDocError(doc.key);
+      }
+    });
+
+    if (missingDocs.length > 0) {
+      isValid = false;
+      if (!firstErrorElement) {
+        firstErrorElement = document.getElementById(`adminDocCard_${missingDocs[0].key}`) || document.getElementById("card-documents");
+      }
+      showToast(`Please upload all required admin documents (${missingDocs.length} missing).`);
     }
 
-    // 13. Approval Chain (Task 3)
-    if (!state.selectedApprovers || state.selectedApprovers.length === 0) {
-      markError("approvers", "At least one approver must be selected in the approval chain.");
+    // 13. Sequential Approval Steps
+    const requiredStages = systemApprovalStages.filter((s) => s.required);
+    const missingReq = requiredStages.filter((s) => !state.selectedApprovers.includes(s.id) && !state.selectedApprovers.includes(s.name));
+    if (missingReq.length > 0 || !state.selectedApprovers || state.selectedApprovers.length === 0) {
+      markError("approvers", "All required approval steps must be included in the approval chain.");
+    }
+
+    // 14. Target Audience
+    const targetAudienceVal = form.targetAudience?.value || state.targetAudience || "";
+    if (!targetAudienceVal) {
+      markError("targetAudience", "Please select a target audience.");
+    }
+
+    // 15. External Guests validation if any added
+    collectExternalGuests();
+    if (state.externalGuests && state.externalGuests.length > 0) {
+      const guestCards = document.querySelectorAll("#externalGuestsList .ce-guest-card");
+      state.externalGuests.forEach((g, idx) => {
+        if (!g.name || !g.name.trim()) {
+          isValid = false;
+          const card = guestCards[idx];
+          const nameInput = card?.querySelector(".ce-guest-name");
+          if (nameInput) {
+            nameInput.classList.add("has-error");
+            nameInput.setAttribute("aria-invalid", "true");
+            if (!firstErrorElement) firstErrorElement = nameInput;
+          }
+          const errEl = document.getElementById("error-externalGuests");
+          if (errEl) {
+            errEl.textContent = `Please enter the full name for Guest ${idx + 1}.`;
+            errEl.hidden = false;
+          }
+        }
+      });
     }
 
     if (!isValid && firstErrorElement) {
@@ -3338,8 +6059,17 @@ const APPROVER_DIRECTORY = {
 
     const title = form?.eventName?.value.trim() || "Untitled Event";
     const date = form?.eventDate?.value || "";
-    const timeStart = form?.timeStart?.value || "";
-    const timeEnd = form?.timeEnd?.value || "";
+    const dateEnd = form?.eventDateEnd?.value || date;
+    const dailyScheduleType = form?.dailySchedule?.value || "Same time each day";
+    const dailySchedules = dailyScheduleType === "Different time by day" ? collectDailySchedules() : [];
+
+    let effectiveTimeStart = form?.timeStart?.value || "";
+    let effectiveTimeEnd = form?.timeEnd?.value || "";
+    if (dailyScheduleType === "Different time by day" && dailySchedules.length > 0) {
+      effectiveTimeStart = dailySchedules[0].timeStart || "";
+      effectiveTimeEnd = dailySchedules[0].timeEnd || "";
+    }
+
     const venue = form?.venue?.value || "";
     const maxCapacity = form?.maxCapacity?.value ? parseInt(form.maxCapacity.value, 10) : null;
     const outsideGuests = Boolean(form?.outsideGuests?.checked);
@@ -3375,21 +6105,40 @@ const APPROVER_DIRECTORY = {
       targetYear: form?.targetYear?.value || "All Levels",
       date,
       dateISO: date,
-      timeStart,
-      timeEnd,
-      time: timeStart && timeEnd ? `${timeStart} - ${timeEnd}` : "",
+      dateStart: date,
+      dateEnd: dateEnd,
+      endDate: dateEnd,
+      endDateISO: dateEnd,
+      dailySchedule: dailyScheduleType,
+      dailySchedules,
+      timeStart: effectiveTimeStart,
+      timeEnd: effectiveTimeEnd,
+      time: effectiveTimeStart && effectiveTimeEnd ? `${effectiveTimeStart} - ${effectiveTimeEnd}` : "",
       venue,
       location: venue,
+      customVenueName: form?.customVenueName?.value.trim() || "",
+      customVenueAddress: form?.customVenueAddress?.value.trim() || "",
+      venueName: form?.customVenueName?.value.trim() || "",
+      venueAddress: form?.customVenueAddress?.value.trim() || "",
+      building: form?.customVenueName?.value.trim() || "",
+      roomNumber: form?.customVenueAddress?.value.trim() || "",
+      onlineMeetingLink: form?.onlineMeetingLink?.value.trim() || "",
+      meetingLink: form?.onlineMeetingLink?.value.trim() || "",
       maxCapacity,
       capacity: maxCapacity,
       openSlots: maxCapacity,
       slots: maxCapacity,
-      registrationDeadline: form?.registrationDeadline?.value || "",
+      registrationStart: form?.registrationStart?.value || "",
+      registrationEnd: form?.registrationEnd?.value || form?.registrationDeadline?.value || "",
+      registrationDeadline: form?.registrationEnd?.value || form?.registrationDeadline?.value || "",
       registrationEnabled,
       attendanceRequired: form?.attendanceRequired?.checked ?? true,
       weatherContingency: form?.weatherContingency?.value || "",
+      venueType: form?.weatherContingency?.value || "",
       description: form?.description?.value.trim() || "",
+      rationale: form?.rationale?.value.trim() || "",
       keyDetails: cleanKeyDetails,
+      objectives: cleanKeyDetails,
       requirements: cleanRequirements,
       participatingFaculty: [...state.participatingFaculty],
       contactPerson: {
@@ -3403,8 +6152,15 @@ const APPROVER_DIRECTORY = {
       participantDocuments: [...state.participantDocs],
       attachments: [...state.participantDocs],
       approvalDocuments: [...state.approvalDocs],
-      outsideGuests: Boolean(outsideGuests),
+      adminDocuments: { ...(state.adminDocs || {}) },
+      targetAudience: form?.targetAudience?.value || state.targetAudience || "Mixed audience",
+      isCollaboration: Boolean(state.isCollaboration),
+      partnerOrganizations: [...(state.partnerOrganizations || [])],
+      collaborationNotes: form?.collaborationNotes?.value.trim() || state.collaborationNotes || "",
+      externalGuests: collectExternalGuests(),
+      outsideGuests: Boolean((state.externalGuests && state.externalGuests.length > 0) || outsideGuests || state.outsideGuests),
       approvers: [...state.selectedApprovers],
+      approvalStages: systemApprovalStages.filter((s) => state.selectedApprovers.includes(s.id) || s.required),
       status, // "Draft", "Pending Approval", or "Published"
       createdAt: nowISO,
       updatedAt: nowISO,
@@ -3446,12 +6202,31 @@ const APPROVER_DIRECTORY = {
       state.participatingFaculty = Array.isArray(target.participatingFaculty) ? [...target.participatingFaculty] : [];
       state.participantDocs = Array.isArray(target.participantDocuments) ? [...target.participantDocuments] : [];
       state.approvalDocs = Array.isArray(target.approvalDocuments) ? [...target.approvalDocuments] : [];
+      state.adminDocs = {};
+      if (target.adminDocuments && typeof target.adminDocuments === "object") {
+        state.adminDocs = { ...target.adminDocuments };
+      } else if (Array.isArray(target.approvalDocuments)) {
+        target.approvalDocuments.forEach((doc) => {
+          if (doc.docKey) state.adminDocs[doc.docKey] = doc;
+        });
+      }
       state.deadlineManuallyEdited = true;
+      state.targetAudience = target.targetAudience || "Mixed audience";
+      state.isCollaboration = target.isCollaboration !== undefined ? Boolean(target.isCollaboration) : Boolean(Array.isArray(target.partnerOrganizations) && target.partnerOrganizations.length > 0);
+      state.partnerOrganizations = Array.isArray(target.partnerOrganizations) ? [...target.partnerOrganizations] : [];
+      state.collaborationNotes = target.collaborationNotes || "";
+      state.externalGuests = Array.isArray(target.externalGuests) ? [...target.externalGuests] : [];
+      state.outsideGuests = Boolean((state.externalGuests && state.externalGuests.length > 0) || target.outsideGuests);
+      if (Array.isArray(target.approvers)) {
+        state.selectedApprovers = [...target.approvers];
+      }
     }
   }
 
   // Initial Run
   render();
+  renderAdminDocuments();
+  renderApprovers();
 
   if (state.editingEventId) {
     const past = loadCurrentUserEvents();
@@ -3460,16 +6235,53 @@ const APPROVER_DIRECTORY = {
       const form = document.getElementById("createEventMainForm");
       if (form) {
         if (form.eventName) form.eventName.value = target.title || target.eventName || "";
-        if (form.eventSource && target.source) form.eventSource.value = target.source;
+        if (form.eventSource) form.eventSource.value = normalizeEventSource(target.source);
         if (form.targetYear && target.targetYear) form.targetYear.value = target.targetYear;
+        if (form.targetAudience) form.targetAudience.value = state.targetAudience;
+        if (form.isCollaboration) form.isCollaboration.checked = state.isCollaboration;
+        if (form.collaborationNotes) form.collaborationNotes.value = state.collaborationNotes;
+        renderPartnerOrgList();
+        renderExternalGuestCards();
         if (form.eventDate) form.eventDate.value = target.date || target.dateISO || target.eventDate || "";
+        if (form.eventDateEnd) {
+          form.eventDateEnd.value = target.dateEnd || target.endDate || target.endDateISO || form.eventDate.value;
+          form.eventDateEnd.min = form.eventDate.value;
+        }
+        if (form.dailySchedule) {
+          form.dailySchedule.value = target.dailySchedule || "Same time each day";
+        }
+        handleDailyScheduleToggle();
+        if (form.dailySchedule && form.dailySchedule.value === "Different time by day" && Array.isArray(target.dailySchedules)) {
+          renderDailyScheduleRows();
+          target.dailySchedules.forEach((ds) => {
+            const row = document.querySelector(`.ce-daily-schedule-row[data-date="${ds.date}"]`);
+            if (row) {
+              const s = row.querySelector(".ce-daily-start-input");
+              const e = row.querySelector(".ce-daily-end-input");
+              if (s && ds.timeStart) s.value = ds.timeStart;
+              if (e && ds.timeEnd) e.value = ds.timeEnd;
+            }
+          });
+        }
         if (form.timeStart && target.timeStart) form.timeStart.value = target.timeStart;
         if (form.timeEnd && target.timeEnd) form.timeEnd.value = target.timeEnd;
         if (form.venue && target.venue) form.venue.value = target.venue;
+        if (form.customVenueName && (target.customVenueName || target.venueName || target.building)) {
+          form.customVenueName.value = target.customVenueName || target.venueName || target.building || "";
+        }
+        if (form.customVenueAddress && (target.customVenueAddress || target.venueAddress || target.roomNumber)) {
+          form.customVenueAddress.value = target.customVenueAddress || target.venueAddress || target.roomNumber || "";
+        }
+        if (form.onlineMeetingLink && (target.onlineMeetingLink || target.meetingLink)) {
+          form.onlineMeetingLink.value = target.onlineMeetingLink || target.meetingLink || "";
+        }
         if (form.maxCapacity && target.maxCapacity) form.maxCapacity.value = target.maxCapacity;
-        if (form.weatherContingency) form.weatherContingency.value = target.weatherContingency || "";
-        if (form.registrationDeadline && target.registrationDeadline) form.registrationDeadline.value = target.registrationDeadline;
+        if (form.weatherContingency) form.weatherContingency.value = target.weatherContingency || target.venueType || "";
+        if (form.registrationStart && target.registrationStart) form.registrationStart.value = target.registrationStart;
+        if (form.registrationEnd) form.registrationEnd.value = target.registrationEnd || target.registrationDeadline || "";
+        if (form.registrationDeadline) form.registrationDeadline.value = target.registrationEnd || target.registrationDeadline || "";
         if (form.description && target.description) form.description.value = target.description;
+        if (form.rationale && target.rationale) form.rationale.value = target.rationale;
 
         if (form.keyDetails) {
           if (Array.isArray(target.keyDetails) && target.keyDetails.length) {
@@ -3502,6 +6314,8 @@ const APPROVER_DIRECTORY = {
         updateAllReadinessChecks();
         updateLivePreview();
         updateDescCounter();
+        updateRationaleCounter();
+        renderApprovers();
       }
     }
   }

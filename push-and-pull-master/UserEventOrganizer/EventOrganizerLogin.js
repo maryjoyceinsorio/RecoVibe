@@ -17,6 +17,15 @@
     banner.classList.remove("show");
     if (!validEmail || !password.value) return;
 
+    try {
+      const sys = JSON.parse(localStorage.getItem("recovibeSystemSettings") || "{}");
+      if (sys && sys.loginEnabled === false) {
+        banner.textContent = "System maintenance is in progress. Organizer sign-in is temporarily disabled. Only super administrators can sign in at this time.";
+        banner.classList.add("show");
+        return;
+      }
+    } catch (_) {}
+
     loginButton.disabled = true;
     loginButton.textContent = "Signing in...";
     try {

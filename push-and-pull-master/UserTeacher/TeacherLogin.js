@@ -18,6 +18,16 @@
         banner.classList.add("show");
         return;
       }
+
+      try {
+        const sys = JSON.parse(localStorage.getItem("recovibeSystemSettings") || "{}");
+        if (sys && sys.loginEnabled === false) {
+          banner.textContent = "System maintenance is in progress. Faculty sign-in is temporarily disabled. Only super administrators can sign in at this time.";
+          banner.classList.add("show");
+          return;
+        }
+      } catch (_) {}
+
       const normalizedEmail = email.value.trim().toLowerCase();
       let teacher = {};
       try {

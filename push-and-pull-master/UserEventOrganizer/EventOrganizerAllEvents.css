@@ -59,6 +59,13 @@ select:focus-visible {
   display: flex;
   min-height: 100vh;
 }
+
+.organizer-main {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .organizer-sidebar {
   position: sticky;
   top: 0;

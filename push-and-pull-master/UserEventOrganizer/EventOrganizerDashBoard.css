@@ -1,5 +1,18 @@
 @import url("EventOrganizerAllEvents.css");
 
+.organizer-app {
+  display: flex;
+  min-height: 100vh;
+}
+
+.organizer-main {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+  background: var(--cream, #faf7f1);
+}
+
 .organizer-dashboard-header {
   display: flex;
   align-items: flex-start;
@@ -103,7 +116,15 @@
   align-items: start;
 }
 
+.dashboard-sidebar-column {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  min-width: 0;
+}
+
 #actionRequiredSection,
+#happeningNowSection,
 #upcomingEventsSection {
   overflow: hidden;
   border: 1px solid var(--line);
@@ -115,6 +136,7 @@
 }
 
 #actionRequiredSection .organizer-results-bar,
+#happeningNowSection .organizer-results-bar,
 #upcomingEventsSection .organizer-results-bar {
   min-height: 76px;
   margin: 0;
@@ -124,12 +146,14 @@
 }
 
 #actionRequiredSection .organizer-results-bar h2,
+#happeningNowSection .organizer-results-bar h2,
 #upcomingEventsSection .organizer-results-bar h2 {
   color: var(--ink);
   font: 600 21px/1.2 var(--display);
 }
 
 #actionRequiredSection .organizer-results-bar a,
+#happeningNowSection .organizer-results-bar a,
 #upcomingEventsSection .organizer-results-bar a {
   padding: 7px 10px;
   border-radius: 7px;
@@ -139,6 +163,7 @@
 }
 
 #actionRequiredSection .organizer-results-bar a:hover,
+#happeningNowSection .organizer-results-bar a:hover,
 #upcomingEventsSection .organizer-results-bar a:hover {
   background: #f4efe4;
 }
@@ -147,44 +172,87 @@
   padding: 0 20px 16px;
 }
 
+#actionRequiredTable {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+#actionRequiredSection .organizer-table thead tr {
+  border-bottom: 1px solid var(--line);
+}
+
 #actionRequiredSection .organizer-table th {
-  padding-top: 16px;
+  padding: 16px 10px 12px;
   color: var(--muted);
   font-size: 10px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+}
+
+#actionRequiredSection .organizer-table tbody tr {
+  border-bottom: 1px solid var(--line);
+  transition: background 0.15s ease;
+}
+
+#actionRequiredSection .organizer-table tbody tr:hover {
+  background: rgba(122, 31, 46, 0.02);
+}
+
+#actionRequiredSection .organizer-table tbody tr:last-child {
+  border-bottom: 0;
 }
 
 #actionRequiredSection .organizer-table td {
   padding: 14px 10px;
   font-size: 13px;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
 }
 
-#actionRequiredSection .organizer-table td:first-child {
-  padding-left: 0;
+#actionRequiredSection .organizer-table tbody tr:last-child td {
+  border-bottom: 0;
 }
 
+#actionRequiredSection .organizer-table td:first-child,
 #actionRequiredSection .organizer-table th:first-child {
   padding-left: 0;
 }
 
+#actionRequiredSection .organizer-table td:last-child,
+#actionRequiredSection .organizer-table th:last-child {
+  padding-right: 0;
+}
+
+#happeningNowSection .upcoming-events-list,
 #upcomingEventsSection .upcoming-events-list {
   gap: 0;
   padding: 8px 20px 16px;
 }
 
+#happeningNowSection .upcoming-event,
 #upcomingEventsSection .upcoming-event {
   padding: 14px 0;
   border: 0;
   border-bottom: 1px solid var(--line);
   border-radius: 0;
   background: transparent;
+  transition: background 0.15s ease;
 }
 
+#happeningNowSection .upcoming-event:last-child,
 #upcomingEventsSection .upcoming-event:last-child {
   border-bottom: 0;
 }
 
+#happeningNowSection .upcoming-event:hover,
+#upcomingEventsSection .upcoming-event:hover {
+  background: rgba(122, 31, 46, 0.02);
+}
+
+#happeningNowSection .upcoming-event-date,
 #upcomingEventsSection .upcoming-event-date {
   display: flex;
   flex-direction: column;
@@ -205,6 +273,7 @@
   white-space: nowrap;
 }
 
+#happeningNowSection .upcoming-event-date .upcoming-event-month,
 #upcomingEventsSection .upcoming-event-date .upcoming-event-month {
   color: var(--maroon);
   font-size: 10px;
@@ -213,12 +282,14 @@
   text-transform: uppercase;
 }
 
+#happeningNowSection .upcoming-event-date strong,
 #upcomingEventsSection .upcoming-event-date strong {
   margin-top: 2px;
   font-size: 30px;
   line-height: 0.95;
 }
 
+#happeningNowSection .upcoming-event-date small,
 #upcomingEventsSection .upcoming-event-date small {
   margin-top: 2px;
   color: var(--maroon);
@@ -227,23 +298,27 @@
   letter-spacing: 0.08em;
 }
 
+#happeningNowSection .upcoming-event-content strong,
 #upcomingEventsSection .upcoming-event-content strong {
   color: var(--ink);
   font-size: 13px;
 }
 
+#happeningNowSection .upcoming-event-content span,
 #upcomingEventsSection .upcoming-event-content span {
   font-size: 11.5px;
 }
 
+#happeningNowSection .organizer-status,
 #upcomingEventsSection .organizer-status {
   align-self: flex-start;
   margin-top: 2px;
 }
 
 #actionRequiredSection .dashboard-empty-state,
+#happeningNowSection .dashboard-empty-state,
 #upcomingEventsSection .dashboard-empty-state {
-  min-height: 220px;
+  min-height: 180px;
 }
 
 .dashboard-content-grid .organizer-panel {
@@ -266,33 +341,17 @@
 
 .dashboard-content-grid .organizer-table th:nth-child(1),
 .dashboard-content-grid .organizer-table td:nth-child(1) {
-  width: 31%;
+  width: 52%;
 }
 
 .dashboard-content-grid .organizer-table th:nth-child(2),
 .dashboard-content-grid .organizer-table td:nth-child(2) {
-  width: 21%;
+  width: 24%;
 }
 
 .dashboard-content-grid .organizer-table th:nth-child(3),
-.dashboard-content-grid .organizer-table td:nth-child(3),
-.dashboard-content-grid .organizer-table th:nth-child(4),
-.dashboard-content-grid .organizer-table td:nth-child(4),
-.dashboard-content-grid .organizer-table th:nth-child(5),
-.dashboard-content-grid .organizer-table td:nth-child(5) {
-  width: 11%;
-  text-align: center;
-}
-
-.dashboard-content-grid .organizer-table th:nth-child(6),
-.dashboard-content-grid .organizer-table td:nth-child(6) {
-  width: 13%;
-}
-
-.dashboard-content-grid .organizer-table th:nth-child(7),
-.dashboard-content-grid .organizer-table td:nth-child(7) {
-  width: 10%;
-  text-align: center;
+.dashboard-content-grid .organizer-table td:nth-child(3) {
+  width: 24%;
 }
 
 .organizer-table input[type="checkbox"] {
@@ -333,7 +392,20 @@
   color: var(--muted);
 }
 
+.organizer-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
 .organizer-status.pending,
+.organizer-status.pending-approval,
 .organizer-status.needs-revision {
   background: #fff0cf;
   color: #805b00;
@@ -383,8 +455,7 @@
   background: #f6e6e1;
 }
 
-#actionRequiredTable .view-column,
-#actionRequiredTable tbody td:last-child {
+#actionRequiredTable .view-column {
   width: 80px;
   min-width: 80px;
   text-align: center;
@@ -723,12 +794,14 @@ body.modal-open {
 
 @media (max-width: 620px) {
   #actionRequiredSection .organizer-results-bar,
+  #happeningNowSection .organizer-results-bar,
   #upcomingEventsSection .organizer-results-bar {
     min-height: 0;
     padding: 16px;
   }
 
   #actionRequiredSection .organizer-table-wrap,
+  #happeningNowSection .upcoming-events-list,
   #upcomingEventsSection .upcoming-events-list {
     padding-right: 16px;
     padding-left: 16px;
@@ -789,7 +862,7 @@ body.modal-open {
   }
 
   .dashboard-content-grid .organizer-table td:nth-child(1)::before {
-    content: "Event";
+    content: "Event Name";
   }
 
   .dashboard-content-grid .organizer-table td:nth-child(2)::before {
@@ -797,23 +870,7 @@ body.modal-open {
   }
 
   .dashboard-content-grid .organizer-table td:nth-child(3)::before {
-    content: "HAP 1";
-  }
-
-  .dashboard-content-grid .organizer-table td:nth-child(4)::before {
-    content: "HAP 2";
-  }
-
-  .dashboard-content-grid .organizer-table td:nth-child(5)::before {
-    content: "HAP 3";
-  }
-
-  .dashboard-content-grid .organizer-table td:nth-child(6)::before {
     content: "Status";
-  }
-
-  .dashboard-content-grid .organizer-table td:nth-child(7)::before {
-    content: "View";
   }
 
   .dashboard-content-grid .organizer-table td[colspan] {

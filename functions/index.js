@@ -234,7 +234,7 @@ exports.recordAttendance = onCall({ region: REGION }, async (request) => {
   // Record attendance row via atomic transaction (one attendance row per student per event)
   const attendanceRef = admin.database().ref(`attendance/${eventId}/${uid}`);
   let alreadyScannedTime = null;
-  const isWalkIn = !isRegistered || Boolean(allowWalkIn);
+  const isWalkIn = !isRegistered;
   const scannedBy = request.auth.token.name || request.auth.token.email || "Event Organizer";
 
   const txResult = await attendanceRef.transaction((current) => {
@@ -330,7 +330,7 @@ exports.recordAttendanceByStudentNo = onCall({ region: REGION }, async (request)
   // Record attendance row
   const attendanceRef = admin.database().ref(`attendance/${eventId}/${studentUid}`);
   let alreadyScannedTime = null;
-  const isWalkIn = !isRegistered || Boolean(allowWalkIn);
+  const isWalkIn = !isRegistered;
   const scannedBy = request.auth.token.name || request.auth.token.email || "Event Organizer";
 
   const txResult = await attendanceRef.transaction((current) => {
@@ -403,13 +403,20 @@ async function ensureApproverDirectory() {
  * Helper to check that the caller owns the event or is an admin
  */
 async function verifyOrganizerEventOwnership(authData, eventId) {
-  const role = await verifyOrganizerRole(authData);
+  if (!authData || !authData.uid) {
+    throw new HttpsError("unauthenticated", "Caller must be authenticated.");
+  }
+  const roleSnap = await admin.database().ref(`roles/${authData.uid}`).once("value");
+  const role = roleSnap.val();
+  if (role !== "event_organizer" && role !== "teacher" && role !== "admin") {
+    throw new HttpsError("permission-denied", "You do not have permission to manage this event.");
+  }
   const eventSnap = await admin.database().ref(`events/${eventId}`).once("value");
   const eventData = eventSnap.val();
   if (!eventData) {
     throw new HttpsError("not-found", "The specified event does not exist.");
   }
-  if (role !== "admin" && eventData.organizerId !== authData.uid) {
+  if (role !== "admin" && (eventData.organizerUid || eventData.organizerId) !== authData.uid) {
     throw new HttpsError("permission-denied", "You can only view or manage your own events.");
   }
   return { role, eventData };
@@ -425,194 +432,451 @@ exports.getApproverDirectory = onCall({ region: REGION }, async (request) => {
   return dirSnap.val() || APPROVER_DIRECTORY;
 });
 
-/**
- * 6. createEventProposal({ name, venue, category, startAt, endAt, outsideGuests, approvers, files })
- */
-exports.createEventProposal = onCall({ region: REGION }, async (request) => {
-  await verifyOrganizerRole(request.auth);
-  await ensureApproverDirectory();
+const PROPOSAL_VENUES = {
+  "Open Field | PUP Biñan": { maxCapacity: 500, type: "outdoor" },
+  "AVR1 | PUP Biñan": { maxCapacity: 150, type: "indoor" },
+  "AVR2 | PUP Biñan": { maxCapacity: 100, type: "indoor" },
+  "AVR2-1Room | PUP Biñan": { maxCapacity: 40, type: "indoor" },
+  "AVR2-2Room | PUP Biñan": { maxCapacity: 40, type: "indoor" },
+  "AVR2-3Room | PUP Biñan": { maxCapacity: 40, type: "indoor" },
+  "Kiosk | PUP Biñan": { maxCapacity: 50, type: "outdoor" },
+  "Open Field | PUP CITE": { maxCapacity: 500, type: "outdoor" },
+  "4th Floor | PUP CITE": { maxCapacity: 200, type: "indoor" },
+  "Others | Inside PUP": { maxCapacity: 100, type: "indoor" },
+  "Others | Outside PUP": { maxCapacity: 200, type: "outdoor" },
+  "Online / Virtual": { maxCapacity: 1000, type: "online" },
+};
 
-  const {
-    name,
-    venue,
-    category,
-    startAt,
-    endAt,
-    outsideGuests,
-    approvers,
-    files,
-    description,
-    source,
-    capacity,
-  } = request.data || {};
-  if (!name || !String(name).trim()) {
-    throw new HttpsError("invalid-argument", "Event name is required.");
+function manilaDateString(timestamp = Date.now()) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(timestamp);
+}
+
+function parseTimeMinutes(value) {
+  const match = /^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i.exec(String(value || "").trim());
+  if (!match) return null;
+  let hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (minute > 59 || hour > 23) return null;
+  if (match[3]) {
+    if (hour < 1 || hour > 12) return null;
+    hour = (hour % 12) + (match[3].toUpperCase() === "PM" ? 12 : 0);
   }
-  if (!startAt) {
-    throw new HttpsError("invalid-argument", "Event date and start time are required.");
+  return hour * 60 + minute;
+}
+
+function manilaTimestamp(dateValue, timeValue) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dateValue || ""))) return NaN;
+  const minutes = parseTimeMinutes(timeValue);
+  if (minutes === null) return NaN;
+  return Date.parse(`${dateValue}T${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}:00+08:00`);
+}
+
+function parseStoredEventTime(value, dateFallback, timeFallback) {
+  if (typeof value === "number") return value;
+  const text = String(value || "").trim();
+  if (!text) return dateFallback && timeFallback ? manilaTimestamp(dateFallback, timeFallback) : NaN;
+  const fullMatch = /^(\d{4}-\d{2}-\d{2})[ T](.+)$/.exec(text);
+  if (fullMatch) return manilaTimestamp(fullMatch[1], fullMatch[2]);
+  const parsed = Date.parse(text);
+  return Number.isNaN(parsed) ? NaN : parsed;
+}
+
+function proposalFieldErrors(data, existingEvents, now = Date.now()) {
+  const errors = [];
+  const add = (field, message) => errors.push({ field, message });
+  const name = String(data.eventName || data.name || data.title || "").trim();
+  const categories = Array.isArray(data.categories)
+    ? data.categories
+    : String(data.category || "").split(",").map((item) => item.trim()).filter(Boolean);
+  const date = String(data.date || data.dateISO || data.eventDate || "").slice(0, 10);
+  const endDate = String(data.dateEnd || data.endDate || data.endDateISO || date).slice(0, 10);
+  const timeStart = String(data.timeStart || "").trim();
+  const timeEnd = String(data.timeEnd || "").trim();
+  const startMinutes = parseTimeMinutes(timeStart);
+  const endMinutes = parseTimeMinutes(timeEnd);
+  const venue = String(data.venue || data.location || "").trim();
+  const venueInfo = PROPOSAL_VENUES[venue];
+  const registrationStart = Date.parse(`${String(data.registrationStart || "")}+08:00`);
+  const registrationEndValue = data.registrationEnd || data.registrationDeadline || "";
+  const registrationEnd = Date.parse(`${String(registrationEndValue).replace(" ", "T")}:00+08:00`);
+  const approvalDocuments = Array.isArray(data.approvalDocuments) ? data.approvalDocuments : [];
+  const capacity = Number(data.maxCapacity ?? data.capacity);
+
+  if (name.length < 3 || name.length > 120) add("eventName", "Event name must be between 3 and 120 characters.");
+  if (categories.length < 1 || categories.length > 3) add("category", "Choose between 1 and 3 event categories.");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date < manilaDateString(now)) {
+    add("eventDate", "Choose an event date that is today or later.");
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(endDate) || endDate < date) add("eventDateEnd", "The event end date cannot be before its start date.");
+  if (startMinutes === null || startMinutes < 480 || startMinutes > 1200) add("timeStart", "Start time must be between 8:00 AM and 8:00 PM.");
+  if (endMinutes === null || endMinutes < 480 || endMinutes > 1200) add("timeEnd", "End time must be between 8:00 AM and 8:00 PM.");
+  const startAtMs = manilaTimestamp(date, timeStart);
+  const endAtMs = manilaTimestamp(endDate, timeEnd);
+  if (Number.isFinite(startAtMs) && startAtMs < now) add("timeStart", "Start time must be in the future.");
+  if (Number.isFinite(startAtMs) && Number.isFinite(endAtMs) && endAtMs <= startAtMs) add("timeEnd", "End time must be after the start time.");
+  if (!venueInfo) add("venue", "Choose a valid venue.");
+  if (!Number.isInteger(capacity) || capacity < 1 || (venueInfo && capacity > venueInfo.maxCapacity)) {
+    add("maxCapacity", venueInfo
+      ? `Capacity must be a whole number from 1 to ${venueInfo.maxCapacity}.`
+      : "Capacity must be a positive whole number.");
+  }
+  if (!data.registrationStart || !Number.isFinite(registrationStart)) add("registrationStart", "Enter a valid registration start date and time.");
+  if (!registrationEndValue || !Number.isFinite(registrationEnd)) add("registrationEnd", "Enter a valid registration deadline.");
+  if (Number.isFinite(registrationStart) && Number.isFinite(registrationEnd) && registrationStart >= registrationEnd) {
+    add("registrationEnd", "Registration must end after it starts.");
+  }
+  const eventDayEnd = Date.parse(`${endDate}T23:59:59+08:00`);
+  if (Number.isFinite(registrationEnd) && Number.isFinite(eventDayEnd) && registrationEnd > eventDayEnd) {
+    add("registrationEnd", "Registration deadline cannot be after the event date.");
+  }
+  const partners = Array.isArray(data.partnerOrganizations) ? data.partnerOrganizations : [];
+  if (data.isCollaboration && partners.length < 1) add("partnerOrganizations", "Choose at least one additional department for a collaboration.");
+  if (String(data.targetYear || "") === "Specified" && (!Array.isArray(data.targetYears) || data.targetYears.length < 1)) {
+    add("targetYear", "Choose at least one target year.");
+  }
+  if (venueInfo?.type === "outdoor" && !String(data.weatherContingency || "").trim()) {
+    add("weatherContingency", "Add a weather contingency plan for this outdoor venue.");
+  }
+  const contactName = String(data.contactPerson?.name || data.contactName || "").trim();
+  const contactEmail = String(data.contactPerson?.email || data.contactEmail || "").trim();
+  if (!contactName) add("contactName", "Enter the contact person's name.");
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail)) add("contactEmail", "Enter a valid contact email address.");
+  if (!approvalDocuments.some((document) => document && String(document.name || "").trim())) {
+    add("approvalDocs", "Attach at least one required approval document.");
   }
 
-  // Load approver directory
-  const dirSnap = await admin.database().ref("approverDirectory").once("value");
-  const directory = dirSnap.val() || APPROVER_DIRECTORY;
-
-  // Validate approvers
-  let selectedKeys = Array.isArray(approvers) ? approvers.filter((k) => directory[k]) : [];
-  if (selectedKeys.length === 0) {
-    // Default to required + defaultOn
-    selectedKeys = Object.keys(directory).filter((k) => directory[k].defaultOn || directory[k].required);
+  if (venueInfo && Number.isFinite(startAtMs) && Number.isFinite(endAtMs)) {
+    const newVenueKey = venue.startsWith("Others |")
+      ? `${venue}|${String(data.customVenueName || "").trim().toLowerCase()}|${String(data.customVenueAddress || "").trim().toLowerCase()}`
+      : venue.toLowerCase();
+    const conflict = existingEvents.some((event) => {
+      if (!event || ["draft", "cancelled", "canceled", "rejected"].includes(String(event.status || "").toLowerCase())) return false;
+      const currentVenue = String(event.venue || event.location || "").trim();
+      const currentVenueKey = currentVenue.startsWith("Others |")
+        ? `${currentVenue}|${String(event.customVenueName || event.venueName || "").trim().toLowerCase()}|${String(event.customVenueAddress || event.venueAddress || "").trim().toLowerCase()}`
+        : currentVenue.toLowerCase();
+      if (!currentVenueKey || currentVenueKey !== newVenueKey) return false;
+      const oldDate = String(event.date || event.dateISO || event.eventDate || "").slice(0, 10);
+      const oldStart = parseStoredEventTime(event.startAt, oldDate, event.timeStart);
+      const oldEnd = parseStoredEventTime(event.endAt, oldDate, event.timeEnd);
+      return Number.isFinite(oldStart) && Number.isFinite(oldEnd) && startAtMs < oldEnd && endAtMs > oldStart;
+    });
+    if (conflict) add("venue", "This venue is already booked during the selected date and time.");
   }
-  // Ensure required approvers cannot be omitted
-  Object.keys(directory).forEach((k) => {
-    if (directory[k].required && !selectedKeys.includes(k)) {
-      selectedKeys.push(k);
-    }
-  });
+  return errors;
+}
 
-  // Sort by stage ascending
-  selectedKeys.sort((a, b) => (directory[a]?.stage || 0) - (directory[b]?.stage || 0));
+async function getEventCreatorIdentity(uid, role, authData) {
+  const [userSnap, authUser] = await Promise.all([
+    admin.database().ref(`users/${uid}`).once("value"),
+    admin.auth().getUser(uid),
+  ]);
+  const account = userSnap.val() || {};
+  const fullName = [account.firstName, account.middleName, account.lastName].filter(Boolean).join(" ").trim();
+  const organizerName = role === "event_organizer"
+    ? String(account.organization || account.organizationName || account.orgName || "").trim()
+    : String(account.fullName || account.name || fullName || authUser.displayName || authData.token?.name || "").trim();
+  if (!organizerName) {
+    throw new HttpsError("failed-precondition", "Your account profile is missing the name required to create an event. Update your profile and try again.");
+  }
+  return { organizerName, source: role === "event_organizer" ? "Organizational" : "Teacher / Faculty" };
+}
 
-  const uid = request.auth.uid;
-  const callerName = request.auth.token.name || request.auth.token.email || "Event Organizer";
-  const eventId = `ev_${Date.now()}_${crypto.randomBytes(3).toString("hex")}`;
-  const now = Date.now();
+async function verifyEventCreator(authData) {
+  if (!authData || !authData.uid) throw new HttpsError("unauthenticated", "Sign in before creating an event.");
+  const roleSnap = await admin.database().ref(`roles/${authData.uid}`).once("value");
+  const role = roleSnap.val();
+  if (role !== "event_organizer" && role !== "teacher") {
+    throw new HttpsError("permission-denied", "Only event organizers and teachers can create events.");
+  }
+  return role;
+}
 
-  const minStage = selectedKeys.length ? directory[selectedKeys[0]].stage : 1;
+function validateDraftId(draftId) {
+  return typeof draftId === "string" && /^[A-Za-z0-9_-]{1,120}$/.test(draftId);
+}
 
-  // Build members object and assign sequential step numbers
-  const members = {};
-  selectedKeys.forEach((key, index) => {
-    const dirItem = directory[key];
-    const isFirstStage = dirItem.stage === minStage;
-    members[key] = {
-      key,
-      label: dirItem.label,
-      stage: dirItem.stage,
-      step: index + 1,
-      status: isFirstStage ? "review" : "wait",
-      note: isFirstStage ? "Reviewing proposal." : "",
-      updatedAt: now,
-    };
-  });
-
-  // Build files object
-  const filesMap = {};
-  if (Array.isArray(files)) {
-    files.forEach((f, idx) => {
-      if (f && (f.name || f.path)) {
-        const fileId = `file_${idx + 1}_${crypto.randomBytes(2).toString("hex")}`;
-        filesMap[fileId] = {
-          id: fileId,
-          name: f.name || `Document ${idx + 1}`,
-          path: f.path || "",
-          status: "ok",
-          note: "",
-          uploadedAt: now,
-        };
-      }
+exports.saveEventDraft = onCall({ region: REGION }, async (request) => {
+  const role = await verifyEventCreator(request.auth);
+  const data = request.data || {};
+  const name = String(data.eventName || data.name || data.title || "").trim();
+  if (name.length < 3 || name.length > 120) {
+    throw new HttpsError("invalid-argument", "Event name must be between 3 and 120 characters.", {
+      fields: [{ field: "eventName", message: "Event name must be between 3 and 120 characters." }],
     });
   }
+  const uid = request.auth.uid;
+  const draftId = data.draftId ? data.draftId : `draft_${Date.now()}_${crypto.randomBytes(5).toString("hex")}`;
+  if (!validateDraftId(draftId)) throw new HttpsError("invalid-argument", "Draft ID is invalid.");
+  const rootRef = admin.database().ref();
+  const draftRef = rootRef.child(`drafts/${uid}/${draftId}`);
+  const existing = await draftRef.once("value");
+  if (!existing.exists()) {
+    const draftsSnap = await rootRef.child(`drafts/${uid}`).once("value");
+    if (Object.keys(draftsSnap.val() || {}).length >= 20) {
+      throw new HttpsError("resource-exhausted", "You can keep up to 20 drafts. Delete a draft before saving another.");
+    }
+  }
+  const identity = await getEventCreatorIdentity(uid, role, request.auth);
+  const draft = { ...data };
+  delete draft.draftId;
+  delete draft.organizerUid;
+  delete draft.createdByRole;
+  delete draft.organizerName;
+  delete draft.organizerId;
+  delete draft.createdBy;
+  draft.name = name;
+  draft.eventName = name;
+  draft.status = "draft";
+  draft.source = identity.source;
+  draft.organizerName = identity.organizerName;
+  draft.organizerUid = uid;
+  draft.createdByRole = role;
+  draft.updatedAt = Date.now();
+  if (!existing.exists()) draft.createdAt = draft.updatedAt;
+  await draftRef.set(draft);
+  return { draftId };
+});
 
-  const distinctStages = [...new Set(selectedKeys.map((k) => directory[k].stage))].sort((a, b) => a - b);
+/**
+ * Admin-only: rebuild organizerEvents/{uid} index from events/{id}.organizerUid
+ * Requires confirmation flag: confirmed === true
+ * Must not change any event.
+ */
+exports.rebuildOrganizerEventsIndex = onCall({ region: REGION }, async (request) => {
+  if (!request.auth || !request.auth.uid) {
+    throw new HttpsError("unauthenticated", "Sign in before performing this action.");
+  }
+  const roleSnap = await admin.database().ref(`roles/${request.auth.uid}`).once("value");
+  if (roleSnap.val() !== "admin") {
+    throw new HttpsError("permission-denied", "Only administrators can rebuild the organizer events index.");
+  }
+  const { confirmed } = request.data || {};
+  if (confirmed !== true) {
+    throw new HttpsError(
+      "failed-precondition",
+      "Action requires explicit confirmation. Pass { confirmed: true } to proceed."
+    );
+  }
 
+  const rootRef = admin.database().ref();
+  const eventsSnap = await rootRef.child("events").once("value");
+  const events = eventsSnap.val() || {};
+  const updates = {};
+  let count = 0;
+
+  for (const [eventId, event] of Object.entries(events)) {
+    if (!event) continue;
+    const uid = event.organizerUid || event.organizerId;
+    if (uid && typeof uid === "string") {
+      updates[`organizerEvents/${uid}/${eventId}`] = true;
+      count++;
+    }
+  }
+
+  if (Object.keys(updates).length > 0) {
+    await rootRef.update(updates);
+  }
+
+  return { success: true, indexedEventsCount: count };
+});
+
+/**
+ * 6. createEventProposal({ clientRequestId, draftId?, ...form })
+ */
+exports.createEventProposal = onCall({ region: REGION }, async (request) => {
+  const role = await verifyEventCreator(request.auth);
+  await ensureApproverDirectory();
+  const uid = request.auth.uid;
+  const data = request.data || {};
+  const requestId = String(data.clientRequestId || "").trim();
+  if (!requestId || requestId.length > 120) {
+    throw new HttpsError("invalid-argument", "A submission request ID is required.");
+  }
+  const requestKey = crypto.createHash("sha256").update(requestId).digest("hex");
+  const rootRef = admin.database().ref();
+  const requestRef = rootRef.child(`eventRequestIds/${uid}/${requestKey}`);
+  const priorEventId = (await requestRef.once("value")).val();
+  if (typeof priorEventId === "string") return { eventId: priorEventId };
+
+  const now = Date.now();
+  const eventsSnap = await rootRef.child("events").once("value");
+  const errors = proposalFieldErrors(data, Object.values(eventsSnap.val() || {}), now);
+  if (errors.length) {
+    throw new HttpsError("invalid-argument", "Please fix the highlighted fields before submitting.", { fields: errors });
+  }
+  if (data.draftId && !validateDraftId(data.draftId)) {
+    throw new HttpsError("invalid-argument", "Draft ID is invalid.");
+  }
+  const draftRef = data.draftId ? rootRef.child(`drafts/${uid}/${data.draftId}`) : null;
+  const draftSnap = draftRef ? await draftRef.once("value") : null;
+  if (data.draftId && !draftSnap.exists()) {
+    throw new HttpsError("invalid-argument", "This draft is no longer available. Save it again before submitting.");
+  }
+
+  const limitRef = rootRef.child(`eventSubmissionLimits/${uid}`);
+  const limitResult = await limitRef.transaction((current) => {
+    const recent = (Array.isArray(current) ? current : []).filter((timestamp) => Number(timestamp) > now - 60 * 60 * 1000);
+    if (recent.length >= 10) return;
+    recent.push(now);
+    return recent;
+  });
+  if (!limitResult.committed) {
+    throw new HttpsError("resource-exhausted", "You are submitting too fast. Try again in a few minutes.");
+  }
+
+  const identity = await getEventCreatorIdentity(uid, role, request.auth);
+  const settingsSnap = await admin.firestore().collection("system_settings").doc("global_config").get();
+  const configuredStages = settingsSnap.exists && Array.isArray(settingsSnap.data()?.approvalStages)
+    ? settingsSnap.data().approvalStages
+    : null;
+  const directorySnap = await rootRef.child("approverDirectory").once("value");
+  const directory = directorySnap.val() || APPROVER_DIRECTORY;
+  const submittedApprovers = new Set(Array.isArray(data.approvers) ? data.approvers.map(String) : []);
+  const stageList = configuredStages?.length
+    ? configuredStages.map((stage, index) => ({
+      id: String(stage.id || `stage-${index + 1}`),
+      label: String(stage.name || `Stage ${index + 1}`),
+      reviewer: String(stage.reviewer || stage.name || ""),
+      required: stage.required !== false,
+      order: index + 1,
+      uid: stage.uid || stage.reviewerUid || stage.userId || "",
+    })).filter((stage) => stage.required || submittedApprovers.has(stage.id))
+    : Object.entries(directory).map(([id, stage], index) => ({
+      id,
+      label: String(stage.label || stage.name || id),
+      reviewer: String(stage.reviewer || stage.label || stage.name || id),
+      required: Boolean(stage.required),
+      order: Number(stage.stage) || index + 1,
+      uid: stage.uid || stage.reviewerUid || "",
+    })).filter((stage) => stage.required || stage.defaultOn || submittedApprovers.has(stage.id));
+  if (!stageList.length) throw new HttpsError("failed-precondition", "No approval stages are configured. Contact an administrator.");
+  stageList.sort((first, second) => first.order - second.order);
+
+  const eventId = `ev_${now}_${crypto.randomBytes(5).toString("hex")}`;
+  const eventName = String(data.eventName || data.name || data.title).trim();
+  const venue = String(data.venue || data.location).trim();
+  const date = String(data.date || data.dateISO || data.eventDate).slice(0, 10);
+  const dateEnd = String(data.dateEnd || data.endDate || data.endDateISO || date).slice(0, 10);
+  const timeStart = String(data.timeStart).trim();
+  const timeEnd = String(data.timeEnd).trim();
+  const startAt = `${date} ${timeStart}`;
+  const endAt = `${dateEnd} ${timeEnd}`;
   const eventPayload = {
+    ...data,
     id: eventId,
     eventId,
-    name: String(name).trim(),
-    title: String(name).trim(),
-    venue: String(venue || "PUP Biñan Campus").trim(),
-    location: String(venue || "PUP Biñan Campus").trim(),
-    category: String(category || "Academic & Learning").trim(),
-    startAt: String(startAt),
-    endAt: String(endAt || ""),
-    description: String(description || request.data?.eventDescription || "").trim(),
-    source: String(source || request.data?.eventSource || "Organizational").trim(),
-    capacity: Number(capacity || request.data?.maxCapacity || 0) || null,
-    outsideGuests: Boolean(outsideGuests),
+    name: eventName,
+    title: eventName,
+    venue,
+    location: venue,
+    category: Array.isArray(data.categories) ? data.categories.join(", ") : String(data.category || ""),
+    startAt,
+    endAt,
+    organizerUid: uid,
+    createdByRole: role,
+    organizerName: identity.organizerName,
+    source: identity.source,
     organizerId: uid,
-    organizerName: callerName,
+    createdBy: uid,
+    creatorRole: role === "event_organizer" ? "Event Organizer" : "Teacher",
     status: "pending",
     createdAt: now,
     updatedAt: now,
   };
+  delete eventPayload.clientRequestId;
+  delete eventPayload.draftId;
 
+  const members = {};
+  const firstStage = stageList[0];
+  stageList.forEach((stage, index) => {
+    members[stage.id] = {
+      key: stage.id,
+      label: stage.reviewer || stage.label,
+      stage: stage.order,
+      step: index + 1,
+      status: index === 0 ? "review" : "wait",
+      note: index === 0 ? "Reviewing proposal." : "",
+      updatedAt: now,
+    };
+  });
+  const approvalFiles = {};
+  (Array.isArray(data.approvalDocuments) ? data.approvalDocuments : []).forEach((file, index) => {
+    if (!file || !String(file.name || "").trim()) return;
+    const fileId = `file_${index + 1}_${crypto.randomBytes(2).toString("hex")}`;
+    approvalFiles[fileId] = {
+      id: fileId,
+      name: String(file.name).slice(0, 255),
+      path: String(file.path || file.url || "").slice(0, 2048),
+      status: "ok",
+      note: "",
+      uploadedAt: now,
+    };
+  });
   const approvalPayload = {
     eventId,
     status: "pending",
     currentStep: 1,
-    totalSteps: selectedKeys.length,
+    totalSteps: stageList.length,
     members,
-    stages: distinctStages,
-    files: filesMap,
-    history: [
-      {
-        action: "submitted",
-        by: callerName,
-        at: now,
-        note: "Event proposal submitted.",
-      },
-    ],
+    stages: [...new Set(stageList.map((stage) => stage.order))],
+    files: approvalFiles,
+    history: [{ action: "submitted", by: identity.organizerName, at: now, note: "Event proposal submitted." }],
     submittedAt: now,
   };
 
-  const rootRef = admin.database().ref();
-  const updates = {};
-  updates[`events/${eventId}`] = eventPayload;
-  updates[`approvals/${eventId}`] = approvalPayload;
-  updates[`organizerEvents/${uid}/${eventId}`] = {
-    id: eventId,
-    name: eventPayload.name,
-    status: "pending",
-    createdAt: now,
-  };
-
-  // Add proposal to first stage approver's queue if assigned
-  const firstReviewKey = selectedKeys.find((k) => members[k] && members[k].status === "review");
-  if (firstReviewKey && directory[firstReviewKey]) {
-    const firstDir = directory[firstReviewKey];
-    if (firstDir.uid) {
-      updates[`approverQueue/${firstDir.uid}/${eventId}`] = {
-        eventId,
-        name: eventPayload.name,
-        title: eventPayload.name,
-        date: eventPayload.startAt,
-        venue: eventPayload.venue,
-        category: eventPayload.category,
-        step: members[firstReviewKey].step,
-        status: "pending",
-        updatedAt: now,
-      };
-      updates[`notifications/${firstDir.uid}/${eventId}_first_turn`] = {
-        eventId,
-        type: "review_needed",
-        title: "Your Review is Needed",
-        message: `Your review is needed for "${eventPayload.name}". (Step ${members[firstReviewKey].step})`,
-        read: false,
-        createdAt: now,
-      };
-    }
-  }
-
-  await rootRef.update(updates);
-
-  // Send submission confirmation notification
-  try {
-    const notifRef = admin.database().ref(`notifications/${uid}`).push();
-    await notifRef.set({
+  const updates = {
+    [`events/${eventId}`]: eventPayload,
+    [`approvals/${eventId}`]: approvalPayload,
+    [`organizerEvents/${uid}/${eventId}`]: true,
+    [`eventRequestIds/${uid}/${requestKey}`]: eventId,
+    [`notifications/${uid}/${eventId}_submitted`]: {
       eventId,
+      type: "proposal_submitted",
       title: "Proposal Submitted",
-      message: `Your event proposal "${eventPayload.name}" was submitted for review.`,
+      message: `Your event proposal "${eventName}" was submitted for review.`,
       read: false,
       createdAt: now,
-    });
-  } catch (err) {
-    console.warn("Could not write notification:", err);
-  }
-
-  return {
-    success: true,
-    eventId,
+    },
   };
+  if (draftRef) updates[`drafts/${uid}/${data.draftId}`] = null;
+
+  const assignedReviewerUids = new Set([firstStage.uid].filter(Boolean).map(String));
+  if (!assignedReviewerUids.size) {
+    const rolesSnap = await rootRef.child("roles").once("value");
+    Object.entries(rolesSnap.val() || {}).forEach(([reviewerUid, reviewerRole]) => {
+      if (reviewerRole === "admin") assignedReviewerUids.add(reviewerUid);
+    });
+  }
+  assignedReviewerUids.forEach((reviewerUid) => {
+    updates[`approverQueue/${reviewerUid}/${eventId}`] = {
+      eventId,
+      name: eventName,
+      title: eventName,
+      date: startAt,
+      venue,
+      category: eventPayload.category,
+      step: 1,
+      status: "pending",
+      updatedAt: now,
+    };
+    updates[`notifications/${reviewerUid}/${eventId}_first_turn`] = {
+      eventId,
+      type: "review_needed",
+      title: "Your Review is Needed",
+      message: `Your review is needed for "${eventName}" (${firstStage.label}).`,
+      read: false,
+      createdAt: now,
+    };
+  });
+
+  await rootRef.update(updates);
+  return { eventId, firstReviewer: firstStage.label };
 });
 
 /**
@@ -779,6 +1043,7 @@ exports.publishEvent = onCall({ region: REGION }, async (request) => {
     ...eventData,
     description: eventData.description || eventData.eventDescription || "",
     organizerName: eventData.organizerName || callerName,
+    organization: eventData.organization || eventData.department || eventData.organizerName || callerName,
     source: eventData.source || eventData.eventSource || "Organizational",
     capacity: eventData.capacity !== undefined ? eventData.capacity : (eventData.maxCapacity || null),
     registeredCount: typeof eventData.registeredCount === "number" ? eventData.registeredCount : 0,
@@ -1825,3 +2090,169 @@ exports.cancelRegistration = onCall({ region: REGION }, async (request) => {
   return { success: true, registeredCount: newCount };
 });
 
+/**
+ * 23. setFavorite({ eventId, favorite, replaceEventId, allowDuplicate, title })
+ * Callable function for organizer to favorite/unfavorite events.
+ * Runs in a transaction on reuseLibrary/{uid}, checks event ownership,
+ * enforces 5-favorites limit and duplicate title check.
+ */
+exports.setFavorite = onCall({ region: REGION }, async (request) => {
+  if (!request.auth || !request.auth.uid) {
+    throw new HttpsError("unauthenticated", "You must be signed in to manage favorites.");
+  }
+
+  const uid = request.auth.uid;
+  const { eventId, favorite, replaceEventId, allowDuplicate, title: clientTitle } = request.data || {};
+
+  if (!eventId || typeof eventId !== "string") {
+    throw new HttpsError("invalid-argument", "Event ID is required.");
+  }
+
+  const isFavorite = Boolean(favorite);
+  const rootRef = admin.database().ref();
+
+  // 1. Verify event ownership
+  const orgEventSnap = await rootRef.child(`organizerEvents/${uid}/${eventId}`).once("value");
+  const eventSnap = await rootRef.child(`events/${eventId}`).once("value");
+  const publicSnap = await rootRef.child(`publicEvents/${eventId}`).once("value");
+
+  const orgEvent = orgEventSnap.val();
+  const mainEvent = eventSnap.val();
+  const pubEvent = publicSnap.val();
+
+  const isOwned =
+    Boolean(orgEvent) ||
+    (mainEvent && (mainEvent.organizerId === uid || mainEvent.createdBy === uid || mainEvent.teacherId === uid)) ||
+    (pubEvent && (pubEvent.organizerId === uid || pubEvent.createdBy === uid)) ||
+    eventId.startsWith("seed-") ||
+    eventId.startsWith("org-") ||
+    eventId.startsWith("tch-");
+
+  if (!isOwned) {
+    throw new HttpsError("permission-denied", "You can only manage favorites for your own events.");
+  }
+
+  let targetEventTitle = (
+    clientTitle ||
+    orgEvent?.name ||
+    orgEvent?.title ||
+    mainEvent?.name ||
+    mainEvent?.title ||
+    pubEvent?.name ||
+    pubEvent?.title ||
+    ""
+  ).trim();
+
+  // If replacing, verify ownership of replaceEventId too
+  if (replaceEventId) {
+    if (typeof replaceEventId !== "string") {
+      throw new HttpsError("invalid-argument", "Replace Event ID must be a string.");
+    }
+    const repOrgSnap = await rootRef.child(`organizerEvents/${uid}/${replaceEventId}`).once("value");
+    const repEventSnap = await rootRef.child(`events/${replaceEventId}`).once("value");
+    const repMain = repEventSnap.val();
+    const isRepOwned =
+      Boolean(repOrgSnap.val()) ||
+      (repMain && (repMain.organizerId === uid || repMain.createdBy === uid || repMain.teacherId === uid)) ||
+      replaceEventId.startsWith("seed-") ||
+      replaceEventId.startsWith("org-") ||
+      replaceEventId.startsWith("tch-");
+
+    if (!isRepOwned) {
+      throw new HttpsError("permission-denied", "You can only replace your own events.");
+    }
+  }
+
+  // 2. Duplicate title check if setting favorite to true
+  const reuseRef = rootRef.child(`reuseLibrary/${uid}`);
+
+  if (isFavorite && !allowDuplicate && targetEventTitle) {
+    const reuseSnap = await reuseRef.once("value");
+    const currentReuse = reuseSnap.val() || {};
+    const lowerTarget = targetEventTitle.toLowerCase();
+
+    for (const [key, data] of Object.entries(currentReuse)) {
+      if (data && data.favorite === true && key !== eventId && key !== replaceEventId) {
+        let existingTitle = "";
+        const kOrgSnap = await rootRef.child(`organizerEvents/${uid}/${key}`).once("value");
+        const kEventSnap = await rootRef.child(`events/${key}`).once("value");
+        const kPubSnap = await rootRef.child(`publicEvents/${key}`).once("value");
+        existingTitle = (
+          kOrgSnap.val()?.name || kOrgSnap.val()?.title ||
+          kEventSnap.val()?.name || kEventSnap.val()?.title ||
+          kPubSnap.val()?.name || kPubSnap.val()?.title || ""
+        ).trim();
+
+        if (existingTitle && existingTitle.toLowerCase() === lowerTarget) {
+          throw new HttpsError("already-exists", "A favorite with this name already exists.");
+        }
+      }
+    }
+  }
+
+  // 3. Run Transaction on reuseLibrary/{uid}
+  let txError = null;
+  const txResult = await reuseRef.transaction((current) => {
+    const data = current || {};
+    const now = Date.now();
+
+    if (isFavorite) {
+      let favCount = 0;
+      for (const [k, item] of Object.entries(data)) {
+        if (item && item.favorite === true && k !== eventId && k !== replaceEventId) {
+          favCount++;
+        }
+      }
+
+      if (favCount >= 5) {
+        txError = "Favorites are full.";
+        return undefined; // abort transaction
+      }
+
+      if (replaceEventId && data[replaceEventId]) {
+        data[replaceEventId] = {
+          ...data[replaceEventId],
+          favorite: false,
+          updatedAt: now,
+        };
+      }
+
+      data[eventId] = {
+        ...(data[eventId] || {}),
+        favorite: true,
+        hidden: data[eventId]?.hidden || false,
+        updatedAt: now,
+      };
+    } else {
+      if (data[eventId]) {
+        data[eventId] = {
+          ...data[eventId],
+          favorite: false,
+          updatedAt: now,
+        };
+      } else {
+        data[eventId] = {
+          favorite: false,
+          hidden: false,
+          updatedAt: now,
+        };
+      }
+    }
+
+    return data;
+  });
+
+  if (!txResult.committed) {
+    if (txError === "Favorites are full.") {
+      throw new HttpsError("failed-precondition", "Favorites are full.");
+    }
+    throw new HttpsError("aborted", "Could not update favorites. Please try again.");
+  }
+
+  return {
+    success: true,
+    eventId,
+    favorite: isFavorite,
+    replacedEventId: replaceEventId || null,
+  };
+});

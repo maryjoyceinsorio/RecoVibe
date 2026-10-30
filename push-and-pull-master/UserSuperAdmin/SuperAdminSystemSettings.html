@@ -58,74 +58,127 @@
       </aside>
 
       <main class="main-content settings-main" id="main-content">
-        <div class="settings-grid">
-          <section class="settings-column" aria-labelledby="event-settings-heading">
-            <h1 id="event-settings-heading">Event Settings</h1>
-            <section class="setting-group" aria-labelledby="registration-settings-heading">
-              <h2 id="registration-settings-heading">Registration Settings</h2>
-              <label class="setting-control" for="toggle-registration">
-                <span class="setting-toggle">
-                  <input id="toggle-registration" type="checkbox" role="switch" checked />
-                  <span class="switch-track" aria-hidden="true">
-                    <span class="switch-thumb"></span>
-                    <span class="switch-state on-state">On</span>
-                    <span class="switch-state off-state">Off</span>
-                  </span>
-                </span>
-                <span class="setting-label">Event Registration</span>
+        <div class="settings-container">
+          <!-- Access and registration -->
+          <section class="settings-access-card" aria-labelledby="access-registration-heading">
+            <h2 class="settings-access-title" id="access-registration-heading">Access and registration</h2>
+            <p class="settings-access-subtitle">Switch the whole system on or off. Turning something off asks you to confirm.</p>
+            
+            <div class="settings-access-row">
+              <div class="settings-access-info">
+                <div class="settings-access-heading-row">
+                  <h3 class="settings-access-name">User login</h3>
+                  <span class="settings-access-badge" id="badge-user-login">On</span>
+                </div>
+                <p class="settings-access-desc">When off, only super admins can sign in. Everyone else sees a maintenance message.</p>
+              </div>
+              <label class="settings-switch" for="toggle-login">
+                <input id="toggle-login" type="checkbox" role="switch" checked />
+                <span class="settings-switch-slider" aria-hidden="true"></span>
               </label>
-            </section>
+            </div>
 
-            <section class="settings-subsection" aria-labelledby="event-sources-heading">
-              <h2 id="event-sources-heading">Event Sources</h2>
-              <div class="setting-group settings-actions">
-                <button class="settings-action-button" type="button" data-settings-action="sources-add">Add</button>
-                <button class="settings-action-button" type="button" data-settings-action="sources-edit">Edit</button>
+            <div class="settings-access-row">
+              <div class="settings-access-info">
+                <div class="settings-access-heading-row">
+                  <h3 class="settings-access-name">Event registration</h3>
+                  <span class="settings-access-badge" id="badge-event-registration">On</span>
+                </div>
+                <p class="settings-access-desc">When off, students cannot register for any event, including ones that are open now.</p>
               </div>
-            </section>
-
-            <section class="settings-subsection" aria-labelledby="venues-heading">
-              <h2 id="venues-heading">Venues</h2>
-              <div class="setting-group settings-actions">
-                <button class="settings-action-button" type="button" data-settings-action="venues-add">Add</button>
-                <button class="settings-action-button" type="button" data-settings-action="venues-edit">Edit</button>
-              </div>
-            </section>
+              <label class="settings-switch" for="toggle-registration">
+                <input id="toggle-registration" type="checkbox" role="switch" checked />
+                <span class="settings-switch-slider" aria-hidden="true"></span>
+              </label>
+            </div>
           </section>
 
-          <section class="settings-column" aria-labelledby="system-access-heading">
-            <h1 id="system-access-heading">System Access</h1>
-            <section class="setting-group" aria-labelledby="user-login-heading">
-              <h2 id="user-login-heading">User Login</h2>
-              <label class="setting-control" for="toggle-login">
-                <span class="setting-toggle">
-                  <input id="toggle-login" type="checkbox" role="switch" checked />
-                  <span class="switch-track" aria-hidden="true">
-                    <span class="switch-thumb"></span>
-                    <span class="switch-state on-state">On</span>
-                    <span class="switch-state off-state">Off</span>
+          <!-- 1. General settings -->
+          <section class="settings-section settings-general-section settings-panel" aria-labelledby="general-settings-heading">
+            <div class="settings-section-header">
+              <div class="settings-section-title-wrap">
+                <h2 class="settings-section-title" id="general-settings-heading">General settings</h2>
+                <p class="settings-section-subtitle">Configure system-wide defaults for events and document uploads.</p>
+              </div>
+              <button class="settings-save-stages-btn" id="save-general-btn" type="button">Save Changes</button>
+            </div>
+            
+            <div class="settings-general-grid">
+              <div class="settings-field-group">
+                <label class="settings-field-label" for="setting-main-org">Main organizing organization</label>
+                <div class="settings-select-wrap">
+                  <select id="setting-main-org" class="settings-select" aria-label="Main organizing organization">
+                    <!-- Dynamically populated from Organization directory -->
+                  </select>
+                  <span class="settings-select-arrow" aria-hidden="true">
+                    <svg viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z" fill="currentColor"/></svg>
                   </span>
-                </span>
-                <span class="setting-label">User Entry</span>
-              </label>
-            </section>
-
-            <section class="settings-subsection" aria-labelledby="event-categories-heading">
-              <h2 id="event-categories-heading">Event Categories</h2>
-              <div class="setting-group settings-actions">
-                <button class="settings-action-button" type="button" data-settings-action="categories-add">Add</button>
-                <button class="settings-action-button" type="button" data-settings-action="categories-edit">Edit</button>
+                </div>
               </div>
-            </section>
 
-            <section class="settings-subsection" aria-labelledby="organizations-heading">
-              <h2 id="organizations-heading">Organizations</h2>
-              <div class="setting-group settings-actions">
-                <button class="settings-action-button" type="button" data-settings-action="organizations-add">Add</button>
-                <button class="settings-action-button" type="button" data-settings-action="organizations-edit">Edit</button>
+              <div class="settings-field-group">
+                <label class="settings-field-label" for="setting-max-upload">Maximum upload size (MB)</label>
+                <input type="number" id="setting-max-upload" class="settings-input" min="1" max="100" value="15" />
               </div>
-            </section>
+
+              <div class="settings-field-group settings-field-group--full">
+                <label class="settings-field-label" for="setting-allowed-docs">Allowed document types</label>
+                <input type="text" id="setting-allowed-docs" class="settings-input" value="PDF, DOCX, JPG, PNG" />
+                <p class="settings-field-hint">Display guidance for organizers; file storage is not enabled in this prototype.</p>
+              </div>
+            </div>
+            <p class="settings-section-error" id="general-settings-error" hidden></p>
           </section>
+
+          <!-- 2. Organization directory -->
+          <section class="settings-section settings-organizations-section settings-panel" aria-labelledby="org-directory-heading">
+            <div class="settings-section-header">
+              <div class="settings-section-title-wrap">
+                <h2 class="settings-section-title" id="org-directory-heading">Organization directory</h2>
+                <p class="settings-section-subtitle">Edit which organizations can be selected for collaboration.</p>
+              </div>
+              <button class="settings-outline-btn" id="add-organization-btn" type="button">+ Add organization</button>
+            </div>
+            <div class="settings-orgs-list" id="organization-directory-list" role="list" aria-label="Organizations directory">
+              <!-- Dynamically populated org rows -->
+            </div>
+            <p class="settings-section-error" id="org-directory-error" hidden></p>
+          </section>
+
+          <!-- 3. Approval stages -->
+          <section class="settings-section settings-approval-stages-section settings-panel" aria-labelledby="approval-stages-heading">
+            <div class="settings-section-header">
+              <div class="settings-section-title-wrap">
+                <h2 class="settings-section-title" id="approval-stages-heading">Approval stages</h2>
+                <p class="settings-section-subtitle">Reorder stages, assign reviewers, and set whether each stage is required.</p>
+              </div>
+              <div class="settings-approval-actions">
+                <button class="settings-outline-btn" id="add-stage-btn" type="button">+ Add stage</button>
+                <button class="settings-save-stages-btn" id="save-stages-btn" type="button">Save Changes</button>
+              </div>
+            </div>
+            <div class="settings-stages-list" id="approval-stages-list" role="list" aria-label="Approval stages list"></div>
+            <p class="settings-stages-error" id="approval-stages-error" hidden></p>
+          </section>
+
+          <!-- Unified Save footer bar -->
+          <div class="settings-footer-actions">
+            <p class="settings-footer-note">All changes above — General settings, Organization directory, and Approval stages — are validated and saved together.</p>
+            <button class="settings-save-stages-btn" id="save-stages-bottom-btn" type="button">Save All Changes</button>
+          </div>
+
+          <!-- Secondary legacy entity controls preserved in DOM -->
+          <details class="settings-legacy-drawer" style="display: none;">
+            <summary>Legacy Entity Settings</summary>
+            <button data-settings-action="sources-add">Add</button>
+            <button data-settings-action="sources-edit">Edit</button>
+            <button data-settings-action="venues-add">Add</button>
+            <button data-settings-action="venues-edit">Edit</button>
+            <button data-settings-action="categories-add">Add</button>
+            <button data-settings-action="categories-edit">Edit</button>
+            <button data-settings-action="organizations-add">Add</button>
+            <button data-settings-action="organizations-edit">Edit</button>
+          </details>
         </div>
       </main>
     </div>
@@ -146,6 +199,21 @@
           <button class="settings-modal-button primary" id="settings-item-submit" type="submit">Add</button>
         </div>
       </form>
+    </dialog>
+    <dialog class="settings-modal" id="settings-confirm-dialog" aria-labelledby="settings-confirm-title">
+      <div class="settings-modal-content" style="max-width: 440px;">
+        <div class="settings-modal-heading">
+          <h2 id="settings-confirm-title">Save Approval Stages?</h2>
+          <button class="settings-modal-close" type="button" id="settings-confirm-close-btn" aria-label="Close confirmation dialog">×</button>
+        </div>
+        <p id="settings-confirm-text" style="font-size: 14px; color: #4b5563; line-height: 1.5; margin: 4px 0 12px 0;">
+          Are you sure you want to save changes to the approval stages? These updates will reflect immediately in the Create Event sequential approval steps for organizers and teachers.
+        </p>
+        <div class="settings-modal-actions">
+          <button class="settings-modal-button secondary" type="button" id="settings-confirm-cancel-btn">No, Cancel</button>
+          <button class="settings-modal-button primary" type="button" id="settings-confirm-yes-btn">Yes, Save</button>
+        </div>
+      </div>
     </dialog>
     <script type="module" src="superAdminGuard.js"></script>
     <script type="module" src="systemSettings.js"></script>

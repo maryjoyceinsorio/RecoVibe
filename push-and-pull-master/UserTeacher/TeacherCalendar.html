@@ -213,6 +213,7 @@
                 >
                   &larr;
                 </button>
+                <h2 class="cal-current-heading" id="calCurrentHeading" aria-live="polite"></h2>
                 <button
                   class="cal-arrow"
                   id="calFullNext"
@@ -232,101 +233,66 @@
 
           <aside class="calendar-side">
             <section class="calendar-side-panel upcoming-panel">
-              <h3>Upcoming</h3>
-              <div class="upcoming-item">
-                <div class="upcoming-date">
-                  <span>25</span><small>SEP</small>
-                </div>
-                <div class="upcoming-copy">
-                  <strong>Org Fair &amp; Booth Setup</strong>
-                  <span>Event Organizer</span>
-                </div>
+              <div class="panel-header">
+                <h3>Upcoming Events</h3>
               </div>
-              <div class="upcoming-item">
-                <div class="upcoming-date">
-                  <span>25</span><small>SEP</small>
-                </div>
-                <div class="upcoming-copy">
-                  <strong>CITE Tech Seminar</strong>
-                  <span>PUP CITE</span>
-                </div>
-              </div>
-              <div class="upcoming-item">
-                <div class="upcoming-date">
-                  <span>25</span><small>SEP</small>
-                </div>
-                <div class="upcoming-copy">
-                  <strong>Blood Donation Drive</strong>
-                  <span>PUP Official</span>
-                </div>
-              </div>
-              <div class="upcoming-item">
-                <div class="upcoming-date">
-                  <span>28</span><small>SEP</small>
-                </div>
-                <div class="upcoming-copy">
-                  <strong>Alumni Homecoming Planning</strong>
-                  <span>Event Organizer</span>
-                </div>
-              </div>
-              <div class="upcoming-item">
-                <div class="upcoming-date">
-                  <span>3</span><small>OCT</small>
-                </div>
-                <div class="upcoming-copy">
-                  <strong>IT Congress General Assembly</strong>
-                  <span>Event Organizer</span>
-                </div>
+              <div class="upcoming-list" id="upcomingList">
+                <div class="upcoming-empty">Loading events...</div>
               </div>
             </section>
 
             <section class="calendar-side-panel filter-panel">
               <div class="panel-header">
                 <h3>Filter by category</h3>
-                <button id="resetCalendarFilters" type="button">Reset</button>
+                <button id="resetCalendarFilters" class="filter-reset-btn" type="button">Reset</button>
               </div>
-              <label class="filter-option"
-                ><input
-                  type="checkbox"
-                  data-event-source="PUP Official"
-                  checked
-                /><span>PUP Official</span></label
-              >
-              <label class="filter-option"
-                ><input
-                  type="checkbox"
-                  data-event-source="PUP Biñan"
-                  checked
-                /><span>PUP Biñan</span></label
-              >
-              <label class="filter-option"
-                ><input
-                  type="checkbox"
-                  data-event-source="PUP CITE"
-                  checked
-                /><span>PUP CITE</span></label
-              >
-              <label class="filter-option"
-                ><input
-                  type="checkbox"
-                  data-event-source="Event Organizer"
-                  checked
-                /><span>Event Organizer</span></label
-              >
-              <label class="filter-option"
-                ><input
-                  type="checkbox"
-                  data-event-source="Others / External"
-                  checked
-                /><span>Others / External</span></label
-              >
-              <label class="filter-option"
-                ><input
-                  type="checkbox"
-                  data-event-source="Holiday"
-                  checked
-                /><span>Holiday</span></label
-              >
+              <div class="filter-options-list">
+                <label class="filter-option filter-option--pup">
+                  <input
+                    type="checkbox"
+                    data-category-key="pup"
+                    checked
+                  /><span>PUP Official</span>
+                </label>
+                <label class="filter-option filter-option--csc">
+                  <input
+                    type="checkbox"
+                    data-category-key="csc"
+                    checked
+                  /><span>CSC</span>
+                </label>
+                <label class="filter-option filter-option--faculty">
+                  <input
+                    type="checkbox"
+                    data-category-key="faculty"
+                    checked
+                  /><span>Teachers/Faculty</span>
+                </label>
+                <label class="filter-option filter-option--org">
+                  <input
+                    type="checkbox"
+                    data-category-key="org"
+                    checked
+                  /><span>Organizational</span>
+                </label>
+                <label class="filter-option filter-option--other">
+                  <input
+                    type="checkbox"
+                    data-category-key="other"
+                    checked
+                  /><span>Others/External</span>
+                </label>
+                <label class="filter-option filter-option--holiday">
+                  <input
+                    type="checkbox"
+                    data-category-key="holiday"
+                    checked
+                  /><span>Holiday</span>
+                </label>
+              </div>
+              <div class="filter-empty-state" id="filterEmptyState" hidden>
+                No categories selected. Select at least one or press Reset.
+              </div>
             </section>
             <section
               class="calendar-side-panel cal-legend"
@@ -334,13 +300,15 @@
               data-calendar-legend="teacher"
               aria-label="Calendar legend"
             >
-              <span class="legend-title">Calendar legend</span>
-              <span class="legend-item"><span class="dot dot-official" aria-hidden="true"></span>PUP Official</span>
-              <span class="legend-item"><span class="dot dot-binan" aria-hidden="true"></span>PUP Biñan</span>
-              <span class="legend-item"><span class="dot dot-cite" aria-hidden="true"></span>PUP CITE</span>
-              <span class="legend-item"><span class="dot dot-organizer" aria-hidden="true"></span>Event Organizer</span>
-              <span class="legend-item"><span class="dot dot-external" aria-hidden="true"></span>Others/External</span>
-              <span class="legend-item"><span class="dot dot-holiday" aria-hidden="true"></span>Holiday</span>
+              <h3 class="legend-title">Calendar legend</h3>
+              <div class="legend-grid">
+                <span class="legend-item"><span class="legend-swatch swatch-pup" aria-hidden="true"></span>PUP Official</span>
+                <span class="legend-item"><span class="legend-swatch swatch-csc" aria-hidden="true"></span>CSC</span>
+                <span class="legend-item"><span class="legend-swatch swatch-faculty" aria-hidden="true"></span>Teachers/Faculty</span>
+                <span class="legend-item"><span class="legend-swatch swatch-org" aria-hidden="true"></span>Organizational</span>
+                <span class="legend-item"><span class="legend-swatch swatch-other" aria-hidden="true"></span>Others/External</span>
+                <span class="legend-item"><span class="legend-swatch swatch-holiday" aria-hidden="true"></span>Holiday</span>
+              </div>
             </section>
           </aside>
         </div>

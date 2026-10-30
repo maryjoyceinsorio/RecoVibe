@@ -422,6 +422,10 @@
     }
     item.read = true;
     renderNotifications();
+    if (item.eventId) {
+      window.location.href = `TeacherMyEvent.html?event=${encodeURIComponent(item.eventId)}`;
+      return;
+    }
     showNotification(item);
   });
   notificationList.addEventListener("keydown", (event) => {
@@ -469,12 +473,9 @@
     .getElementById("notificationViewEvent")
     .addEventListener("click", (event) => {
       const eventId = event.currentTarget.dataset.eventId;
-      const eventRecord = (window.RECOVIBE_EVENTS || []).find(
-        (item) => String(item.id) === String(eventId),
-      );
-      if (!eventRecord) return;
-      closeDetails();
-      window.RecovibeEventDetails?.open(eventRecord);
+      if (eventId) {
+        window.location.href = `TeacherMyEvent.html?event=${encodeURIComponent(eventId)}`;
+      }
     });
   document
     .getElementById("confirmDeleteNotification")
